@@ -1,0 +1,25 @@
+import { useEffect, useState } from 'react'
+import { App, Button, Card, Form, Input, InputNumber, Select, Space, Typography, Upload } from 'antd'
+import type { UploadFile } from 'antd'
+import { useQuery } from '@tanstack/react-query'
+import { useNavigate, useParams } from 'react-router'
+import { createSku, getSku, listCategories, publishSku, updateSku, type SkuWrite } from '../api/catalog'
+import { uploadFile } from '../api/http'
+
+type Values = Omit<SkuWrite, 'basePrice' | 'coverMediaId' | 'galleryMediaIds' | 'version'> & { priceYuan: number }
+export default function SkuEditPage() {
+  const { id } = useParams(); const navigate = useNavigate(); const { message } = App.useApp(); const [form] = Form.useForm<Values>();
+  const [cover, setCover] = useState<UploadFile[]>([]); const [gallery, setGallery] = useState<UploadFile[]>([]); const [saving, setSaving] = useState(false)
+  const categories = useQuery({ queryKey: ['categories'], queryFn: listCategories }); const detail = useQuery({ queryKey: ['sku', id], queryFn: () => getSku(id!), enabled: Boolean(id) })
+  useEffect(() => { if (!detail.data) return; const s = detail.data; form.setFieldsValue({ categoryId:s.categoryId,skuCode:s.skuCode,name:s.name,description:s.description,serviceScope:s.serviceScope,exclusions:s.exclusions,warrantyDescription:s.warrantyDescription,priceMode:s.priceMode,priceYuan:s.basePrice/100,unit:s.unit }); if(s.coverMediaId)setCover([{uid:s.coverMediaId,name:'已上传封面',status:'done',response:{id:Number(s.coverMediaId)}}]); setGallery(s.galleryMediaIds.map(x=>({uid:x,name:'已上传图片',status:'done',response:{id:Number(x)}}))) }, [detail.data, form])
+  const uploader = (setter: React.Dispatch<React.SetStateAction<UploadFile[]>>) => async ({ file, onSuccess, onError }: any) => { try { const result=await uploadFile('/api/v1/admin/media/images',file as File); onSuccess(result); setter(current=>current.map(x=>x.uid===file.uid?{...x,status:'done',response:result}:x)) } catch(e){onError(e)} }
+  async function save(publish: boolean) { const v=await form.validateFields(); if(!cover[0]?.response?.id){message.error('请上传封面图');return} setSaving(true); try { const body:SkuWrite={...v,basePrice:Math.round(v.priceYuan*100),coverMediaId:String(cover[0].response.id),galleryMediaIds:gallery.filter(x=>x.response?.id).map(x=>String(x.response.id)),version:detail.data?.version??0}; const saved=id?await updateSku(id,body):await createSku(body); if(publish)await publishSku(saved.id); message.success(publish?'已发布':'草稿已保存'); navigate('/catalog/skus') } catch(e){message.error(e instanceof Error?e.message:'保存失败')} finally{setSaving(false)} }
+  return <Card loading={detail.isLoading}><Typography.Title level={3}>{id?'编辑 SKU':'新增 SKU'}</Typography.Title><Form form={form} layout="vertical" initialValues={{priceMode:'FIXED',unit:'次'}}>
+    <Space align="start" size="large" style={{width:'100%'}}><Form.Item name="categoryId" label="分类" rules={[{required:true}]}><Select style={{width:240}} options={categories.data?.map(x=>({value:x.id,label:x.name}))}/></Form.Item><Form.Item name="skuCode" label="SKU 编码" rules={[{required:true,pattern:/^[A-Z0-9-]{2,64}$/}]}><Input disabled={Boolean(id)} style={{width:280}}/></Form.Item></Space>
+    <Form.Item name="name" label="名称" rules={[{required:true,min:2,max:128}]}><Input/></Form.Item><Form.Item name="description" label="简述" rules={[{max:500}]}><Input.TextArea rows={2}/></Form.Item>
+    <Form.Item name="serviceScope" label="服务范围" rules={[{required:true,min:10,max:1000}]}><Input.TextArea rows={3}/></Form.Item><Form.Item name="exclusions" label="除外项" rules={[{required:true,min:5,max:1000}]}><Input.TextArea rows={3}/></Form.Item><Form.Item name="warrantyDescription" label="售后/质保说明" rules={[{required:true,min:5,max:500}]}><Input.TextArea rows={3}/></Form.Item>
+    <Space size="large"><Form.Item name="priceMode" label="计价模式"><Select style={{width:160}} options={[{value:'FIXED',label:'固定价'}]}/></Form.Item><Form.Item name="priceYuan" label="价格（元）" rules={[{required:true}]}><InputNumber min={0.01} precision={2}/></Form.Item><Form.Item name="unit" label="单位" rules={[{required:true}]}><Select style={{width:100}} options={['次','个','台','套'].map(x=>({value:x,label:x}))}/></Form.Item></Space>
+    <Form.Item label="封面图（必填）"><Upload listType="picture-card" fileList={cover} maxCount={1} customRequest={uploader(setCover)} onChange={({fileList})=>setCover(fileList)}>上传</Upload></Form.Item><Form.Item label="轮播图（最多 8 张）"><Upload listType="picture-card" fileList={gallery} maxCount={8} customRequest={uploader(setGallery)} onChange={({fileList})=>setGallery(fileList)}>上传</Upload></Form.Item>
+    <Space><Button onClick={()=>navigate('/catalog/skus')}>取消</Button><Button loading={saving} onClick={()=>save(false)}>保存草稿</Button><Button type="primary" loading={saving} onClick={()=>save(true)}>保存并发布</Button></Space>
+  </Form></Card>
+}

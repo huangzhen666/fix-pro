@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_DB: fix_pro
+          POSTGRES_USER: fixpro
+          POSTGRES_PASSWORD: fixpro-ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U fixpro -d fix_pro"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      DB_DSN: postgres://fixpro:fixpro-ci@localhost:5432/fix_pro?sslmode=disable&timezone=UTC
+    defaults:
+      run:
+        working-directory: apps/server-go
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.5'
+          cache-dependency-path: apps/server-go/go.sum
+      - run: gofmt -w . && git diff --exit-code
+      - run: go vet ./...
+      - run: go test ./...
+      - run: go test -race ./...
+      - run: go run ./cmd/migrate
+      - run: go build ./cmd/server ./cmd/migrate
+      - run: docker build -t fixpro-server-go:ci .

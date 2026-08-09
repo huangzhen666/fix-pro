@@ -1,0 +1,59 @@
+openapi: 3.1.0
+info:
+  title: FixPro API
+  version: 1.0.0-go
+servers:
+  - url: http://localhost:8080
+components:
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema: {type: string, pattern: '^[1-9][0-9]*$'}
+  securitySchemes:
+    adminBasic: {type: http, scheme: basic}
+    miniBearer: {type: http, scheme: bearer}
+  schemas:
+    ApiResponse:
+      type: object
+      required: [code, message, data, requestId]
+      properties:
+        code: {type: string}
+        message: {type: string}
+        data: {}
+        requestId: {type: string}
+paths:
+  /actuator/health:
+    get: {responses: {'200': {description: Healthy}}}
+  /api/v1/public/ping:
+    get: {responses: {'200': {description: Pong}}}
+  /api/v1/catalog/categories:
+    get: {responses: {'200': {description: Published services grouped by category}}}
+  /api/v1/catalog/services:
+    get:
+      parameters: [{name: keyword, in: query, schema: {type: string}}]
+      responses: {'200': {description: Published service list}}
+  /api/v1/catalog/services/{id}:
+    get:
+      parameters: [{$ref: '#/components/parameters/Id'}]
+      responses: {'200': {description: Published service detail}}
+  /api/v1/admin/catalog/categories:
+    get: {security: [{adminBasic: []}], responses: {'200': {description: Categories}}}
+    post: {security: [{adminBasic: []}], responses: {'200': {description: Category created}}}
+  /api/v1/admin/catalog/skus:
+    get: {security: [{adminBasic: []}], responses: {'200': {description: SKU page}}}
+    post: {security: [{adminBasic: []}], responses: {'200': {description: SKU draft created}}}
+  /api/v1/admin/media/images:
+    post: {security: [{adminBasic: []}], responses: {'200': {description: SKU image uploaded}}}
+  /api/v1/mini/cart:
+    get: {security: [{miniBearer: []}], responses: {'200': {description: Cart}}}
+  /api/v1/mini/cart/items:
+    post: {security: [{miniBearer: []}], responses: {'200': {description: Item added}}}
+  /api/v1/mini/media/fault:
+    post: {security: [{miniBearer: []}], responses: {'200': {description: Fault evidence uploaded}}}
+  /api/v1/mini/orders:
+    post:
+      security: [{miniBearer: []}]
+      parameters: [{name: Idempotency-Key, in: header, required: true, schema: {type: string, maxLength: 128}}]
+      responses: {'200': {description: Order created or replayed}}

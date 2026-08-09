@@ -1,0 +1,32 @@
+{
+  "pages": [
+    "pages/home/index",
+    "pages/services/index",
+    "pages/services/detail",
+    "pages/cart/index",
+    "pages/checkout/index",
+    "pages/checkout/result",
+    "pages/search/index",
+    "pages/orders/index",
+    "pages/profile/index",
+    "pages/workbench/index"
+  ],
+  "window": {
+    "navigationBarTitleText": "FixPro 家居运维",
+    "navigationBarBackgroundColor": "#ffffff",
+    "navigationBarTextStyle": "black",
+    "backgroundColor": "#f5f7fa"
+  },
+  "tabBar": {
+    "color": "#667085",
+    "selectedColor": "#1677ff",
+    "backgroundColor": "#ffffff",
+    "list": [
+      { "pagePath": "pages/home/index", "text": "首页" },
+      { "pagePath": "pages/services/index", "text": "全部服务" },
+      { "pagePath": "pages/profile/index", "text": "我的" }
+    ]
+  },
+  "sitemapLocation": "sitemap.json",
+  "lazyCodeLoading": "requiredComponents"
+}

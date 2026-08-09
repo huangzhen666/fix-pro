@@ -1,0 +1,18 @@
+.task-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 18rpx;
+}
+
+.task-item {
+  padding: 24rpx;
+  border-radius: 14rpx;
+  background: #f6f8fb;
+}
+
+.task-value {
+  margin-bottom: 6rpx;
+  color: #1677ff;
+  font-size: 42rpx;
+  font-weight: 800;
+}

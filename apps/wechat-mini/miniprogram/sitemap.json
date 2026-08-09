@@ -1,0 +1,4 @@
+{
+  "desc": "FixPro sitemap",
+  "rules": [{ "action": "allow", "page": "*" }]
+}

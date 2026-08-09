@@ -1,0 +1,6 @@
+<view class="page">
+  <view class="card">
+    <view class="section-title">暂无订单</view>
+    <view class="muted">订单、报价、施工证据、验收与质保将在后续 Sprint 接入。</view>
+  </view>
+</view>

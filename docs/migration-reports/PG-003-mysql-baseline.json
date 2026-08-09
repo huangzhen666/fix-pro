@@ -1,0 +1,27 @@
+{
+  "capturedAt": "2026-08-07T12:22:00.5756097Z",
+  "mysqlVersion": "8.4.10",
+  "sessionTimeZone": "SYSTEM",
+  "databaseCharset": "utf8mb4",
+  "tables": [
+    {"table":"organization","count":1,"minId":1,"maxId":1},
+    {"table":"employee_account","count":0,"minId":0,"maxId":0},
+    {"table":"customer","count":1,"minId":1,"maxId":1},
+    {"table":"service_category","count":6,"minId":1001,"maxId":1006},
+    {"table":"service_sku","count":1,"minId":1,"maxId":1},
+    {"table":"customer_order","count":0,"minId":0,"maxId":0},
+    {"table":"work_order","count":0,"minId":0,"maxId":0},
+    {"table":"work_order_status_history","count":0,"minId":0,"maxId":0},
+    {"table":"idempotency_record","count":0,"minId":0,"maxId":0},
+    {"table":"outbox_event","count":0,"minId":0,"maxId":0},
+    {"table":"audit_log","count":0,"minId":0,"maxId":0},
+    {"table":"media_asset","count":1,"minId":1,"maxId":1},
+    {"table":"service_sku_media","count":1,"minId":1,"maxId":1},
+    {"table":"service_sku_version","count":1,"minId":1,"maxId":1},
+    {"table":"shopping_cart","count":0,"minId":0,"maxId":0},
+    {"table":"shopping_cart_item","count":0,"minId":0,"maxId":0},
+    {"table":"shopping_cart_item_media","count":0,"minId":0,"maxId":0},
+    {"table":"order_item","count":0,"minId":0,"maxId":0},
+    {"table":"order_item_media","count":0,"minId":0,"maxId":0}
+  ]
+}

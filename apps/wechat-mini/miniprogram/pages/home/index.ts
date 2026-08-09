@@ -1,0 +1,6 @@
+import { getApiBaseUrl } from '../../config/env'
+import { listCategoryGroups, type CategoryGroup } from '../../services/catalog'
+import { getCart } from '../../services/cart'
+
+const categoryIcons=['💧','🔧','🛡️','♨️','🧰','🚿','🏠','✨']
+Page({data:{loading:true,categories:[] as any[],recommended:[] as any[],cartCount:0},onShow(){this.load()},async load(){try{const [groups,cart]=await Promise.all([listCategoryGroups(),getCart()]);const categories=groups.slice(0,8).map((x,i)=>({...x,icon:categoryIcons[i%categoryIcons.length]}));const recommended=groups.flatMap(x=>x.services).slice(0,4).map(x=>({...x,coverImageUrl:`${getApiBaseUrl()}${x.coverImageUrl}`,priceText:(x.price/100).toFixed(2)}));this.setData({categories,recommended,cartCount:cart.itemCount})}catch(e){wx.showToast({title:e instanceof Error?e.message:'加载失败',icon:'none'})}finally{this.setData({loading:false})}},openSearch(){wx.navigateTo({url:'/pages/search/index'})},openCategory(e:any){wx.setStorageSync('fixpro.selectedCategory',e.currentTarget.dataset.id);wx.switchTab({url:'/pages/services/index'})},openService(e:any){wx.navigateTo({url:`/pages/services/detail?id=${e.currentTarget.dataset.id}`})},openCart(){wx.navigateTo({url:'/pages/cart/index'})},openEmergency(){wx.showModal({title:'快速报修',content:'如果暂时无法判断服务类别，请联系客服协助选择；首期仍以标准服务下单为准。',showCancel:false})}})

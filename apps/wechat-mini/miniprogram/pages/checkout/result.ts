@@ -1,0 +1,1 @@
+Page({data:{orderNo:'',status:'',amountText:'0.00'},onLoad(options){this.setData({orderNo:String(options.orderNo||''),status:String(options.status||''),amountText:(Number(options.amount||0)/100).toFixed(2)})},goServices(){wx.switchTab({url:'/pages/services/index'})}})

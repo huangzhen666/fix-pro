@@ -1,0 +1,12 @@
+<view class="page">
+  <view class="card">
+    <view class="section-title">今日待办</view>
+    <view class="task-grid">
+      <view wx:for="{{tasks}}" wx:key="label" class="task-item">
+        <view class="task-value">{{item.value}}</view>
+        <view class="muted">{{item.label}}</view>
+      </view>
+    </view>
+  </view>
+  <view class="card muted">签到、SOP、影像上传、报价和完工验收将在履约 Sprint 接入。</view>
+</view>
