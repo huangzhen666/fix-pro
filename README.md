@@ -39,7 +39,7 @@ docker compose -f deploy/compose.yaml up -d --build postgres migrate server
 
 ```powershell
 cd apps/server-go
-$env:DB_DSN='postgres://fixpro:fixpro-local@localhost:5432/fix_pro?sslmode=disable&timezone=UTC'
+$env:DB_DSN='postgres://fixpro:fixpro-local@localhost:5433/fix_pro?sslmode=disable&timezone=UTC'
 go run ./cmd/migrate
 go run ./cmd/server
 ```

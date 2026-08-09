@@ -25,7 +25,7 @@ type Config struct {
 func Load() (Config, error) {
 	c := Config{
 		Env: env("APP_ENV", "local"), HTTPAddr: env("HTTP_ADDR", ":8080"),
-		DBDSN:     env("DB_DSN", "postgres://fixpro:fixpro-local@localhost:5432/fix_pro?sslmode=disable&timezone=UTC"),
+		DBDSN:     env("DB_DSN", "postgres://fixpro:fixpro-local@localhost:5433/fix_pro?sslmode=disable&timezone=UTC"),
 		DBMaxOpen: envInt("DB_MAX_OPEN_CONNS", 20), DBMaxIdle: envInt("DB_MAX_IDLE_CONNS", 5),
 		MediaDriver: env("MEDIA_DRIVER", "local"), MediaLocalRoot: env("MEDIA_LOCAL_ROOT", os.TempDir()+"/fixpro-media"),
 		AdminUsername: env("APP_ADMIN_USERNAME", "admin"), AdminPassword: env("APP_ADMIN_PASSWORD", "change-me-in-production"),
