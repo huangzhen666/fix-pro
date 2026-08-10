@@ -1,7 +1,7 @@
-import { Button, Card, Descriptions, Divider, Space, Tag } from 'antd'
-import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useParams } from 'react-router'
-import { getOrder } from '../api/orders'
-import { AuthMedia } from '../components/AuthMedia'
+import { OrderDetailDrawer } from '../components/OrderDetailDrawer'
 
-export default function OrderDetailPage(){const {id}=useParams();const navigate=useNavigate();const query=useQuery({queryKey:['order',id],queryFn:()=>getOrder(id!)});const data=query.data;return <Space direction="vertical" size="large" style={{width:'100%'}}><Button onClick={()=>navigate('/orders')}>返回订单列表</Button><Card loading={query.isLoading} title={data?`订单 ${data.order.orderNo}`:'订单详情'}>{data&&<><Descriptions column={2} bordered items={[{key:'status',label:'状态',children:<Tag color="gold">{data.order.status}</Tag>},{key:'amount',label:'总金额',children:`¥${(data.order.totalAmount/100).toFixed(2)}`},{key:'name',label:'联系人',children:data.order.contactName},{key:'mobile',label:'手机号',children:data.order.contactMobile},{key:'address',label:'服务地址',span:2,children:data.order.serviceAddress},{key:'created',label:'下单时间',children:new Date(data.order.createdAt).toLocaleString()}]}/>{data.items.map(item=><Card key={item.id} type="inner" title={`${item.skuName} · V${item.skuVersion}`} style={{marginTop:20}}><Descriptions column={1} size="small" items={[{key:'code',label:'SKU 编码',children:item.skuCode},{key:'scope',label:'服务范围',children:item.serviceScope},{key:'exclusions',label:'除外项',children:item.exclusions},{key:'warranty',label:'售后/质保',children:item.warrantyDescription},{key:'fault',label:'故障描述',children:item.faultDescription},{key:'price',label:'成交金额',children:`¥${(item.unitPrice/100).toFixed(2)} × ${item.quantity}${item.unit} = ¥${(item.subtotal/100).toFixed(2)}`}]} /><Divider>客户故障资料</Divider><Space wrap>{item.faultMedia.map(m=><AuthMedia key={m.id} url={m.url} type={m.mediaType} name={m.name}/>)}</Space></Card>)}</>}</Card></Space>}
+export default function OrderDetailPage() {
+  const { id } = useParams(); const navigate = useNavigate()
+  return <OrderDetailDrawer open={Boolean(id)} orderId={id} onClose={() => navigate('/orders')} />
+}

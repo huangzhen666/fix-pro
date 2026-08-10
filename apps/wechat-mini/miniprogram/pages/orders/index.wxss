@@ -1,1 +1,1 @@
-
+.page{padding:24rpx;background:#f5f7fa;min-height:100vh}.card{background:#fff;border-radius:20rpx;padding:28rpx;margin-bottom:20rpx}.order:active{background:#f8fafc}.row{display:flex;justify-content:space-between;align-items:center}.title{font-size:30rpx;font-weight:600}.status{font-size:24rpx;color:#1677ff}.muted{color:#98a2b3;font-size:24rpx;margin-top:12rpx}.summary{margin-top:24rpx;color:#667085;font-size:25rpx}.amount{color:#101828;font-weight:600}.empty{text-align:center;color:#98a2b3;margin-top:80rpx}

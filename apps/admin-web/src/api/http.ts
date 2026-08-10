@@ -45,7 +45,7 @@ export async function apiBlob(path: string): Promise<Blob> {
   return response.blob()
 }
 
-export async function uploadFile(path: string, file: File): Promise<{ id: number; mediaType: string }> {
+export async function uploadFile(path: string, file: File): Promise<{ id: string; mediaType: string; contentType?: string; size?: number }> {
   const form = new FormData()
   form.append('file', file)
   return apiRequest(path, { method: 'POST', body: form })

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/subtle"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/fixpro/server/internal/platform/httpx"
@@ -13,6 +14,23 @@ type Principal struct {
 	OrgID, SubjectID int64
 	Role, Name       string
 }
+
+func Worker(env string, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if env != "local" {
+			httpx.Failure(w, r, httpx.E("UNAUTHORIZED", "需要师傅认证", 401))
+			return
+		}
+		token := strings.TrimPrefix(strings.TrimSpace(r.Header.Get("Authorization")), "Bearer local-worker-")
+		id, err := strconv.ParseInt(token, 10, 64)
+		if err != nil || id <= 0 {
+			httpx.Failure(w, r, httpx.E("UNAUTHORIZED", "需要师傅认证", 401))
+			return
+		}
+		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), principalKey, Principal{OrgID: 1, SubjectID: id, Role: "WORKER", Name: "本地演示师傅"})))
+	})
+}
+
 type key string
 
 const principalKey key = "principal"

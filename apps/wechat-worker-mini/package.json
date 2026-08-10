@@ -1,0 +1,12 @@
+{
+  "name": "wechat-worker-mini",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "typecheck": "tsc --noEmit --pretty false"
+  },
+  "devDependencies": {
+    "miniprogram-api-typings": "^4.0.0",
+    "typescript": "~6.0.2"
+  }
+}

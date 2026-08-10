@@ -1,0 +1,30 @@
+<view class="page">
+  <view wx:if="{{loading}}" class="state">正在加载工单...</view>
+  <view wx:elif="{{error}}" class="state error">{{error}}<button size="mini" bindtap="load">重新加载</button></view>
+  <block wx:elif="{{order}}">
+    <view class="card">
+      <view class="row"><text class="title">{{order.workOrderNo}}</text><text class="status">{{order.statusText}}</text></view>
+      <view class="muted">订单：{{order.orderNo}}</view>
+      <view wx:if="{{order.appointmentAt}}" class="muted">预约：{{order.appointmentSlotLabel || order.appointmentAt}}</view>
+      <view class="muted">地址：{{order.serviceAddress}}</view>
+    </view>
+    <view class="card actions">
+      <button wx:if="{{order.status === 'PENDING_ACCEPT'}}" type="primary" data-command="ACCEPT" bindtap="command">接单</button>
+      <button wx:if="{{order.status === 'PENDING_ACCEPT'}}" type="warn" data-command="REJECT" bindtap="command">拒绝接单</button>
+      <button wx:if="{{order.status === 'PENDING_ARRIVAL'}}" type="primary" data-command="ARRIVE" bindtap="command">标记已到达</button>
+      <button wx:if="{{order.status === 'PENDING_ACCEPT' || order.status === 'PENDING_ARRIVAL'}}" size="mini" bindtap="reschedule">与客户沟通后改期</button>
+      <button wx:if="{{order.status === 'PENDING_ACCEPT' || order.status === 'PENDING_ARRIVAL'}}" size="mini" type="warn" bindtap="returnWorkOrder">退回调度</button>
+      <button wx:if="{{order.status === 'ARRIVED'}}" type="primary" data-command="START" bindtap="command">开始服务</button>
+    </view>
+    <view wx:if="{{order.status === 'PENDING_ARRIVAL' || order.status === 'ARRIVED' || order.status === 'IN_SERVICE'}}" class="card">
+      <view class="section-title">现场凭证</view>
+      <view class="media-row"><button size="mini" bindtap="chooseMedia" data-stage="BEFORE">上传施工前</button><button size="mini" bindtap="chooseMedia" data-stage="AFTER">上传施工后</button></view>
+      <view class="muted">施工前：{{order.evidence.length ? '已上传' : '未上传'}}　施工后：{{order.evidence.length ? '请确认列表' : '未上传'}}</view>
+    </view>
+    <view wx:if="{{order.status === 'IN_SERVICE'}}" class="card">
+      <view class="section-title">提交完工</view>
+      <textarea maxlength="1000" placeholder="请填写完工说明" value="{{summary}}" bindinput="updateSummary" />
+      <button type="primary" loading="{{submitting}}" bindtap="submit">提交完工审核</button>
+    </view>
+  </block>
+</view>

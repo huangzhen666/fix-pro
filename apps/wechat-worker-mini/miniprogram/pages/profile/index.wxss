@@ -1,0 +1,6 @@
+.page { min-height: 100vh; padding: 24rpx; background: #f5f7fa; box-sizing: border-box; }
+.card { margin-bottom: 20rpx; padding: 28rpx; background: #fff; border-radius: 16rpx; }
+.profile { display: flex; align-items: center; gap: 20rpx; }
+.avatar { width: 88rpx; height: 88rpx; border-radius: 50%; background: #e6f4ff; color: #1677ff; line-height: 88rpx; text-align: center; font-size: 36rpx; }
+.title { font-size: 32rpx; font-weight: 600; }
+.muted { color: #667085; font-size: 24rpx; }

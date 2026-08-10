@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fixpro/server/internal/platform/auth"
 	"github.com/fixpro/server/internal/platform/httpx"
 	"github.com/jackc/pgx/v5/pgconn"
 )
@@ -42,6 +43,7 @@ type SKUWrite struct {
 	BasePrice                                                                                                            int64
 	GalleryMediaIDs                                                                                                      []string
 	Version                                                                                                              int
+	RequiredSkillIDs                                                                                                     []string
 }
 
 func (s *SKUWrite) UnmarshalJSON(b []byte) error {
@@ -59,32 +61,38 @@ func (s *SKUWrite) UnmarshalJSON(b []byte) error {
 		CoverMediaID        string   `json:"coverMediaId"`
 		GalleryMediaIDs     []string `json:"galleryMediaIds"`
 		Version             int      `json:"version"`
+		RequiredSkillIDs    []string `json:"requiredSkillIds"`
 	}
 	var v raw
 	if err := json.Unmarshal(b, &v); err != nil {
 		return err
 	}
-	*s = SKUWrite{v.CategoryID, v.SKUCode, v.Name, v.Description, v.ServiceScope, v.Exclusions, v.WarrantyDescription, v.PriceMode, v.Unit, v.CoverMediaID, v.BasePrice, v.GalleryMediaIDs, v.Version}
+	*s = SKUWrite{CategoryID: v.CategoryID, SKUCode: v.SKUCode, Name: v.Name, Description: v.Description, ServiceScope: v.ServiceScope, Exclusions: v.Exclusions, WarrantyDescription: v.WarrantyDescription, PriceMode: v.PriceMode, Unit: v.Unit, CoverMediaID: v.CoverMediaID, BasePrice: v.BasePrice, GalleryMediaIDs: v.GalleryMediaIDs, Version: v.Version, RequiredSkillIDs: v.RequiredSkillIDs}
 	return nil
 }
 
 type SKUDetail struct {
-	ID                  string   `json:"id"`
-	CategoryID          string   `json:"categoryId"`
-	SKUCode             string   `json:"skuCode"`
-	Name                string   `json:"name"`
-	Description         string   `json:"description"`
-	ServiceScope        string   `json:"serviceScope"`
-	Exclusions          string   `json:"exclusions"`
-	WarrantyDescription string   `json:"warrantyDescription"`
-	PriceMode           string   `json:"priceMode"`
-	BasePrice           int64    `json:"basePrice"`
-	Unit                string   `json:"unit"`
-	CoverMediaID        *string  `json:"coverMediaId"`
-	GalleryMediaIDs     []string `json:"galleryMediaIds"`
-	Status              string   `json:"status"`
-	Version             int      `json:"version"`
-	PublishedVersion    *int     `json:"publishedVersion"`
+	ID                  string    `json:"id"`
+	CategoryID          string    `json:"categoryId"`
+	SKUCode             string    `json:"skuCode"`
+	Name                string    `json:"name"`
+	Description         string    `json:"description"`
+	ServiceScope        string    `json:"serviceScope"`
+	Exclusions          string    `json:"exclusions"`
+	WarrantyDescription string    `json:"warrantyDescription"`
+	PriceMode           string    `json:"priceMode"`
+	BasePrice           int64     `json:"basePrice"`
+	Unit                string    `json:"unit"`
+	CoverMediaID        *string   `json:"coverMediaId"`
+	GalleryMediaIDs     []string  `json:"galleryMediaIds"`
+	Status              string    `json:"status"`
+	Version             int       `json:"version"`
+	PublishedVersion    *int      `json:"publishedVersion"`
+	RequiredSkillIDs    []string  `json:"requiredSkillIds"`
+	CreatedBy           string    `json:"createdBy"`
+	CreatedAt           time.Time `json:"createdAt"`
+	UpdatedBy           string    `json:"updatedBy"`
+	UpdatedAt           time.Time `json:"updatedAt"`
 }
 type SKUAdmin struct {
 	ID               string    `json:"id"`
@@ -96,6 +104,9 @@ type SKUAdmin struct {
 	Status           string    `json:"status"`
 	PublishedVersion *int      `json:"publishedVersion"`
 	UpdatedAt        time.Time `json:"updatedAt"`
+	CreatedAt        time.Time `json:"createdAt"`
+	CreatedBy        string    `json:"createdBy"`
+	UpdatedBy        string    `json:"updatedBy"`
 }
 type Page[T any] struct {
 	Items    []T   `json:"items"`
@@ -248,7 +259,7 @@ func (s *Service) CategoryStatus(ctx context.Context, n int64, status string) (C
 	return s.category(ctx, n)
 }
 
-func (s *Service) AdminList(ctx context.Context, key string, page, size int) (Page[SKUAdmin], error) {
+func (s *Service) AdminList(ctx context.Context, key, categoryID string, page, size int) (Page[SKUAdmin], error) {
 	if page < 1 {
 		page = 1
 	}
@@ -261,10 +272,10 @@ func (s *Service) AdminList(ctx context.Context, key string, page, size int) (Pa
 	q := "%" + strings.TrimSpace(key) + "%"
 	var out Page[SKUAdmin]
 	out.Page, out.PageSize = page, size
-	if e := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM service_sku WHERE org_id=1 AND (name ILIKE $1 OR COALESCE(sku_code,'') ILIKE $2)`, q, q).Scan(&out.Total); e != nil {
+	if e := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM service_sku WHERE org_id=1 AND ($3='' OR category_id=$3::bigint) AND (name ILIKE $1 OR COALESCE(sku_code,'') ILIKE $2)`, q, q, categoryID).Scan(&out.Total); e != nil {
 		return out, e
 	}
-	rows, e := s.db.QueryContext(ctx, `SELECT s.id,s.sku_code,s.name,c.name,s.base_price,s.unit,s.status,s.current_published_version,s.updated_at FROM service_sku s JOIN service_category c ON c.id=s.category_id AND c.org_id=s.org_id WHERE s.org_id=1 AND (s.name ILIKE $1 OR COALESCE(s.sku_code,'') ILIKE $2) ORDER BY s.updated_at DESC LIMIT $3 OFFSET $4`, q, q, size, (page-1)*size)
+	rows, e := s.db.QueryContext(ctx, `SELECT s.id,s.sku_code,s.name,c.name,s.base_price,s.unit,s.status,s.current_published_version,s.created_at,s.updated_at,s.created_by,s.updated_by FROM service_sku s JOIN service_category c ON c.id=s.category_id AND c.org_id=s.org_id WHERE s.org_id=1 AND ($3='' OR s.category_id=$3::bigint) AND (s.name ILIKE $1 OR COALESCE(s.sku_code,'') ILIKE $2) ORDER BY s.updated_at DESC LIMIT $4 OFFSET $5`, q, q, categoryID, size, (page-1)*size)
 	if e != nil {
 		return out, e
 	}
@@ -274,7 +285,7 @@ func (s *Service) AdminList(ctx context.Context, key string, page, size int) (Pa
 		var x SKUAdmin
 		var n int64
 		var pv sql.NullInt64
-		if e = rows.Scan(&n, &x.SKUCode, &x.Name, &x.CategoryName, &x.BasePrice, &x.Unit, &x.Status, &pv, &x.UpdatedAt); e != nil {
+		if e = rows.Scan(&n, &x.SKUCode, &x.Name, &x.CategoryName, &x.BasePrice, &x.Unit, &x.Status, &pv, &x.CreatedAt, &x.UpdatedAt, &x.CreatedBy, &x.UpdatedBy); e != nil {
 			return out, e
 		}
 		x.ID = fmt.Sprint(n)
@@ -290,7 +301,7 @@ func (s *Service) Detail(ctx context.Context, n int64) (SKUDetail, error) {
 	var x SKUDetail
 	var rawID, cat int64
 	var cover, pv sql.NullInt64
-	e := s.db.QueryRowContext(ctx, `SELECT id,category_id,sku_code,name,COALESCE(description,''),service_scope,exclusions,warranty_description,price_mode,base_price,unit,cover_media_id,status,version,current_published_version FROM service_sku WHERE org_id=1 AND id=$1`, n).Scan(&rawID, &cat, &x.SKUCode, &x.Name, &x.Description, &x.ServiceScope, &x.Exclusions, &x.WarrantyDescription, &x.PriceMode, &x.BasePrice, &x.Unit, &cover, &x.Status, &x.Version, &pv)
+	e := s.db.QueryRowContext(ctx, `SELECT id,category_id,sku_code,name,COALESCE(description,''),service_scope,exclusions,warranty_description,price_mode,base_price,unit,cover_media_id,status,version,current_published_version,created_by,created_at,updated_by,updated_at FROM service_sku WHERE org_id=1 AND id=$1`, n).Scan(&rawID, &cat, &x.SKUCode, &x.Name, &x.Description, &x.ServiceScope, &x.Exclusions, &x.WarrantyDescription, &x.PriceMode, &x.BasePrice, &x.Unit, &cover, &x.Status, &x.Version, &pv, &x.CreatedBy, &x.CreatedAt, &x.UpdatedBy, &x.UpdatedAt)
 	if e == sql.ErrNoRows {
 		return x, httpx.E("SKU_NOT_FOUND", "SKU 不存在", 404)
 	}
@@ -315,6 +326,18 @@ func (s *Service) Detail(ctx context.Context, n int64) (SKUDetail, error) {
 			return x, e
 		}
 		x.GalleryMediaIDs = append(x.GalleryMediaIDs, fmt.Sprint(m))
+	}
+	reqRows, e := s.db.QueryContext(ctx, `SELECT skill_id FROM service_sku_skill_requirement WHERE org_id=1 AND sku_id=$1 ORDER BY skill_id`, n)
+	if e != nil {
+		return x, e
+	}
+	defer reqRows.Close()
+	for reqRows.Next() {
+		var skillID int64
+		if e = reqRows.Scan(&skillID); e != nil {
+			return x, e
+		}
+		x.RequiredSkillIDs = append(x.RequiredSkillIDs, fmt.Sprint(skillID))
 	}
 	return x, rows.Err()
 }
@@ -375,9 +398,33 @@ func (s *Service) bind(ctx context.Context, tx *sql.Tx, n int64, w SKUWrite) err
 			seen[m] = true
 		}
 	}
+	if _, e = tx.ExecContext(ctx, `DELETE FROM service_sku_skill_requirement WHERE org_id=1 AND sku_id=$1`, n); e != nil {
+		return e
+	}
+	seenSkills := map[int64]bool{}
+	for _, rawSkill := range w.RequiredSkillIDs {
+		skillID, e := id(rawSkill)
+		if e != nil {
+			return httpx.E("WORKER_SKILL_INVALID", "SKU 技能要求不合法", 400)
+		}
+		if seenSkills[skillID] {
+			continue
+		}
+		var active int
+		if e = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM worker_skill WHERE org_id=1 AND id=$1 AND status='ACTIVE'`, skillID).Scan(&active); e != nil {
+			return e
+		}
+		if active == 0 {
+			return httpx.E("WORKER_SKILL_INVALID", "SKU 技能要求不可用", 400)
+		}
+		if _, e = tx.ExecContext(ctx, `INSERT INTO service_sku_skill_requirement(org_id,sku_id,skill_id) VALUES(1,$1,$2)`, n, skillID); e != nil {
+			return e
+		}
+		seenSkills[skillID] = true
+	}
 	return nil
 }
-func (s *Service) Create(ctx context.Context, w SKUWrite) (SKUDetail, error) {
+func (s *Service) Create(ctx context.Context, w SKUWrite, actor string) (SKUDetail, error) {
 	if e := s.validateWrite(ctx, w); e != nil {
 		return SKUDetail{}, e
 	}
@@ -389,7 +436,7 @@ func (s *Service) Create(ctx context.Context, w SKUWrite) (SKUDetail, error) {
 	}
 	defer tx.Rollback()
 	var n int64
-	e = tx.QueryRowContext(ctx, `INSERT INTO service_sku(org_id,category_id,sku_code,name,description,service_scope,exclusions,warranty_description,price_mode,base_price,unit,cover_media_id,status) VALUES(1,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'DRAFT') RETURNING id`, cat, strings.ToUpper(w.SKUCode), w.Name, w.Description, w.ServiceScope, w.Exclusions, w.WarrantyDescription, w.PriceMode, w.BasePrice, w.Unit, cover).Scan(&n)
+	e = tx.QueryRowContext(ctx, `INSERT INTO service_sku(org_id,category_id,sku_code,name,description,service_scope,exclusions,warranty_description,price_mode,base_price,unit,cover_media_id,status,created_by,updated_by) VALUES(1,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'DRAFT',$12,$12) RETURNING id`, cat, strings.ToUpper(w.SKUCode), w.Name, w.Description, w.ServiceScope, w.Exclusions, w.WarrantyDescription, w.PriceMode, w.BasePrice, w.Unit, cover, actor).Scan(&n)
 	if duplicate(e) {
 		return SKUDetail{}, httpx.E("SKU_CODE_DUPLICATED", "SKU 编码已存在", 409)
 	}
@@ -404,7 +451,7 @@ func (s *Service) Create(ctx context.Context, w SKUWrite) (SKUDetail, error) {
 	}
 	return s.Detail(ctx, n)
 }
-func (s *Service) Update(ctx context.Context, n int64, w SKUWrite) (SKUDetail, error) {
+func (s *Service) Update(ctx context.Context, n int64, w SKUWrite, actor string) (SKUDetail, error) {
 	if e := s.validateWrite(ctx, w); e != nil {
 		return SKUDetail{}, e
 	}
@@ -422,7 +469,7 @@ func (s *Service) Update(ctx context.Context, n int64, w SKUWrite) (SKUDetail, e
 		return SKUDetail{}, e
 	}
 	defer tx.Rollback()
-	r, e := tx.ExecContext(ctx, `UPDATE service_sku SET category_id=$1,name=$2,description=$3,service_scope=$4,exclusions=$5,warranty_description=$6,price_mode=$7,base_price=$8,unit=$9,cover_media_id=$10,version=version+1 WHERE org_id=1 AND id=$11 AND version=$12`, cat, w.Name, w.Description, w.ServiceScope, w.Exclusions, w.WarrantyDescription, w.PriceMode, w.BasePrice, w.Unit, cover, n, w.Version)
+	r, e := tx.ExecContext(ctx, `UPDATE service_sku SET category_id=$1,name=$2,description=$3,service_scope=$4,exclusions=$5,warranty_description=$6,price_mode=$7,base_price=$8,unit=$9,cover_media_id=$10,updated_by=$11,version=version+1 WHERE org_id=1 AND id=$12 AND version=$13`, cat, w.Name, w.Description, w.ServiceScope, w.Exclusions, w.WarrantyDescription, w.PriceMode, w.BasePrice, w.Unit, cover, actor, n, w.Version)
 	if e != nil {
 		return SKUDetail{}, e
 	}
@@ -623,7 +670,7 @@ func (h *Handler) CategoryStatus(w http.ResponseWriter, r *http.Request) {
 	fail(w, r, v, e)
 }
 func (h *Handler) AdminList(w http.ResponseWriter, r *http.Request) {
-	v, e := h.s.AdminList(r.Context(), r.URL.Query().Get("keyword"), pageInt(r, "page", 1), pageInt(r, "pageSize", 20))
+	v, e := h.s.AdminList(r.Context(), r.URL.Query().Get("keyword"), r.URL.Query().Get("categoryId"), pageInt(r, "page", 1), pageInt(r, "pageSize", 20))
 	fail(w, r, v, e)
 }
 func (h *Handler) AdminDetail(w http.ResponseWriter, r *http.Request) {
@@ -636,15 +683,17 @@ func (h *Handler) AdminDetail(w http.ResponseWriter, r *http.Request) {
 	fail(w, r, v, e)
 }
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
+	p, _ := auth.From(r.Context())
 	var b SKUWrite
 	if e := httpx.DecodeJSON(w, r, &b); e != nil {
 		httpx.Failure(w, r, e)
 		return
 	}
-	v, e := h.s.Create(r.Context(), b)
+	v, e := h.s.Create(r.Context(), b, p.Name)
 	fail(w, r, v, e)
 }
 func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
+	p, _ := auth.From(r.Context())
 	n, e := httpx.PathID(r, "id")
 	if e != nil {
 		httpx.Failure(w, r, e)
@@ -655,7 +704,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		httpx.Failure(w, r, e)
 		return
 	}
-	v, e := h.s.Update(r.Context(), n, b)
+	v, e := h.s.Update(r.Context(), n, b, p.Name)
 	fail(w, r, v, e)
 }
 func (h *Handler) Publish(w http.ResponseWriter, r *http.Request) {

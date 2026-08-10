@@ -1,0 +1,42 @@
+{
+  "appid": "wxd9a8894156cefd47",
+  "projectname": "fix-pro-worker-mini",
+  "description": "FixPro 师傅作业小程序",
+  "miniprogramRoot": "miniprogram/",
+  "compileType": "miniprogram",
+  "setting": {
+    "es6": true,
+    "enhance": true,
+    "postcss": true,
+    "minified": false,
+    "checkInvalidKey": true,
+    "useCompilerPlugins": [
+      "typescript"
+    ],
+    "urlCheck": false,
+    "uploadWithSourceMap": true,
+    "minifyWXML": false,
+    "minifyWXSS": false,
+    "compileWorklet": false,
+    "uglifyFileName": false,
+    "packNpmManually": false,
+    "packNpmRelationList": [],
+    "localPlugins": false,
+    "disableUseStrict": false,
+    "condition": false,
+    "swc": false,
+    "disableSWC": true,
+    "babelSetting": {
+      "ignore": [],
+      "disablePlugins": [],
+      "outputPath": ""
+    }
+  },
+  "condition": {},
+  "simulatorPluginLibVersion": {},
+  "packOptions": {
+    "ignore": [],
+    "include": []
+  },
+  "editorSetting": {}
+}

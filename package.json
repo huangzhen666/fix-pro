@@ -4,14 +4,16 @@
   "version": "0.1.0",
   "workspaces": [
     "apps/admin-web",
-    "apps/wechat-mini"
+    "apps/wechat-mini",
+    "apps/wechat-worker-mini"
   ],
   "scripts": {
     "admin:dev": "npm run dev --workspace admin-web",
     "admin:build": "npm run build --workspace admin-web",
     "admin:lint": "npm run lint --workspace admin-web",
     "mini:typecheck": "npm run typecheck --workspace wechat-mini",
-    "check": "npm run admin:lint && npm run admin:build && npm run mini:typecheck"
+    "mini:worker:typecheck": "npm run typecheck --workspace wechat-worker-mini",
+    "check": "npm run admin:lint && npm run admin:build && npm run mini:typecheck && npm run mini:worker:typecheck"
   },
   "engines": {
     "node": ">=24"

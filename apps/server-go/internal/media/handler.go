@@ -15,6 +15,16 @@ func NewHandler(s *Service) *Handler { return &Handler{s: s} }
 func (h *Handler) UploadSKU(w http.ResponseWriter, r *http.Request) {
 	h.upload(w, r, "SKU_IMAGE", true)
 }
+func (h *Handler) UploadWorker(w http.ResponseWriter, r *http.Request) {
+	switch r.URL.Query().Get("purpose") {
+	case "AVATAR":
+		h.upload(w, r, "WORKER_AVATAR", true)
+	case "CERTIFICATE":
+		h.upload(w, r, "WORKER_CERTIFICATE", true)
+	default:
+		httpx.Failure(w, r, httpx.E("MEDIA_PURPOSE_INVALID", "师傅资料类型不合法", 400))
+	}
+}
 func (h *Handler) UploadFault(w http.ResponseWriter, r *http.Request) {
 	h.upload(w, r, "FAULT_EVIDENCE", false)
 }

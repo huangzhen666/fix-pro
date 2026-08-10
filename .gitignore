@@ -24,3 +24,5 @@ apps/wechat-mini/miniprogram_npm/
 docs/.qa-*/
 server-initializr.zip
 go-cache/
+.gocache/
+/fixpro-server-*.exe

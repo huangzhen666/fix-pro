@@ -46,6 +46,21 @@ func New(db *sql.DB, root string) (*Service, error) {
 }
 
 func (s *Service) Upload(ctx context.Context, p auth.Principal, fh *multipart.FileHeader, purpose string, imageOnly bool) (Uploaded, error) {
+	ownerType, ownerID := "ADMIN", int64(0)
+	if p.Role == "CUSTOMER" {
+		ownerType, ownerID = "CUSTOMER", p.SubjectID
+	}
+	return s.upload(ctx, fh, purpose, imageOnly, p.OrgID, ownerType, ownerID)
+}
+
+func (s *Service) UploadWorkOrder(ctx context.Context, p auth.Principal, workOrderID int64, fh *multipart.FileHeader) (Uploaded, error) {
+	if p.Role != "WORKER" {
+		return Uploaded{}, httpx.E("FORBIDDEN", "无权上传工单证据", 403)
+	}
+	return s.upload(ctx, fh, "WORK_ORDER_EVIDENCE", true, p.OrgID, "WORK_ORDER", workOrderID)
+}
+
+func (s *Service) upload(ctx context.Context, fh *multipart.FileHeader, purpose string, imageOnly bool, orgID int64, ownerType string, ownerID int64) (Uploaded, error) {
 	if fh == nil {
 		return Uploaded{}, httpx.E("MEDIA_NOT_FOUND", "请选择文件", 400)
 	}
@@ -97,12 +112,8 @@ func (s *Service) Upload(ctx context.Context, p auth.Principal, fh *multipart.Fi
 		}
 		return Uploaded{}, errors.New("uploaded size mismatch")
 	}
-	ownerType, ownerID := "ADMIN", int64(0)
-	if p.Role == "CUSTOMER" {
-		ownerType, ownerID = "CUSTOMER", p.SubjectID
-	}
 	var id int64
-	err = s.db.QueryRowContext(ctx, `INSERT INTO media_asset(org_id,owner_type,owner_id,purpose,media_type,original_name,object_key,content_type,size_bytes,status) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,'READY') RETURNING id`, p.OrgID, ownerType, ownerID, purpose, kind, safeName(fh.Filename), key, ct, written).Scan(&id)
+	err = s.db.QueryRowContext(ctx, `INSERT INTO media_asset(org_id,owner_type,owner_id,purpose,media_type,original_name,object_key,content_type,size_bytes,status) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,'READY') RETURNING id`, orgID, ownerType, ownerID, purpose, kind, safeName(fh.Filename), key, ct, written).Scan(&id)
 	if err != nil {
 		_ = os.Remove(target)
 		return Uploaded{}, err
@@ -127,8 +138,30 @@ func (s *Service) Read(ctx context.Context, id int64, p *auth.Principal, public 
 		if n == 0 {
 			return asset{}, nil, httpx.E("MEDIA_ACCESS_DENIED", "媒体未公开", 403)
 		}
-	} else if p != nil && p.Role == "CUSTOMER" && (a.OrgID != p.OrgID || a.OwnerType != "CUSTOMER" || a.OwnerID != p.SubjectID) {
-		return asset{}, nil, httpx.E("MEDIA_ACCESS_DENIED", "无权访问该媒体", 403)
+	} else if p != nil && p.Role == "CUSTOMER" {
+		allowed := a.OrgID == p.OrgID && a.OwnerType == "CUSTOMER" && a.OwnerID == p.SubjectID
+		if !allowed && a.OrgID == p.OrgID && a.OwnerType == "WORK_ORDER" && a.Purpose == "WORK_ORDER_EVIDENCE" {
+			var count int
+			if err = s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM work_order_evidence e JOIN work_order w ON w.org_id=e.org_id AND w.id=e.work_order_id JOIN customer_order o ON o.org_id=w.org_id AND o.id=w.order_id WHERE e.org_id=$1 AND e.media_id=$2 AND e.customer_visible=true AND o.customer_id=$3`, p.OrgID, id, p.SubjectID).Scan(&count); err != nil {
+				return asset{}, nil, err
+			}
+			allowed = count > 0
+		}
+		if !allowed {
+			return asset{}, nil, httpx.E("MEDIA_ACCESS_DENIED", "无权访问该媒体", 403)
+		}
+	} else if p != nil && p.Role == "WORKER" {
+		allowed := a.OrgID == p.OrgID && a.OwnerType == "WORK_ORDER" && a.Purpose == "WORK_ORDER_EVIDENCE"
+		if allowed {
+			var count int
+			if err = s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM work_order w WHERE w.org_id=$1 AND w.id=$2 AND w.assignee_id=$3 AND EXISTS (SELECT 1 FROM work_order_evidence e WHERE e.org_id=w.org_id AND e.work_order_id=w.id AND e.media_id=$4)`, p.OrgID, a.OwnerID, p.SubjectID, a.ID).Scan(&count); err != nil {
+				return asset{}, nil, err
+			}
+			allowed = count > 0
+		}
+		if !allowed {
+			return asset{}, nil, httpx.E("MEDIA_ACCESS_DENIED", "无权访问该媒体", 403)
+		}
 	}
 	path := filepath.Clean(filepath.Join(s.root, filepath.FromSlash(a.Key)))
 	if !strings.HasPrefix(path, s.root+string(os.PathSeparator)) {
@@ -149,7 +182,7 @@ func (s *Service) Delete(ctx context.Context, id int64, p auth.Principal) error 
 		return httpx.E("MEDIA_ACCESS_DENIED", "无权删除该媒体", 403)
 	}
 	var refs int
-	if err = s.db.QueryRowContext(ctx, `SELECT (SELECT COUNT(*) FROM service_sku_media WHERE media_id=$1) + (SELECT COUNT(*) FROM shopping_cart_item_media WHERE media_id=$2) + (SELECT COUNT(*) FROM order_item_media WHERE media_id=$3)`, id, id, id).Scan(&refs); err != nil {
+	if err = s.db.QueryRowContext(ctx, `SELECT (SELECT COUNT(*) FROM service_sku_media WHERE media_id=$1) + (SELECT COUNT(*) FROM shopping_cart_item_media WHERE media_id=$2) + (SELECT COUNT(*) FROM order_item_media WHERE media_id=$3) + (SELECT COUNT(*) FROM employee_account WHERE avatar_media_id=$4) + (SELECT COUNT(*) FROM worker_certificate_media WHERE media_id=$5)`, id, id, id, id, id).Scan(&refs); err != nil {
 		return err
 	}
 	if refs > 0 {

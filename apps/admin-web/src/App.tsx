@@ -12,6 +12,9 @@ const SkuEditPage = lazy(() => import('./pages/SkuEditPage'))
 const OrderListPage = lazy(() => import('./pages/OrderListPage'))
 const OrderDetailPage = lazy(() => import('./pages/OrderDetailPage'))
 const CategoryPage = lazy(() => import('./pages/CategoryPage'))
+const WorkOrderPage = lazy(() => import('./pages/WorkOrderPage'))
+const WorkerPage = lazy(() => import('./pages/WorkerPage'))
+const SkillPage = lazy(() => import('./pages/SkillPage'))
 
 function ProtectedLayout() {
   const credential = useAuthStore((state) => state.credential)
@@ -31,7 +34,9 @@ const router = createBrowserRouter([
       { path: 'catalog/skus/:id/edit', element: <SkuEditPage /> },
       { path: 'orders', element: <OrderListPage /> },
       { path: 'orders/:id', element: <OrderDetailPage /> },
-      { path: 'work-orders', element: <PlaceholderPage title="履约调度" /> },
+      { path: 'work-orders', element: <WorkOrderPage /> },
+      { path: 'workers', element: <WorkerPage /> },
+      { path: 'worker-skills', element: <SkillPage /> },
       { path: 'customers', element: <PlaceholderPage title="客户资产" /> },
       { path: 'inventory', element: <PlaceholderPage title="材料库存" /> },
       { path: 'after-sales', element: <PlaceholderPage title="售后质保" /> },

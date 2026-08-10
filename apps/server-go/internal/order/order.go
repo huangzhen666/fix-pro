@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/fixpro/server/internal/catalog"
+	"github.com/fixpro/server/internal/fulfillment"
 	"github.com/fixpro/server/internal/platform/auth"
 	"github.com/fixpro/server/internal/platform/httpx"
 	"math"
@@ -22,9 +23,11 @@ type Service struct{ db *sql.DB }
 func New(db *sql.DB) *Service { return &Service{db} }
 
 type Write struct {
-	ContactName    string `json:"contactName"`
-	ContactMobile  string `json:"contactMobile"`
-	ServiceAddress string `json:"serviceAddress"`
+	ContactName     string `json:"contactName"`
+	ContactMobile   string `json:"contactMobile"`
+	ServiceAddress  string `json:"serviceAddress"`
+	AppointmentDate string `json:"appointmentDate"`
+	AppointmentSlot string `json:"appointmentSlot"`
 }
 type Result struct {
 	ID          string    `json:"id"`
@@ -42,6 +45,7 @@ type Summary struct {
 	TotalAmount   int64     `json:"totalAmount"`
 	ItemCount     int       `json:"itemCount"`
 	CreatedAt     time.Time `json:"createdAt"`
+	Version       int       `json:"version"`
 }
 type Page struct {
 	Items    []Summary `json:"items"`
@@ -50,16 +54,19 @@ type Page struct {
 	PageSize int       `json:"pageSize"`
 }
 type Base struct {
-	ID             string    `json:"id"`
-	OrderNo        string    `json:"orderNo"`
-	CustomerID     string    `json:"customerId"`
-	Status         string    `json:"status"`
-	ContactName    string    `json:"contactName"`
-	ContactMobile  string    `json:"contactMobile"`
-	ServiceAddress string    `json:"serviceAddress"`
-	TotalAmount    int64     `json:"totalAmount"`
-	ItemCount      int       `json:"itemCount"`
-	CreatedAt      time.Time `json:"createdAt"`
+	ID              string     `json:"id"`
+	OrderNo         string     `json:"orderNo"`
+	CustomerID      string     `json:"customerId"`
+	Status          string     `json:"status"`
+	ContactName     string     `json:"contactName"`
+	ContactMobile   string     `json:"contactMobile"`
+	ServiceAddress  string     `json:"serviceAddress"`
+	TotalAmount     int64      `json:"totalAmount"`
+	ItemCount       int        `json:"itemCount"`
+	Version         int        `json:"version"`
+	CreatedAt       time.Time  `json:"createdAt"`
+	AppointmentAt   *time.Time `json:"appointmentAt,omitempty"`
+	AppointmentSlot string     `json:"appointmentSlot,omitempty"`
 }
 type Media struct {
 	ID        string `json:"id"`
@@ -108,7 +115,21 @@ func validate(w Write) error {
 	if len([]rune(strings.TrimSpace(w.ServiceAddress))) < 5 || len([]rune(w.ServiceAddress)) > 255 {
 		return httpx.E("VALIDATION_ERROR", "服务地址需为 5-255 字", 400)
 	}
+	if !validSlot(w.AppointmentSlot) {
+		return httpx.E("APPOINTMENT_SLOT_INVALID", "请选择有效的预约时间段", 400)
+	}
+	date, err := time.ParseInLocation("2006-01-02", w.AppointmentDate, time.Local)
+	if err != nil || date.Before(time.Now().AddDate(0, 0, -1)) {
+		return httpx.E("APPOINTMENT_DATE_INVALID", "预约日期不能为空且不能早于今天", 400)
+	}
 	return nil
+}
+func validSlot(slot string) bool {
+	switch slot {
+	case "08:00", "10:00", "12:00", "14:00", "16:00", "18:00", "20:00":
+		return true
+	}
+	return false
 }
 func (s *Service) Create(ctx context.Context, p auth.Principal, key string, w Write) (Result, error) {
 	if strings.TrimSpace(key) == "" || len(key) > 128 {
@@ -117,6 +138,10 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, key string, w Wr
 	if e := validate(w); e != nil {
 		return Result{}, e
 	}
+	date, _ := time.ParseInLocation("2006-01-02", w.AppointmentDate, time.Local)
+	hour := 0
+	fmt.Sscanf(w.AppointmentSlot, "%d:00", &hour)
+	appointmentAt := time.Date(date.Year(), date.Month(), date.Day(), hour, 0, 0, 0, time.Local).UTC()
 	body, _ := json.Marshal(w)
 	hash := sha256.Sum256(body)
 	tx, e := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
@@ -125,11 +150,11 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, key string, w Wr
 	}
 	defer tx.Rollback()
 	var placeholderID int64
-	e = tx.QueryRowContext(ctx, `INSERT INTO idempotency_record(org_id,principal_id,idempotency_key,request_hash,response_code,response_body,expires_at) VALUES($1,$2,$3,$4,'PROCESSING',NULL,$5) ON CONFLICT (org_id,principal_id,idempotency_key) DO NOTHING RETURNING id`, p.OrgID, p.SubjectID, key, hash[:], time.Now().UTC().Add(24*time.Hour)).Scan(&placeholderID)
+	e = tx.QueryRowContext(ctx, `INSERT INTO idempotency_record(org_id,principal_type,principal_id,idempotency_key,request_hash,response_code,response_body,expires_at) VALUES($1,'CUSTOMER',$2,$3,$4,'PROCESSING',NULL,$5) ON CONFLICT (org_id,principal_type,principal_id,idempotency_key) DO NOTHING RETURNING id`, p.OrgID, p.SubjectID, key, hash[:], time.Now().UTC().Add(24*time.Hour)).Scan(&placeholderID)
 	if e == sql.ErrNoRows {
 		var old []byte
 		var raw sql.NullString
-		e = tx.QueryRowContext(ctx, `SELECT request_hash,response_body FROM idempotency_record WHERE org_id=$1 AND principal_id=$2 AND idempotency_key=$3`, p.OrgID, p.SubjectID, key).Scan(&old, &raw)
+		e = tx.QueryRowContext(ctx, `SELECT request_hash,response_body FROM idempotency_record WHERE org_id=$1 AND principal_type='CUSTOMER' AND principal_id=$2 AND idempotency_key=$3`, p.OrgID, p.SubjectID, key).Scan(&old, &raw)
 		if e != nil {
 			return Result{}, e
 		}
@@ -206,7 +231,7 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, key string, w Wr
 	}
 	orderNo := fmt.Sprintf("FP%s%06d", time.Now().UTC().Format("20060102150405"), time.Now().UnixNano()%1000000)
 	var orderID int64
-	e = tx.QueryRowContext(ctx, `INSERT INTO customer_order(org_id,order_no,customer_id,contact_name,contact_mobile,service_address,order_type,status,total_amount,paid_amount,item_count) VALUES($1,$2,$3,$4,$5,$6,'REPAIR','WAITING_PAYMENT',$7,0,$8) RETURNING id`, p.OrgID, orderNo, p.SubjectID, strings.TrimSpace(w.ContactName), w.ContactMobile, strings.TrimSpace(w.ServiceAddress), total, count).Scan(&orderID)
+	e = tx.QueryRowContext(ctx, `INSERT INTO customer_order(org_id,order_no,customer_id,contact_name,contact_mobile,service_address,order_type,status,total_amount,paid_amount,item_count,appointment_at,appointment_slot) VALUES($1,$2,$3,$4,$5,$6,'REPAIR',$7,$8,0,$9,$10,$11) RETURNING id`, p.OrgID, orderNo, p.SubjectID, strings.TrimSpace(w.ContactName), w.ContactMobile, strings.TrimSpace(w.ServiceAddress), fulfillment.OrderPendingConfirmation, total, count, appointmentAt, w.AppointmentSlot).Scan(&orderID)
 	if e != nil {
 		return Result{}, e
 	}
@@ -222,15 +247,18 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, key string, w Wr
 			return Result{}, e
 		}
 	}
+	if _, e = tx.ExecContext(ctx, `INSERT INTO order_status_history(org_id,order_id,from_status,to_status,event_code,operator_type,operator_id,operator_name) VALUES($1,$2,NULL,$3,'ORDER_CREATED','CUSTOMER',$4,$5)`, p.OrgID, orderID, fulfillment.OrderPendingConfirmation, p.SubjectID, p.Name); e != nil {
+		return Result{}, e
+	}
 	if _, e = tx.ExecContext(ctx, `DELETE FROM shopping_cart_item_media cim USING shopping_cart_item ci WHERE ci.id=cim.cart_item_id AND ci.org_id=cim.org_id AND ci.org_id=$1 AND ci.cart_id=$2`, p.OrgID, cart); e != nil {
 		return Result{}, e
 	}
 	if _, e = tx.ExecContext(ctx, `DELETE FROM shopping_cart_item WHERE org_id=$1 AND cart_id=$2`, p.OrgID, cart); e != nil {
 		return Result{}, e
 	}
-	out := Result{fmt.Sprint(orderID), orderNo, "WAITING_PAYMENT", total, time.Now().UTC()}
+	out := Result{fmt.Sprint(orderID), orderNo, fulfillment.OrderPendingConfirmation, total, time.Now().UTC()}
 	raw, _ := json.Marshal(out)
-	if _, e = tx.ExecContext(ctx, `UPDATE idempotency_record SET response_code='OK',response_body=$1 WHERE org_id=$2 AND principal_id=$3 AND idempotency_key=$4`, raw, p.OrgID, p.SubjectID, key); e != nil {
+	if _, e = tx.ExecContext(ctx, `UPDATE idempotency_record SET response_code='OK',response_body=$1 WHERE org_id=$2 AND principal_type='CUSTOMER' AND principal_id=$3 AND idempotency_key=$4`, raw, p.OrgID, p.SubjectID, key); e != nil {
 		return Result{}, e
 	}
 	if e = tx.Commit(); e != nil {
@@ -238,7 +266,7 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, key string, w Wr
 	}
 	return out, nil
 }
-func (s *Service) List(ctx context.Context, key string, page, size int) (Page, error) {
+func (s *Service) List(ctx context.Context, key, status, contact, createdFrom, createdTo string, page, size int) (Page, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -249,11 +277,13 @@ func (s *Service) List(ctx context.Context, key string, page, size int) (Page, e
 		size = 100
 	}
 	q := "%" + strings.TrimSpace(key) + "%"
+	c := "%" + strings.TrimSpace(contact) + "%"
+	where := `org_id=1 AND ($1='' OR order_no ILIKE $1 OR contact_name ILIKE $1 OR contact_mobile ILIKE $1) AND ($2='' OR status=$2) AND ($3='' OR contact_name ILIKE $3 OR contact_mobile ILIKE $3) AND ($4='' OR created_at >= $4::date) AND ($5='' OR created_at < ($5::date + INTERVAL '1 day'))`
 	out := Page{Items: []Summary{}, Page: page, PageSize: size}
-	if e := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM customer_order WHERE org_id=1 AND order_no ILIKE $1`, q).Scan(&out.Total); e != nil {
+	if e := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM customer_order WHERE `+where, q, status, c, createdFrom, createdTo).Scan(&out.Total); e != nil {
 		return out, e
 	}
-	rows, e := s.db.QueryContext(ctx, `SELECT id,order_no,status,contact_name,contact_mobile,total_amount,item_count,created_at FROM customer_order WHERE org_id=1 AND order_no ILIKE $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3`, q, size, (page-1)*size)
+	rows, e := s.db.QueryContext(ctx, `SELECT id,order_no,status,contact_name,contact_mobile,total_amount,item_count,created_at,version FROM customer_order WHERE `+where+` ORDER BY created_at DESC LIMIT $6 OFFSET $7`, q, status, c, createdFrom, createdTo, size, (page-1)*size)
 	if e != nil {
 		return out, e
 	}
@@ -261,7 +291,7 @@ func (s *Service) List(ctx context.Context, key string, page, size int) (Page, e
 	for rows.Next() {
 		var x Summary
 		var n int64
-		if e = rows.Scan(&n, &x.OrderNo, &x.Status, &x.ContactName, &x.ContactMobile, &x.TotalAmount, &x.ItemCount, &x.CreatedAt); e != nil {
+		if e = rows.Scan(&n, &x.OrderNo, &x.Status, &x.ContactName, &x.ContactMobile, &x.TotalAmount, &x.ItemCount, &x.CreatedAt, &x.Version); e != nil {
 			return out, e
 		}
 		x.ID = fmt.Sprint(n)
@@ -294,7 +324,7 @@ func (s *Service) media(ctx context.Context, item int64) ([]Media, error) {
 func (s *Service) Detail(ctx context.Context, n int64) (Detail, error) {
 	var out Detail
 	var id, customer int64
-	e := s.db.QueryRowContext(ctx, `SELECT id,order_no,customer_id,status,contact_name,contact_mobile,service_address,total_amount,item_count,created_at FROM customer_order WHERE org_id=1 AND id=$1`, n).Scan(&id, &out.Order.OrderNo, &customer, &out.Order.Status, &out.Order.ContactName, &out.Order.ContactMobile, &out.Order.ServiceAddress, &out.Order.TotalAmount, &out.Order.ItemCount, &out.Order.CreatedAt)
+	e := s.db.QueryRowContext(ctx, `SELECT id,order_no,customer_id,status,contact_name,contact_mobile,service_address,total_amount,item_count,version,created_at,appointment_at,COALESCE(appointment_slot,'') FROM customer_order WHERE org_id=1 AND id=$1`, n).Scan(&id, &out.Order.OrderNo, &customer, &out.Order.Status, &out.Order.ContactName, &out.Order.ContactMobile, &out.Order.ServiceAddress, &out.Order.TotalAmount, &out.Order.ItemCount, &out.Order.Version, &out.Order.CreatedAt, &out.Order.AppointmentAt, &out.Order.AppointmentSlot)
 	if e == sql.ErrNoRows {
 		return out, httpx.E("RESOURCE_NOT_FOUND", "订单不存在", 404)
 	}
@@ -347,7 +377,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	send(w, r, v, e)
 }
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
-	v, e := h.s.List(r.Context(), r.URL.Query().Get("keyword"), ints(r, "page", 1), ints(r, "pageSize", 20))
+	v, e := h.s.List(r.Context(), r.URL.Query().Get("keyword"), r.URL.Query().Get("status"), r.URL.Query().Get("contact"), r.URL.Query().Get("createdFrom"), r.URL.Query().Get("createdTo"), ints(r, "page", 1), ints(r, "pageSize", 20))
 	send(w, r, v, e)
 }
 func (h *Handler) Detail(w http.ResponseWriter, r *http.Request) {

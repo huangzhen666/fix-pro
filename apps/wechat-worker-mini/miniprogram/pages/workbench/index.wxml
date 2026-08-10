@@ -1,0 +1,16 @@
+<view class="page">
+  <view class="hero card">
+    <view class="eyebrow">FIXPRO FIELD SERVICE</view>
+    <view class="title">今天，把每一单做好</view>
+    <view class="muted">作业签到、进度更新和完工凭证将在此完成</view>
+  </view>
+  <view class="card">
+    <view class="section-title">今日待办</view>
+    <view class="summary-grid">
+      <view wx:for="{{summary}}" wx:key="label" class="summary-item">
+        <view class="value">{{item.value}}</view>
+        <view class="muted">{{item.label}}</view>
+      </view>
+    </view>
+  </view>
+</view>

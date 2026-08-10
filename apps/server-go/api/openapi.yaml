@@ -57,3 +57,70 @@ paths:
       security: [{miniBearer: []}]
       parameters: [{name: Idempotency-Key, in: header, required: true, schema: {type: string, maxLength: 128}}]
       responses: {'200': {description: Order created or replayed}}
+  /api/v1/mini/orders/{id}:
+    get: {security: [{miniBearer: []}], parameters: [{$ref: '#/components/parameters/Id'}], responses: {'200': {description: Customer order detail and work order progress}}}
+  /api/v1/mini/work-orders/{id}:
+    get: {security: [{miniBearer: []}], parameters: [{$ref: '#/components/parameters/Id'}], responses: {'200': {description: Customer work order detail}}}
+  /api/v1/mini/work-orders/{id}/acceptance:
+    post: {security: [{miniBearer: []}], parameters: [{$ref: '#/components/parameters/Id'}, {name: Idempotency-Key, in: header, required: true, schema: {type: string}}], responses: {'200': {description: Customer acceptance recorded}}}
+  /api/v1/admin/orders/{id}/confirm:
+    post:
+      security: [{adminBasic: []}]
+      parameters: [{$ref: '#/components/parameters/Id'}, {name: Idempotency-Key, in: header, required: true, schema: {type: string}}]
+      responses: {'200': {description: Order confirmed and work orders created}}
+  /api/v1/admin/workers:
+    get: {security: [{adminBasic: []}], responses: {'200': {description: Worker list with filters}}}
+    post: {security: [{adminBasic: []}], responses: {'200': {description: Worker draft created or activated}}}
+  /api/v1/admin/workers/{id}:
+    get: {security: [{adminBasic: []}], parameters: [{$ref: '#/components/parameters/Id'}], responses: {'200': {description: Worker detail}}}
+    put: {security: [{adminBasic: []}], parameters: [{$ref: '#/components/parameters/Id'}], responses: {'200': {description: Worker updated}}}
+  /api/v1/admin/workers/{id}/activate:
+    post: {security: [{adminBasic: []}], parameters: [{$ref: '#/components/parameters/Id'}], responses: {'200': {description: Worker activated}}}
+  /api/v1/admin/workers/{id}/disable:
+    post: {security: [{adminBasic: []}], parameters: [{$ref: '#/components/parameters/Id'}], responses: {'200': {description: Worker disabled and optional not-started work orders returned}}}
+  /api/v1/admin/workers/candidates:
+    get: {security: [{adminBasic: []}], parameters: [{name: workOrderId, in: query, required: true, schema: {type: string}}], responses: {'200': {description: Skill-matched worker candidates}}}
+  /api/v1/admin/worker-trades:
+    get: {security: [{adminBasic: []}], responses: {'200': {description: Worker trade dictionary}}}
+    post: {security: [{adminBasic: []}], responses: {'200': {description: Worker trade created}}}
+  /api/v1/admin/worker-trades/{id}:
+    put: {security: [{adminBasic: []}], parameters: [{$ref: '#/components/parameters/Id'}], responses: {'200': {description: Worker trade updated}}}
+    delete: {security: [{adminBasic: []}], parameters: [{$ref: '#/components/parameters/Id'}], responses: {'200': {description: Worker trade deleted when it has no skills}}}
+  /api/v1/admin/worker-trades/{id}/status:
+    post: {security: [{adminBasic: []}], parameters: [{$ref: '#/components/parameters/Id'}], responses: {'200': {description: Worker trade status updated}}}
+  /api/v1/admin/worker-skills:
+    get: {security: [{adminBasic: []}], responses: {'200': {description: Worker skill dictionary}}}
+    post: {security: [{adminBasic: []}], responses: {'200': {description: Worker skill created}}}
+  /api/v1/admin/worker-skills/{id}:
+    put: {security: [{adminBasic: []}], parameters: [{$ref: '#/components/parameters/Id'}], responses: {'200': {description: Worker skill updated}}}
+    delete: {security: [{adminBasic: []}], parameters: [{$ref: '#/components/parameters/Id'}], responses: {'200': {description: Worker skill deleted when it is unused}}}
+  /api/v1/admin/worker-skills/{id}/status:
+    post: {security: [{adminBasic: []}], parameters: [{$ref: '#/components/parameters/Id'}], responses: {'200': {description: Worker skill status updated}}}
+  /api/v1/admin/workers/{id}/status:
+    post: {security: [{adminBasic: []}], parameters: [{$ref: '#/components/parameters/Id'}], responses: {'200': {description: Worker status updated}}}
+  /api/v1/admin/work-orders:
+    get: {security: [{adminBasic: []}], responses: {'200': {description: Work order page}}}
+  /api/v1/admin/work-orders/{id}:
+    get: {security: [{adminBasic: []}], parameters: [{$ref: '#/components/parameters/Id'}], responses: {'200': {description: Work order detail with completion evidence}}}
+  /api/v1/admin/work-orders/{id}/assign:
+    post: {security: [{adminBasic: []}], parameters: [{$ref: '#/components/parameters/Id'}, {name: Idempotency-Key, in: header, required: true, schema: {type: string}}], responses: {'200': {description: Work order assigned}}}
+  /api/v1/admin/work-orders/{id}/reassign:
+    post: {security: [{adminBasic: []}], parameters: [{$ref: '#/components/parameters/Id'}, {name: Idempotency-Key, in: header, required: true, schema: {type: string}}], responses: {'200': {description: Work order reassigned}}}
+  /api/v1/admin/work-orders/{id}/reschedule:
+    post: {security: [{adminBasic: []}], parameters: [{$ref: '#/components/parameters/Id'}], responses: {'200': {description: Appointment updated}}}
+  /api/v1/admin/work-orders/{id}/completion-review:
+    post: {security: [{adminBasic: []}], parameters: [{$ref: '#/components/parameters/Id'}, {name: Idempotency-Key, in: header, required: true, schema: {type: string}}], responses: {'200': {description: Completion reviewed}}}
+  /api/v1/worker/work-orders:
+    get: {security: [{miniBearer: []}], responses: {'200': {description: Assigned worker work order page}}}
+  /api/v1/worker/work-orders/{id}:
+    get: {security: [{miniBearer: []}], parameters: [{$ref: '#/components/parameters/Id'}], responses: {'200': {description: Assigned worker work order detail}}}
+  /api/v1/worker/work-orders/{id}/{command}:
+    post: {security: [{miniBearer: []}], parameters: [{$ref: '#/components/parameters/Id'}], responses: {'200': {description: Worker command applied}}}
+  /api/v1/worker/work-orders/{id}/media/images:
+    post: {security: [{miniBearer: []}], parameters: [{$ref: '#/components/parameters/Id'}], responses: {'200': {description: Work order image or video evidence uploaded}}}
+  /api/v1/worker/media/{id}/content:
+    get: {security: [{miniBearer: []}], parameters: [{$ref: '#/components/parameters/Id'}], responses: {'200': {description: Assigned worker evidence content}}}
+  /api/v1/worker/work-orders/{id}/evidence:
+    post: {security: [{miniBearer: []}], parameters: [{$ref: '#/components/parameters/Id'}], responses: {'200': {description: Uploaded media bound to evidence stage}}}
+  /api/v1/worker/work-orders/{id}/submit-completion:
+    post: {security: [{miniBearer: []}], parameters: [{$ref: '#/components/parameters/Id'}], responses: {'200': {description: Completion submitted}}}

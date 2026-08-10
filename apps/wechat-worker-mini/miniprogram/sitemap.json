@@ -1,0 +1,4 @@
+{
+  "desc": "FixPro 师傅作业小程序站点地图",
+  "rules": [{ "action": "allow", "page": "*" }]
+}

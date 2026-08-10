@@ -1,0 +1,13 @@
+<view class="page">
+  <view wx:if="{{loading}}" class="state">正在加载工单...</view>
+  <view wx:elif="{{error}}" class="state error">{{error}}</view>
+  <view wx:elif="{{!items.length}}" class="state">当前没有待处理工单</view>
+  <view wx:else>
+    <view wx:for="{{items}}" wx:key="id" class="card" data-id="{{item.id}}" bindtap="open">
+      <view class="row"><text class="title">{{item.workOrderNo}}</text><text class="status">{{item.statusText}}</text></view>
+      <view class="muted">订单：{{item.orderNo}}</view>
+      <view wx:if="{{item.appointmentAt}}" class="muted">预约：{{item.appointmentSlotLabel || item.appointmentAt}}</view>
+      <view wx:if="{{item.serviceAddress}}" class="muted">地址：{{item.serviceAddress}}</view>
+    </view>
+  </view>
+</view>

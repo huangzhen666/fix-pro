@@ -1,6 +1,8 @@
 <view class="page">
-  <view class="card">
-    <view class="section-title">暂无订单</view>
-    <view class="muted">订单、报价、施工证据、验收与质保将在后续 Sprint 接入。</view>
+  <view wx:if="{{!loading && !items.length}}" class="card empty">暂无订单</view>
+  <view wx:for="{{items}}" wx:key="id" class="card order" data-id="{{item.id}}" bindtap="openDetail">
+    <view class="row"><text class="title">{{item.orderNo}}</text><text class="status">{{item.statusText}}</text></view>
+    <view class="muted">{{item.createdAt}}</view>
+    <view class="row summary"><text>{{item.itemCount}} 项服务 · {{item.workOrderFinished}}/{{item.workOrderTotal}} 个工单完成</text><text class="amount">¥{{item.amountText}}</text></view>
   </view>
 </view>

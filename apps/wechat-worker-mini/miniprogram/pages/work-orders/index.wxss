@@ -1,0 +1,8 @@
+.page { min-height: 100vh; padding: 24rpx; background: #f5f7fa; box-sizing: border-box; }
+.card { margin-bottom: 20rpx; padding: 28rpx; background: #fff; border-radius: 16rpx; }
+.row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14rpx; }
+.title { font-size: 30rpx; font-weight: 600; }
+.status { color: #1677ff; font-size: 24rpx; }
+.muted { margin-top: 8rpx; color: #667085; font-size: 24rpx; }
+.state { padding: 120rpx 24rpx; color: #667085; text-align: center; }
+.error { color: #d92d20; }

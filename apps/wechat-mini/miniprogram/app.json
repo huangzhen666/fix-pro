@@ -8,6 +8,7 @@
     "pages/checkout/result",
     "pages/search/index",
     "pages/orders/index",
+    "pages/orders/detail",
     "pages/profile/index",
     "pages/workbench/index"
   ],

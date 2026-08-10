@@ -1,0 +1,42 @@
+<view class="page" wx:if="{{order}}">
+  <view class="card order-card">
+    <view class="order-header">
+      <text class="order-no">订单号 {{order.orderNo}}</text>
+      <text class="order-status">{{order.stageLabel}}</text>
+    </view>
+    <view class="amount-row"><text>订单金额</text><text class="amount">¥{{order.totalAmountText}}</text></view>
+    <view class="info-row"><text class="info-label">下单时间</text><text class="info-value">{{order.createdAtText}}</text></view>
+    <view class="info-row"><text class="info-label">联系人</text><text class="info-value">{{order.contactName}} {{order.contactMobile}}</text></view>
+    <view class="info-row address"><text class="info-label">服务地址</text><text class="info-value">{{order.serviceAddress}}</text></view>
+  </view>
+
+  <view wx:for="{{order.workOrders}}" wx:key="id" class="card fulfillment-card">
+    <view class="section-header"><text class="section-title">履约详情</text><text class="work-order-no">{{item.workOrderNo}}</text></view>
+    <view class="steps">
+      <view wx:for="{{item.flowSteps}}" wx:for-item="step" wx:key="key" class="step {{step.state}}">
+        <view class="step-track"><view class="step-dot"><text>{{step.index}}</text></view><view wx:if="{{!step.last}}" class="step-line"></view></view>
+        <text class="step-label">{{step.label}}</text>
+      </view>
+    </view>
+
+    <view class="timeline">
+      <view wx:for="{{item.timelineSteps}}" wx:for-item="step" wx:key="key" class="timeline-item {{step.state}}">
+        <view class="timeline-axis"><view class="timeline-dot"></view><view wx:if="{{!step.last}}" class="timeline-line"></view></view>
+        <view class="timeline-content">
+          <view class="timeline-head"><text class="timeline-title">{{step.label}}</text><text wx:if="{{step.timeText}}" class="timeline-time">{{step.timeText}}</text></view>
+          <view class="timeline-description">{{step.description}}</view>
+        </view>
+      </view>
+    </view>
+
+    <view wx:if="{{item.assigneeName || item.appointmentText}}" class="service-info">
+      <view wx:if="{{item.assigneeName}}" class="info-row"><text class="info-label">服务师傅</text><text class="info-value">{{item.assigneeName}}</text></view>
+      <view wx:if="{{item.appointmentText}}" class="info-row"><text class="info-label">预约时间</text><text class="info-value">{{item.appointmentText}}</text></view>
+    </view>
+    <view wx:if="{{item.completionSummary}}" class="completion-summary">服务说明：{{item.completionSummary}}</view>
+    <view class="evidence"><image wx:for="{{item.evidence}}" wx:key="id" src="{{item.url}}" mode="aspectFill" /></view>
+    <view wx:if="{{item.status === 'WAITING_ACCEPTANCE' || item.status === 'WAITING_QA_AUDIT' || item.status === 'WAITING_DIRECTOR_AUDIT'}}" class="actions"><button size="mini" type="primary" data-work-id="{{item.id}}" data-decision="ACCEPT" bindtap="acceptance">确认完成</button><button size="mini" data-work-id="{{item.id}}" data-decision="REJECT" bindtap="acceptance">需要返工</button></view>
+    <button wx:if="{{item.status === 'FINISHED' || item.status === 'FINISHED_WITH_REVIEW_EXCEPTION'}}" size="mini" data-work-id="{{item.id}}" bindtap="rating">评价服务</button>
+  </view>
+</view>
+<view wx:if="{{!loading && !order}}" class="empty">订单不存在或暂时无法加载</view>

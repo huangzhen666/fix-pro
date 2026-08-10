@@ -11,6 +11,8 @@ const items = [
   { key: '/catalog/categories', label: '服务分类' },
   { key: '/orders', label: '订单中心' },
   { key: '/work-orders', label: '履约调度' },
+  { key: '/workers', label: '师傅管理' },
+  { key: '/worker-skills', label: '工种与技能' },
   { key: '/customers', label: '客户资产' },
   { key: '/inventory', label: '材料库存' },
   { key: '/after-sales', label: '售后质保' },
