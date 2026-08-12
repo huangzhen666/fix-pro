@@ -1,4 +1,4 @@
-.PHONY: fmt test build migrate run
+.PHONY: fmt test build migrate run dev
 fmt:
 	gofmt -w $$(find . -name '*.go')
 test:
@@ -9,3 +9,5 @@ migrate:
 	go run ./cmd/migrate
 run:
 	go run ./cmd/server
+dev:
+	go tool air -c .air.toml

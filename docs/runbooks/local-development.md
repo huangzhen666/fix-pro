@@ -16,10 +16,24 @@ curl.exe http://localhost:8080/api/v1/public/ping
 cd apps/server-go
 $env:DB_DSN='postgres://fixpro:fixpro-local@localhost:5433/fix_pro?sslmode=disable&timezone=UTC'
 go run ./cmd/migrate
-go run ./cmd/server
+go tool air -c .air.toml
 ```
 
-迁移命令使用 golang-migrate。已执行的 `up.sql` 不应修改，表结构变化应新增下一版本迁移。
+Air 是项目内锁定版本的本地开发热重载工具，不需要全局安装 `air`。也可以执行 `make dev`。Air 只监听 Go 源码，修改后会自动构建并重启 `cmd/server`；不需要热重载时使用 `go run ./cmd/server`。
+
+迁移命令使用 golang-migrate。已执行的 `up.sql` 不应修改，表结构变化应新增下一版本迁移。修改迁移 SQL 不会由 Air 自动执行，必须显式再次运行 `go run ./cmd/migrate`。
+
+### 1.1 Air 调试和排障
+
+```powershell
+go tool air -c .air.toml -d
+```
+
+- Air 生成的开发二进制位于 `apps/server-go/.tmp/air/`，已被 Git 忽略，停止 Air 时会按配置清理。
+- 如果 `go tool air` 找不到，先在 `apps/server-go` 执行 `go mod download`，并确认 Go 版本为 1.26+。
+- 如果修改 Go 文件没有重启，使用 `-d` 查看监听日志；Markdown、图片、`*_test.go`、迁移 SQL 和构建产物不会触发主服务重建。
+- 如果端口 8080 被占用，先停止旧的 `go run`、服务 exe 或 Docker server 容器，确保只运行一个后端实例。
+- Windows 使用 `.tmp/air/fixpro-server-dev.exe`；Linux/WSL/macOS 使用 `.tmp/air/fixpro-server-dev`，两者共享同一份 `.air.toml`。
 
 ## 2. 验证管理端 SKU 正向链路
 
