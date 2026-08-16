@@ -197,8 +197,8 @@ func (s *Service) Quantity(ctx context.Context, p auth.Principal, item int64, q 
 }
 func (s *Service) Fault(ctx context.Context, p auth.Principal, item int64, w FaultWrite) (View, error) {
 	desc := strings.TrimSpace(w.FaultDescription)
-	if len([]rune(desc)) < 5 || len([]rune(desc)) > 500 {
-		return View{}, httpx.E("FAULT_DESCRIPTION_REQUIRED", "故障描述需为 5-500 字", 400)
+	if len([]rune(desc)) > 500 {
+		return View{}, httpx.E("VALIDATION_ERROR", "补充信息不能超过500字", 400)
 	}
 	unique := []int64{}
 	seen := map[int64]bool{}
@@ -212,11 +212,8 @@ func (s *Service) Fault(ctx context.Context, p auth.Principal, item int64, w Fau
 			seen[n] = true
 		}
 	}
-	if len(unique) == 0 {
-		return View{}, httpx.E("FAULT_MEDIA_REQUIRED", "请至少上传一张故障图片或一个视频", 400)
-	}
 	if len(unique) > 8 {
-		return View{}, httpx.E("MEDIA_COUNT_EXCEEDED", "故障媒体最多 8 个", 400)
+		return View{}, httpx.E("MEDIA_COUNT_EXCEEDED", "补充媒体最多 8 个", 400)
 	}
 	if e := s.assert(ctx, p, item); e != nil {
 		return View{}, e

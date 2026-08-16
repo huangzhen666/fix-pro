@@ -1,0 +1,12 @@
+<view class="page login-page">
+  <view class="brand-mark">FixPro</view>
+  <view class="subtitle">师傅作业中心</view>
+  <view class="card login-card">
+    <view class="heading">欢迎登录</view>
+    <view class="hint">使用后台为您配置的手机号和初始密码登录</view>
+    <input class="field" type="number" maxlength="11" placeholder="请输入手机号" value="{{mobile}}" bindinput="onInputMobile" />
+    <input class="field" password placeholder="请输入密码" value="{{password}}" bindinput="onInputPassword" />
+    <view wx:if="{{errorMessage}}" class="error">{{errorMessage}}</view>
+    <button class="primary-button" loading="{{submitting}}" disabled="{{submitting}}" bindtap="onLogin">登录</button>
+  </view>
+</view>

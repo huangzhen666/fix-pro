@@ -9,17 +9,20 @@ import (
 )
 
 type Config struct {
-	Env                string
-	HTTPAddr           string
-	DBDSN              string
-	DBMaxOpen          int
-	DBMaxIdle          int
-	MediaDriver        string
-	MediaLocalRoot     string
-	AdminUsername      string
-	AdminPassword      string
-	CORSAllowedOrigins []string
-	ShutdownTimeout    time.Duration
+	Env                   string
+	HTTPAddr              string
+	DBDSN                 string
+	DBMaxOpen             int
+	DBMaxIdle             int
+	MediaDriver           string
+	MediaLocalRoot        string
+	AdminUsername         string
+	AdminPassword         string
+	AdminBasicCompat      bool
+	AdminCookieSecure     bool
+	WorkerDevTokenEnabled bool
+	CORSAllowedOrigins    []string
+	ShutdownTimeout       time.Duration
 }
 
 func Load() (Config, error) {
@@ -29,7 +32,9 @@ func Load() (Config, error) {
 		DBMaxOpen: envInt("DB_MAX_OPEN_CONNS", 20), DBMaxIdle: envInt("DB_MAX_IDLE_CONNS", 5),
 		MediaDriver: env("MEDIA_DRIVER", "local"), MediaLocalRoot: env("MEDIA_LOCAL_ROOT", os.TempDir()+"/fixpro-media"),
 		AdminUsername: env("APP_ADMIN_USERNAME", "admin"), AdminPassword: env("APP_ADMIN_PASSWORD", "change-me-in-production"),
-		CORSAllowedOrigins: split(env("CORS_ALLOWED_ORIGINS", "http://localhost:5173")), ShutdownTimeout: 15 * time.Second,
+		AdminBasicCompat: envBool("APP_ADMIN_BASIC_COMPAT", false), AdminCookieSecure: envBool("APP_ADMIN_COOKIE_SECURE", false),
+		WorkerDevTokenEnabled: envBool("WORKER_DEV_TOKEN_ENABLED", false),
+		CORSAllowedOrigins:    split(env("CORS_ALLOWED_ORIGINS", "http://localhost:5173")), ShutdownTimeout: 15 * time.Second,
 	}
 	if c.DBDSN == "" {
 		return Config{}, errors.New("DB_DSN is required")
@@ -44,11 +49,28 @@ func Load() (Config, error) {
 		if strings.Contains(strings.ToLower(c.DBDSN), "sslmode=disable") {
 			return Config{}, errors.New("production database TLS cannot be disabled")
 		}
+		if c.AdminBasicCompat {
+			return Config{}, errors.New("production Basic Auth compatibility must be disabled")
+		}
+		if c.WorkerDevTokenEnabled {
+			return Config{}, errors.New("production Worker development token must be disabled")
+		}
+		if !c.AdminCookieSecure {
+			return Config{}, errors.New("production admin session cookie must be Secure")
+		}
 	}
 	if c.MediaDriver != "local" && c.MediaDriver != "s3" {
 		return Config{}, errors.New("MEDIA_DRIVER must be local or s3")
 	}
 	return c, nil
+}
+
+func envBool(k string, fallback bool) bool {
+	v := strings.TrimSpace(strings.ToLower(os.Getenv(k)))
+	if v == "" {
+		return fallback
+	}
+	return v == "1" || v == "true" || v == "yes" || v == "on"
 }
 
 func env(k, fallback string) string {

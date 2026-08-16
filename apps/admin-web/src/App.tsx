@@ -15,10 +15,13 @@ const CategoryPage = lazy(() => import('./pages/CategoryPage'))
 const WorkOrderPage = lazy(() => import('./pages/WorkOrderPage'))
 const WorkerPage = lazy(() => import('./pages/WorkerPage'))
 const SkillPage = lazy(() => import('./pages/SkillPage'))
+const AdminUsersPage = lazy(() => import('./pages/AdminUsersPage'))
+const AdminRolesPage = lazy(() => import('./pages/AdminRolesPage'))
+const ChangePasswordPage = lazy(() => import('./pages/ChangePasswordPage'))
 
 function ProtectedLayout() {
-  const credential = useAuthStore((state) => state.credential)
-  return credential ? <AdminLayout /> : <Navigate to="/login" replace />
+  const authenticated = useAuthStore((state) => state.authenticated)
+  return authenticated ? <AdminLayout /> : <Navigate to="/login" replace />
 }
 
 const router = createBrowserRouter([
@@ -42,6 +45,9 @@ const router = createBrowserRouter([
       { path: 'after-sales', element: <PlaceholderPage title="售后质保" /> },
       { path: 'enterprises', element: <PlaceholderPage title="企业合同" /> },
       { path: 'settings', element: <PlaceholderPage title="系统设置" /> },
+      { path: 'settings/users', element: <AdminUsersPage /> },
+      { path: 'settings/roles', element: <AdminRolesPage /> },
+      { path: 'settings/change-password', element: <ChangePasswordPage /> },
     ],
   },
   { path: '*', element: <Navigate to="/" replace /> },

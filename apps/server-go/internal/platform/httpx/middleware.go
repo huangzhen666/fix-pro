@@ -41,7 +41,8 @@ func Middleware(log *slog.Logger, origins []string, next http.Handler) http.Hand
 		if origin := r.Header.Get("Origin"); allowed[origin] {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Idempotency-Key, X-Request-Id")
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
+			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Idempotency-Key, X-Request-Id, X-CSRF-Token")
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 		}
 		if r.Method == http.MethodOptions {

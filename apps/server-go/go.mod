@@ -3,8 +3,10 @@ module github.com/fixpro/server
 go 1.26.0
 
 require (
+	github.com/casbin/casbin/v3 v3.11.0
 	github.com/golang-migrate/migrate/v4 v4.19.1
 	github.com/jackc/pgx/v5 v5.10.0
+	golang.org/x/crypto v0.54.0
 )
 
 require (
@@ -14,12 +16,15 @@ require (
 	github.com/bep/godartsass/v2 v2.5.0 // indirect
 	github.com/bep/golibsass v1.2.0 // indirect
 	github.com/bits-and-blooms/bitset v1.24.5 // indirect
+	github.com/bmatcuk/doublestar/v4 v4.6.1 // indirect
+	github.com/casbin/govaluate v1.3.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/fatih/color v1.18.0 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/gobwas/glob v0.2.3 // indirect
 	github.com/gohugoio/hashstructure v0.6.0 // indirect
 	github.com/gohugoio/hugo v0.164.0 // indirect
+	github.com/google/uuid v1.6.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
@@ -32,9 +37,9 @@ require (
 	github.com/spf13/afero v1.15.0 // indirect
 	github.com/spf13/cast v1.10.0 // indirect
 	github.com/tdewolff/parse/v2 v2.8.12 // indirect
-	golang.org/x/sync v0.21.0 // indirect
-	golang.org/x/sys v0.46.0 // indirect
-	golang.org/x/text v0.38.0 // indirect
+	golang.org/x/sync v0.22.0 // indirect
+	golang.org/x/sys v0.47.0 // indirect
+	golang.org/x/text v0.40.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 )
 

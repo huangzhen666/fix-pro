@@ -1,0 +1,14 @@
+<view class="page">
+  <view class="privacy-tip">地址信息仅用于上门服务，隐私信息将严格保密</view>
+  <view class="form-card">
+    <view class="import-actions"><button size="mini" bindtap="chooseWechatAddress">从微信地址选择</button><button size="mini" bindtap="fillWechatUserName">使用微信昵称</button></view>
+    <view class="form-row"><text class="label">所在城市</text><input class="field" placeholder="请输入城市" value="{{form.city}}" data-field="city" bindinput="input"/></view>
+    <view class="form-row"><text class="label">具体地址</text><input class="field" placeholder="如：前湾·江上湾" value="{{form.detailAddress}}" data-field="detailAddress" bindinput="input"/></view>
+    <view class="form-row"><text class="label">楼号/门牌号</text><input class="field" placeholder="如：1-1101" value="{{form.buildingDoor}}" data-field="buildingDoor" bindinput="input"/></view>
+    <view class="form-row"><text class="label">联系人</text><input class="field" placeholder="请输入联系人" value="{{form.contactName}}" data-field="contactName" bindinput="input"/></view>
+    <view class="form-row"><text class="label">手机号码</text><input class="field" type="number" maxlength="11" placeholder="请输入手机号" value="{{form.contactMobile}}" data-field="contactMobile" bindinput="input"/></view>
+    <view class="notice">订单信息将开放给联系人，请谨慎填写</view>
+  </view>
+  <label class="default-row"><checkbox value="default" checked="{{form.isDefault}}" bindchange="defaultChange"/>设为默认地址</label>
+  <button class="save-button" loading="{{saving}}" bindtap="save">保存</button>
+</view>

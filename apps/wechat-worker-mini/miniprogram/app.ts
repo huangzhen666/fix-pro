@@ -1,9 +1,11 @@
-import { setWorkerToken } from './services/request'
-
 App({
-  onLaunch() {
-    if (!wx.getStorageSync('fixpro.worker.accessToken')) {
-      setWorkerToken('local-worker-1')
+  onLaunch() {},
+  onShow() {
+    const token = wx.getStorageSync<string>('fixpro.worker.accessToken')
+    const pages = getCurrentPages()
+    const route = pages.length ? pages[pages.length - 1].route : ''
+    if (!token && route && route !== 'pages/login/index' && route !== 'pages/change-password/index') {
+      wx.reLaunch({ url: '/pages/login/index' })
     }
   },
 })

@@ -1,0 +1,19 @@
+<view class="page">
+  <view class="page-title">{{selectMode ? '选择服务地址' : '地址管理'}}</view>
+  <view wx:if="{{!items.length && !loading}}" class="empty">还没有保存地址，先新增一个吧</view>
+  <view wx:for="{{items}}" wx:key="id" class="address-card" data-id="{{item.id}}" bindtap="choose">
+    <view class="address-main">
+      <view class="city">{{item.city}}</view>
+      <view class="full-address">{{item.fullAddress}}</view>
+      <view class="contact">{{item.contactName}}　{{item.maskedMobile}}</view>
+    </view>
+    <view class="address-divider"></view>
+    <view class="address-footer">
+      <view wx:if="{{item.isDefault}}" class="default-label"><text class="default-dot">✓</text> 当前默认</view>
+      <view wx:else class="default-action" data-id="{{item.id}}" catchtap="setDefault">设为默认</view>
+      <view class="footer-actions"><view data-id="{{item.id}}" catchtap="edit">编辑</view><view data-id="{{item.id}}" catchtap="remove">删除</view></view>
+    </view>
+  </view>
+  <view class="bottom-space"></view>
+  <view class="add-bar"><button bindtap="add">新增地址</button></view>
+</view>

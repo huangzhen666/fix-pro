@@ -22,6 +22,8 @@ deploy/
 
 ## 一键启动后端环境
 
+本机快速启动步骤见 [本地部署与快速启动手册](deploy_local.md)。
+
 ```powershell
 docker compose -f deploy/compose.yaml up -d --build postgres migrate server
 ```
@@ -30,7 +32,7 @@ docker compose -f deploy/compose.yaml up -d --build postgres migrate server
 
 - 健康检查：`http://localhost:8080/actuator/health`
 - Ping：`http://localhost:8080/api/v1/public/ping`
-- 管理员本地账号：`admin / change-me-in-production`
+- 管理员首次使用：先执行 `go run ./cmd/bootstrap-admin -org-id 1 -username admin -platform-super-admin`，命令只显示一次随机临时密码；登录后必须改密
 - 小程序本地令牌：`Bearer local-customer-1`
 
 ## 本机启动 Go 后端
@@ -57,6 +59,8 @@ npm run check
 ```
 
 管理后台访问 `http://localhost:5173`，Vite 会把 `/api` 代理到 `http://localhost:8080`。小程序使用微信开发者工具导入 `apps/wechat-mini`。
+
+后台使用 HttpOnly Cookie 会话和 CSRF Token，不再把 Basic 凭据保存到浏览器；权限、角色和用户管理入口位于“角色与权限”和“后台用户”。
 
 ## 后端质量命令
 

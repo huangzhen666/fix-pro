@@ -1,0 +1,7 @@
+.password-page { min-height: 100vh; box-sizing: border-box; padding: 140rpx 32rpx; background: #f5f7fa; }
+.password-card { padding: 44rpx 32rpx; border-radius: 24rpx; }
+.heading { color: #101828; font-size: 38rpx; font-weight: 700; line-height: 1.4; }
+.hint { margin: 18rpx 0 32rpx; color: #667085; font-size: 25rpx; line-height: 1.6; }
+.field { height: 92rpx; margin-top: 20rpx; padding: 0 24rpx; box-sizing: border-box; border: 1rpx solid #d0d5dd; border-radius: 12rpx; background: #fff; }
+.error { margin-top: 20rpx; color: #d92d20; font-size: 24rpx; }
+.primary-button { margin-top: 36rpx; border-radius: 46rpx; background: #1677ff; color: #fff; }

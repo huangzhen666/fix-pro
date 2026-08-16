@@ -2,22 +2,25 @@ import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 
 interface AuthState {
-  credential?: string
-  setBasicCredential: (username: string, password: string) => void
-  clearCredential: () => void
+  authenticated: boolean
+  user?: { orgId: number; adminUserId: number; name: string; role: string; platformSuperAdmin?: boolean; mustChangePassword?: boolean }
+  permissions: string[]
+  setSession: (user: AuthState['user'], permissions?: string[]) => void
+  setPermissions: (permissions: string[]) => void
+  clearSession: () => void
 }
 
 export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
-      credential: undefined,
-      setBasicCredential: (username, password) => {
-        set({ credential: window.btoa(`${username}:${password}`) })
-      },
-      clearCredential: () => set({ credential: undefined }),
+      authenticated: false,
+      permissions: [],
+      setSession: (user, permissions = []) => set({ authenticated: true, user, permissions }),
+      setPermissions: (permissions) => set({ permissions }),
+      clearSession: () => set({ authenticated: false, user: undefined, permissions: [] }),
     }),
     {
-      name: 'fixpro-bootstrap-auth',
+      name: 'fixpro-admin-session',
       storage: createJSONStorage(() => sessionStorage),
     },
   ),

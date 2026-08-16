@@ -151,10 +151,10 @@ func (s *Service) Read(ctx context.Context, id int64, p *auth.Principal, public 
 			return asset{}, nil, httpx.E("MEDIA_ACCESS_DENIED", "无权访问该媒体", 403)
 		}
 	} else if p != nil && p.Role == "WORKER" {
-		allowed := a.OrgID == p.OrgID && a.OwnerType == "WORK_ORDER" && a.Purpose == "WORK_ORDER_EVIDENCE"
+		allowed := a.OrgID == p.OrgID && ((a.OwnerType == "WORK_ORDER" && a.Purpose == "WORK_ORDER_EVIDENCE") || (a.OwnerType == "CUSTOMER" && a.Purpose == "FAULT_EVIDENCE"))
 		if allowed {
 			var count int
-			if err = s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM work_order w WHERE w.org_id=$1 AND w.id=$2 AND w.assignee_id=$3 AND EXISTS (SELECT 1 FROM work_order_evidence e WHERE e.org_id=w.org_id AND e.work_order_id=w.id AND e.media_id=$4)`, p.OrgID, a.OwnerID, p.SubjectID, a.ID).Scan(&count); err != nil {
+			if err = s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM work_order w WHERE w.org_id=$1 AND w.assignee_id=$2 AND ((w.id=$3 AND EXISTS (SELECT 1 FROM work_order_evidence e WHERE e.org_id=w.org_id AND e.work_order_id=w.id AND e.media_id=$4)) OR (EXISTS (SELECT 1 FROM work_order_item wi JOIN order_item_media om ON om.org_id=wi.org_id AND om.order_item_id=wi.order_item_id WHERE wi.org_id=w.org_id AND wi.work_order_id=w.id AND om.media_id=$4)))`, p.OrgID, p.SubjectID, a.OwnerID, a.ID).Scan(&count); err != nil {
 				return asset{}, nil, err
 			}
 			allowed = count > 0

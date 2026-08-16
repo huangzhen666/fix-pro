@@ -7,9 +7,13 @@ import (
 	"strconv"
 )
 
-type Handler struct{ service *Service }
+type Handler struct {
+	service        *Service
+	workerSessions *auth.WorkerSessionStore
+}
 
-func NewHandler(s *Service) *Handler { return &Handler{service: s} }
+func NewHandler(s *Service) *Handler                                    { return &Handler{service: s} }
+func (h *Handler) SetWorkerSessionStore(store *auth.WorkerSessionStore) { h.workerSessions = store }
 func qInt(r *http.Request, k string) int64 {
 	n, _ := strconv.ParseInt(r.URL.Query().Get(k), 10, 64)
 	return n
@@ -206,6 +210,20 @@ func (h *Handler) SaveWorker(w http.ResponseWriter, r *http.Request) {
 }
 func (h *Handler) Activate(w http.ResponseWriter, r *http.Request) { h.status(w, r, "ACTIVE") }
 func (h *Handler) Disable(w http.ResponseWriter, r *http.Request)  { h.status(w, r, "DISABLED") }
+func (h *Handler) ResetPassword(w http.ResponseWriter, r *http.Request) {
+	p, _ := auth.From(r.Context())
+	id, err := httpx.PathID(r, "id")
+	if err != nil {
+		httpx.Failure(w, r, err)
+		return
+	}
+	out, err := h.service.ResetPassword(r.Context(), p, id, h.workerSessions)
+	if err != nil {
+		httpx.Failure(w, r, err)
+		return
+	}
+	httpx.Success(w, r, out)
+}
 func (h *Handler) status(w http.ResponseWriter, r *http.Request, status string) {
 	p, _ := auth.From(r.Context())
 	id, e := httpx.PathID(r, "id")

@@ -9,11 +9,30 @@ export interface WorkOrder {
   appointmentAt?: string
   appointmentSlot?: string
   appointmentSlotLabel?: string
+  appointmentDateText?: string
   customerName?: string
+  customerMobile?: string
   serviceAddress?: string
+  items?: WorkOrderItem[]
   completionSummary?: string
   version: number
   evidence?: Evidence[]
+}
+
+export interface WorkOrderItem {
+  id: string
+  name: string
+  unit: string
+  quantity: number
+  customerNote?: string
+  customerMedia: WorkOrderMedia[]
+}
+
+export interface WorkOrderMedia {
+  id: string
+  mediaType: 'IMAGE' | 'VIDEO' | string
+  url: string
+  localUrl?: string
 }
 
 export interface Evidence {

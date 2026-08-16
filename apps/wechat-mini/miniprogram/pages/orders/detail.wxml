@@ -6,8 +6,10 @@
     </view>
     <view class="amount-row"><text>订单金额</text><text class="amount">¥{{order.totalAmountText}}</text></view>
     <view class="info-row"><text class="info-label">下单时间</text><text class="info-value">{{order.createdAtText}}</text></view>
+    <view class="info-section-title">上门信息</view>
     <view class="info-row"><text class="info-label">联系人</text><text class="info-value">{{order.contactName}} {{order.contactMobile}}</text></view>
     <view class="info-row address"><text class="info-label">服务地址</text><text class="info-value">{{order.serviceAddress}}</text></view>
+    <view class="info-row"><text class="info-label">预约时间</text><text class="info-value">{{order.appointmentText}}</text></view>
   </view>
 
   <view wx:for="{{order.workOrders}}" wx:key="id" class="card fulfillment-card">

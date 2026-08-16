@@ -3,7 +3,7 @@ import { apiRequest, uploadFile } from './http'
 export interface Trade { id: string; tradeCode: string; name: string; description?: string; sortOrder: number; status: string; version: number; skillCount: number }
 export interface Skill { id: string; tradeId: string; tradeName?: string; skillCode: string; name: string; description?: string; sortOrder: number; status: string; version: number }
 export interface WorkerMedia { id: string; mediaType: 'IMAGE' | 'VIDEO'; contentType: string; name: string; url: string; createdAt: string }
-export interface Worker { id: string; workerNo: string; displayName: string; mobileMasked?: string; mobile?: string; status: string; version: number; openWorkOrderCount: number; trades?: string[]; skills?: string[]; tradeIds?: number[]; skillIds?: number[]; avatar?: WorkerMedia; certificates?: WorkerMedia[] }
+export interface Worker { id: string; workerNo: string; displayName: string; mobileMasked?: string; mobile?: string; status: string; mustChangePassword?: boolean; version: number; openWorkOrderCount: number; initialPassword?: string; trades?: string[]; skills?: string[]; tradeIds?: number[]; skillIds?: number[]; avatar?: WorkerMedia; certificates?: WorkerMedia[] }
 export interface Candidate extends Worker { matchedSkills: string[]; matchedSkillCount: number; requiredSkillCount: number; allSkillsMatched: boolean }
 export interface WorkerWrite { displayName: string; mobile: string; tradeIds: number[]; skillIds: number[]; joinedOn?: string; remark?: string; activate?: boolean; version: number; avatarMediaId?: number; certificateMediaIds?: number[] }
 export const uploadWorkerMedia = (purpose: 'AVATAR' | 'CERTIFICATE', file: File) => uploadFile(`/api/v1/admin/media/worker?purpose=${purpose}`, file)
@@ -22,4 +22,5 @@ export const getWorker = (id: string) => apiRequest<Worker>(`/api/v1/admin/worke
 export const saveWorker = (id: string | undefined, body: WorkerWrite) => apiRequest<Worker>(id ? `/api/v1/admin/workers/${id}` : '/api/v1/admin/workers', { method: id ? 'PUT' : 'POST', body: JSON.stringify(body) })
 export const activateWorker = (id: string, version: number) => apiRequest(`/api/v1/admin/workers/${id}/activate`, { method: 'POST', body: JSON.stringify({ version }) })
 export const disableWorker = (id: string, body: { reason: string; workOrderPolicy: string; version: number }) => apiRequest(`/api/v1/admin/workers/${id}/disable`, { method: 'POST', body: JSON.stringify(body) })
+export const resetWorkerPassword = (id: string) => apiRequest<{ workerId: number; temporaryPassword: string; mustChangePassword: boolean }>(`/api/v1/admin/workers/${id}/reset-password`, { method: 'POST', body: JSON.stringify({ confirm: true }) })
 export const listCandidates = (workOrderId: string) => apiRequest<Candidate[]>(`/api/v1/admin/workers/candidates?workOrderId=${workOrderId}`)

@@ -1,28 +1,14 @@
-import { useEffect, useState } from 'react'
-import { Button, Card, Divider, Drawer, Image, Input, Modal, Radio, Select, Space, Spin, Table, Tag, Typography, message } from 'antd'
+import { useState } from 'react'
+import { Button, Card, Divider, Drawer, Input, Modal, Select, Space, Spin, Table, Tag, Typography, message } from 'antd'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { apiBlob } from '../api/http'
-import { assignWorkOrder, getWorkOrder, internalReview, listWorkerCandidates, listWorkOrders, type AdminEvidence } from '../api/fulfillment'
+import { assignWorkOrder, internalReview, listWorkerCandidates, listWorkOrders } from '../api/fulfillment'
 import { getOrder } from '../api/orders'
 import { listSkills, listTrades } from '../api/workforce'
 import { workOrderStatusLabel } from '../utils/enums'
 import { OrderDetailContent } from '../components/OrderDetailDrawer'
-import { FulfillmentDetailDrawer } from '../components/FulfillmentDetailDrawer'
+import { FulfillmentDetailDrawer, type FulfillmentReviewOptions } from '../components/FulfillmentDetailDrawer'
 
 const statuses = ['PENDING_DISPATCH', 'PENDING_ACCEPT', 'PENDING_ARRIVAL', 'ARRIVED', 'IN_SERVICE', 'WAITING_QA_AUDIT', 'WAITING_DIRECTOR_AUDIT', 'WAITING_CUSTOMER_SERVICE_CONFIRMATION', 'SECOND_VISIT_PENDING', 'FINISHED', 'FINISHED_WITH_REVIEW_EXCEPTION', 'CANCELLED']
-
-function MediaPreview({ evidence }: { evidence: AdminEvidence }) {
-  const [url, setUrl] = useState<string>()
-  useEffect(() => {
-    let active = true
-    let objectUrl = ''
-    apiBlob(evidence.url).then(blob => { if (active) { objectUrl = URL.createObjectURL(blob); setUrl(objectUrl) } }).catch(() => undefined)
-    return () => { active = false; if (objectUrl) URL.revokeObjectURL(objectUrl) }
-  }, [evidence.url])
-  if (!url) return <Spin size="small" />
-  if (evidence.mediaType === 'VIDEO') return <video src={url} controls style={{ width: 220, maxHeight: 180, background: '#111' }} />
-  return <Image src={url} width={220} height={160} style={{ objectFit: 'cover' }} />
-}
 
 export default function WorkOrderPage() {
   const [status, setStatus] = useState('')
@@ -42,7 +28,6 @@ export default function WorkOrderPage() {
   const skills = useQuery({ queryKey: ['dispatch-skills', tradeId], queryFn: () => listSkills(tradeId, 'ACTIVE'), enabled: Boolean(tradeId) })
   const workers = useQuery({ queryKey: ['worker-candidates', selected?.id, tradeId, skillId], queryFn: () => listWorkerCandidates(selected!.id, tradeId, skillId), enabled: Boolean(selected?.id) })
   const orderDetail = useQuery({ queryKey: ['order-for-dispatch', selected?.orderId], queryFn: () => getOrder(selected!.orderId), enabled: Boolean(selected?.orderId) })
-  const detail = useQuery({ queryKey: ['admin-work-order', review?.id], queryFn: () => getWorkOrder(review.id), enabled: Boolean(review?.id) })
   const assign = useMutation({ mutationFn: () => assignWorkOrder(selected.id, { workerId: workerId!, note: '', version: selected.version }), onSuccess: () => { message.success('派单成功'); setSelected(null); client.invalidateQueries({ queryKey: ['work-orders'] }) }, onError: (e: Error) => message.error(e.message) })
   const reviewMutation = useMutation({ mutationFn: () => internalReview(review.id, review.status === 'WAITING_DIRECTOR_AUDIT' ? 'DIRECTOR' : 'QA', { decision: review.decision, note: reviewNote, version: review.version }), onSuccess: () => { message.success('审核完成'); setReview(null); setReviewNote(''); client.invalidateQueries({ queryKey: ['work-orders'] }) }, onError: (e: Error) => message.error(e.message) })
 
@@ -80,20 +65,6 @@ export default function WorkOrderPage() {
     <Drawer title={orderDetail.data ? `派单 · 订单 ${orderDetail.data.order.orderNo}` : '派单'} open={!!selected} width={1100} onClose={() => setSelected(null)} footer={<Space style={{ width: '100%', justifyContent: 'flex-end' }}><Button onClick={() => setSelected(null)}>关闭</Button><Button type="primary" loading={assign.isPending} onClick={() => { if (!workerId) { message.warning('请选择师傅'); return } assign.mutate() }}>确认派单</Button></Space>}>
       {orderDetail.isLoading ? <Spin /> : orderDetail.data ? <Space direction="vertical" size="large" style={{ width: '100%' }}><OrderDetailContent data={orderDetail.data} /><Divider>师傅筛选与排班</Divider><Space><Select allowClear placeholder="工种" value={tradeId || undefined} onChange={v => { setTradeId(v || ''); setSkillId('') }} options={trades.data?.map(t => ({ value: t.id, label: t.name }))} style={{ width: 220 }} /><Select allowClear placeholder="技能" value={skillId || undefined} onChange={v => setSkillId(v || '')} options={skills.data?.map(s => ({ value: s.id, label: `${s.tradeName} / ${s.name}` }))} style={{ width: 280 }} /></Space><Typography.Text strong>可派师傅</Typography.Text><Space wrap>{workers.data?.map(w => <Card key={w.id} size="small" onClick={() => setWorkerId(w.id)} style={{ width: 320, borderColor: workerId === w.id ? '#1677ff' : undefined, cursor: 'pointer' }}><Typography.Text strong>{w.displayName}</Typography.Text><div>工种：{w.trades?.join('、') || '未配置'}</div><div>技能：{w.skills?.join('、') || '未配置'}</div><div>{w.appointmentAvailable ? '预约时段空闲' : '预约时段冲突'}　{w.allSkillsMatched ? '技能全匹配' : '部分匹配'}　未完成 {w.openWorkOrderCount} 单</div></Card>)}</Space></Space> : <Typography.Text type="danger">订单详情加载失败</Typography.Text>}
     </Drawer>
-    <FulfillmentDetailDrawer open={Boolean(fulfillmentDrawerId)} workOrderId={fulfillmentDrawerId} onClose={() => setFulfillmentDrawerId(undefined)} />
-
-    <Modal title="完工审核" open={!!review} confirmLoading={reviewMutation.isPending} okText={review?.decision === 'REJECT' ? '确认驳回' : '确认通过'} okButtonProps={review?.decision === 'REJECT' ? { danger: true } : undefined} onOk={submitReview} onCancel={() => setReview(null)} width={760}>
-      {detail.isLoading ? <Spin /> : detail.data ? <Space direction="vertical" style={{ width: '100%' }}>
-        <Typography.Text strong>{detail.data.workOrderNo} · {workOrderStatusLabel(detail.data.status)}</Typography.Text>
-        <Typography.Paragraph>服务地址：{detail.data.serviceAddress}<br />联系人：{detail.data.contactName} {detail.data.contactMobile}<br />预约时间：{detail.data.appointmentAt ? `${new Date(detail.data.appointmentAt).toLocaleDateString()} ${detail.data.appointmentSlot || new Date(detail.data.appointmentAt).toLocaleTimeString()}` : '-'}</Typography.Paragraph>
-        <Typography.Text strong>师傅完工说明</Typography.Text>
-        <Typography.Paragraph>{detail.data.completionSummary || '未填写'}</Typography.Paragraph>
-        <Divider>现场凭证（{detail.data.evidence.length}）</Divider>
-        {detail.data.evidence.length ? <Space wrap>{detail.data.evidence.map(item => <Card key={item.id} size="small" title={`${item.stage} · ${item.mediaType === 'VIDEO' ? '视频' : '图片'}`}><MediaPreview evidence={item} /><div style={{ marginTop: 8, color: '#667085' }}>{item.customerVisible ? '客户可见' : '仅内部可见'}</div></Card>)}</Space> : <Typography.Text type="secondary">师傅尚未上传凭证</Typography.Text>}
-        {detail.data.reviewNote ? <Typography.Text type="secondary">上次审核备注：{detail.data.reviewNote}</Typography.Text> : null}
-        <Radio.Group value={review?.decision} onChange={e => setReview((current: any) => ({ ...current, decision: e.target.value }))} options={[{ value: 'APPROVE', label: '通过' }, { value: 'REJECT', label: '驳回' }]} />
-        <Input.TextArea rows={3} placeholder={review?.decision === 'REJECT' ? '请输入驳回原因（必填）' : '审核备注（可选）'} value={reviewNote} onChange={e => setReviewNote(e.target.value)} />
-      </Space> : <Typography.Text type="danger">工单详情加载失败，请关闭后重试</Typography.Text>}
-    </Modal>
+    <FulfillmentDetailDrawer open={Boolean(fulfillmentDrawerId || review)} workOrderId={review?.id || fulfillmentDrawerId} onClose={() => { if (review) { setReview(null); setReviewNote('') } else setFulfillmentDrawerId(undefined) }} review={review ? { level: review.status === 'WAITING_DIRECTOR_AUDIT' ? 'DIRECTOR' : 'QA', decision: review.decision, note: reviewNote, loading: reviewMutation.isPending, onDecisionChange: decision => setReview((current: any) => ({ ...current, decision })), onNoteChange: setReviewNote, onSubmit: submitReview } satisfies FulfillmentReviewOptions : undefined} />
   </Card>
 }

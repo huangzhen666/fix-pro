@@ -55,6 +55,7 @@ type Worker struct {
 	JoinedOn           *string        `json:"joinedOn,omitempty"`
 	Remark             string         `json:"remark"`
 	Status             string         `json:"status"`
+	MustChangePassword bool           `json:"mustChangePassword"`
 	Version            int            `json:"version"`
 	OpenWorkOrderCount int            `json:"openWorkOrderCount"`
 	Trades             []string       `json:"trades,omitempty"`
@@ -64,6 +65,7 @@ type Worker struct {
 	Avatar             *WorkerMedia   `json:"avatar,omitempty"`
 	Certificates       []WorkerMedia  `json:"certificates,omitempty"`
 	History            []HistoryEntry `json:"history,omitempty"`
+	InitialPassword    string         `json:"initialPassword,omitempty"`
 }
 type HistoryEntry struct {
 	EventCode    string          `json:"eventCode"`
@@ -110,6 +112,12 @@ func mask(v string) string {
 		return v
 	}
 	return v[:3] + "****" + v[len(v)-4:]
+}
+func workerMediaURL(p auth.Principal, id string) string {
+	if p.Role == "WORKER" {
+		return "/api/v1/worker/media/" + id + "/content"
+	}
+	return "/api/v1/admin/media/" + id + "/content"
 }
 func ids(v []int64) map[int64]bool {
 	out := map[int64]bool{}
@@ -375,6 +383,7 @@ func (s *Service) worker(ctx context.Context, p auth.Principal, id int64) (Worke
 	x.ID = fmt.Sprint(wid)
 	x.Mobile = mobile
 	x.MobileMasked = mask(mobile)
+	_ = s.db.QueryRowContext(ctx, `SELECT must_change_password FROM employee_account WHERE org_id=$1 AND id=$2`, p.OrgID, wid).Scan(&x.MustChangePassword)
 	if joined.Valid {
 		x.JoinedOn = &joined.String
 	}
@@ -383,7 +392,7 @@ func (s *Service) worker(ctx context.Context, p auth.Principal, id int64) (Worke
 		var mediaID int64
 		if e = s.db.QueryRowContext(ctx, `SELECT id,media_type,content_type,original_name,created_at FROM media_asset WHERE org_id=$1 AND id=$2 AND purpose='WORKER_AVATAR' AND status='READY'`, p.OrgID, avatarID.Int64).Scan(&mediaID, &media.MediaType, &media.ContentType, &media.Name, &media.CreatedAt); e == nil {
 			media.ID = fmt.Sprint(mediaID)
-			media.URL = "/api/v1/admin/media/" + media.ID + "/content"
+			media.URL = workerMediaURL(p, media.ID)
 			x.Avatar = &media
 		} else if e != sql.ErrNoRows {
 			return x, e
@@ -426,7 +435,7 @@ func (s *Service) worker(ctx context.Context, p auth.Principal, id int64) (Worke
 			return x, e
 		}
 		media.ID = fmt.Sprint(mediaID)
-		media.URL = "/api/v1/admin/media/" + media.ID + "/content"
+		media.URL = workerMediaURL(p, media.ID)
 		x.Certificates = append(x.Certificates, media)
 	}
 	if e = certificateRows.Err(); e != nil {
@@ -517,7 +526,7 @@ func (s *Service) SaveWorker(ctx context.Context, p auth.Principal, id int64, w 
 	}
 	w.DisplayName = strings.TrimSpace(w.DisplayName)
 	w.Mobile = strings.TrimSpace(w.Mobile)
-	if len([]rune(w.DisplayName)) < 2 || len(w.Mobile) != 11 {
+	if len([]rune(w.DisplayName)) < 2 || !validWorkerMobile(w.Mobile) {
 		return Worker{}, httpx.E("VALIDATION_ERROR", "姓名或手机号不合法", 400)
 	}
 	tx, e := s.db.BeginTx(ctx, nil)
@@ -529,7 +538,13 @@ func (s *Service) SaveWorker(ctx context.Context, p auth.Principal, id int64, w 
 		return Worker{}, e
 	}
 	var workerID int64
+	initialPassword := ""
 	if id == 0 {
+		initialPassword = "w" + w.Mobile
+		initialHash, hashErr := auth.HashPassword("w" + w.Mobile)
+		if hashErr != nil {
+			return Worker{}, hashErr
+		}
 		no := fmt.Sprintf("WK%s%06d", time.Now().UTC().Format("20060102"), time.Now().UnixNano()%1000000)
 		for {
 			var exists bool
@@ -541,7 +556,7 @@ func (s *Service) SaveWorker(ctx context.Context, p auth.Principal, id int64, w 
 			}
 			no = fmt.Sprintf("WK%s%06d", time.Now().UTC().Format("20060102"), time.Now().UnixNano()%1000000)
 		}
-		e = tx.QueryRowContext(ctx, `INSERT INTO employee_account(org_id,worker_no,username,display_name,password_hash,status,role,mobile,joined_on,remark,avatar_media_id) VALUES($1,$2,$2,$3,'!local-worker-no-login','DRAFT','WORKER',$4,NULLIF($5,'')::date,$6,NULLIF($7,0)) RETURNING id`, p.OrgID, no, w.DisplayName, w.Mobile, w.JoinedOn, w.Remark, w.AvatarMediaID).Scan(&workerID)
+		e = tx.QueryRowContext(ctx, `INSERT INTO employee_account(org_id,worker_no,username,display_name,password_hash,status,role,mobile,joined_on,remark,avatar_media_id,must_change_password,password_version) VALUES($1,$2,$3,$4,$5,'DRAFT','WORKER',$3,NULLIF($6,'')::date,$7,NULLIF($8,0),TRUE,1) RETURNING id`, p.OrgID, no, w.Mobile, w.DisplayName, initialHash, w.JoinedOn, w.Remark, w.AvatarMediaID).Scan(&workerID)
 		if e != nil {
 			return Worker{}, httpx.E("WORKER_MOBILE_EXISTS", "师傅编号或手机号已存在", 409)
 		}
@@ -565,7 +580,28 @@ func (s *Service) SaveWorker(ctx context.Context, p auth.Principal, id int64, w 
 		}
 	} else {
 		workerID = id
-		r, e := tx.Exec(`UPDATE employee_account SET display_name=$1,mobile=$2,joined_on=NULLIF($3,'')::date,remark=$4,avatar_media_id=NULLIF($5,0),version=version+1 WHERE org_id=$6 AND id=$7 AND role='WORKER' AND version=$8`, w.DisplayName, w.Mobile, w.JoinedOn, w.Remark, w.AvatarMediaID, p.OrgID, id, w.Version)
+		var oldMobile string
+		if e = tx.QueryRowContext(ctx, `SELECT COALESCE(mobile,'') FROM employee_account WHERE org_id=$1 AND id=$2 AND role='WORKER' AND deleted_at IS NULL FOR UPDATE`, p.OrgID, id).Scan(&oldMobile); e == sql.ErrNoRows {
+			return Worker{}, httpx.E("WORKER_NOT_FOUND", "师傅不存在", 404)
+		} else if e != nil {
+			return Worker{}, e
+		}
+		var duplicateMobile bool
+		if e = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM employee_account WHERE org_id=$1 AND mobile=$2 AND id<>$3 AND role='WORKER' AND deleted_at IS NULL)`, p.OrgID, w.Mobile, id).Scan(&duplicateMobile); e != nil {
+			return Worker{}, e
+		}
+		if duplicateMobile {
+			return Worker{}, httpx.E("WORKER_MOBILE_EXISTS", "当前组织已有相同手机号的师傅", 409)
+		}
+		var initialHash string
+		if oldMobile != w.Mobile {
+			initialPassword = "w" + w.Mobile
+			initialHash, e = auth.HashPassword("w" + w.Mobile)
+			if e != nil {
+				return Worker{}, e
+			}
+		}
+		r, e := tx.Exec(`UPDATE employee_account SET username=$1,display_name=$2,mobile=$1,joined_on=NULLIF($3,'')::date,remark=$4,avatar_media_id=NULLIF($5,0),password_hash=CASE WHEN $6<>'' THEN $6 ELSE password_hash END,must_change_password=CASE WHEN $6<>'' THEN TRUE ELSE must_change_password END,password_version=CASE WHEN $6<>'' THEN password_version+1 ELSE password_version END,version=version+1 WHERE org_id=$7 AND id=$8 AND role='WORKER' AND version=$9`, w.Mobile, w.DisplayName, w.JoinedOn, w.Remark, w.AvatarMediaID, initialHash, p.OrgID, id, w.Version)
 		if e != nil {
 			return Worker{}, e
 		}
@@ -595,7 +631,53 @@ func (s *Service) SaveWorker(ctx context.Context, p auth.Principal, id int64, w 
 	if e = tx.Commit(); e != nil {
 		return Worker{}, e
 	}
-	return s.worker(ctx, p, workerID)
+	out, e := s.worker(ctx, p, workerID)
+	if e != nil {
+		return Worker{}, e
+	}
+	out.InitialPassword = initialPassword
+	return out, nil
+}
+
+func (s *Service) ResetPassword(ctx context.Context, p auth.Principal, id int64, sessions *auth.WorkerSessionStore) (map[string]any, error) {
+	if e := admin(p); e != nil {
+		return nil, e
+	}
+	if sessions == nil {
+		return nil, httpx.E("WORKER_AUTH_UNAVAILABLE", "师傅认证服务未初始化", 500)
+	}
+	tx, e := s.db.BeginTx(ctx, nil)
+	if e != nil {
+		return nil, e
+	}
+	defer tx.Rollback()
+	var mobile string
+	if e = tx.QueryRowContext(ctx, `SELECT COALESCE(mobile,'') FROM employee_account WHERE org_id=$1 AND id=$2 AND role='WORKER' AND deleted_at IS NULL FOR UPDATE`, p.OrgID, id).Scan(&mobile); e == sql.ErrNoRows {
+		return nil, httpx.E("WORKER_NOT_FOUND", "师傅不存在", 404)
+	} else if e != nil {
+		return nil, e
+	}
+	if !validWorkerMobile(mobile) {
+		return nil, httpx.E("WORKER_MOBILE_REQUIRED", "师傅手机号不合法，无法重置密码", 400)
+	}
+	temporaryPassword := "w" + mobile
+	hash, e := auth.HashPassword(temporaryPassword)
+	if e != nil {
+		return nil, e
+	}
+	if _, e = tx.ExecContext(ctx, `UPDATE employee_account SET password_hash=$1,must_change_password=TRUE,password_version=password_version+1,last_password_changed_at=CURRENT_TIMESTAMP(3),version=version+1 WHERE org_id=$2 AND id=$3`, hash, p.OrgID, id); e != nil {
+		return nil, e
+	}
+	if e = s.history(tx, p, id, "PASSWORD_RESET", nil, map[string]any{"mustChangePassword": true}, "后台重置师傅密码"); e != nil {
+		return nil, e
+	}
+	if e = tx.Commit(); e != nil {
+		return nil, e
+	}
+	if e = sessions.RevokeWorkerSessions(ctx, p.OrgID, id); e != nil {
+		return nil, e
+	}
+	return map[string]any{"workerId": id, "temporaryPassword": temporaryPassword, "mustChangePassword": true}, nil
 }
 func (s *Service) replaceAssignments(tx *sql.Tx, p auth.Principal, id int64, trades, skills []int64) error {
 	tm, sm := ids(trades), ids(skills)

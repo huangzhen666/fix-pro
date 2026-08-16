@@ -27,6 +27,7 @@ type CustomerOrderView = Omit<CustomerOrderDetail, 'workOrders'> & {
   stageLabel: string
   totalAmountText: string
   createdAtText: string
+  appointmentText: string
 }
 
 const stageMeta: Array<{ key: StageKey; label: string }> = [
@@ -151,7 +152,8 @@ Page({
         }
       }))
       const stageIndex = workOrders.length ? Math.min(...workOrders.map(work => stageMeta.findIndex(stage => stage.label === work.currentStageLabel))) : 0
-      this.setData({ order: { ...detail, workOrders, stageLabel: stageMeta[stageIndex].label, totalAmountText: (detail.totalAmount / 100).toFixed(2), createdAtText: formatDateTime(detail.createdAt) } })
+      const appointmentText = detail.appointmentAt ? `${formatDateTime(detail.appointmentAt)}${detail.appointmentSlotLabel ? `（${detail.appointmentSlotLabel}）` : ''}` : '待确认'
+      this.setData({ order: { ...detail, workOrders, stageLabel: stageMeta[stageIndex].label, totalAmountText: (detail.totalAmount / 100).toFixed(2), createdAtText: formatDateTime(detail.createdAt), appointmentText } })
     } catch (e) {
       wx.showToast({ title: e instanceof Error ? e.message : '订单加载失败', icon: 'none' })
     } finally {

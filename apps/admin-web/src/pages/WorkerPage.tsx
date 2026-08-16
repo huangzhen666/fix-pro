@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { App, Button, Card, Form, Input, Modal, Select, Space, Table, Tag, Typography, Upload } from 'antd'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { getWorker, listSkills, listTrades, listWorkers, saveWorker, disableWorker, uploadWorkerMedia, type WorkerMedia, type WorkerWrite } from '../api/workforce'
+import { getWorker, listSkills, listTrades, listWorkers, saveWorker, disableWorker, resetWorkerPassword, uploadWorkerMedia, type WorkerMedia, type WorkerWrite } from '../api/workforce'
 import { statusLabel } from '../utils/enums'
 import { AuthMedia } from '../components/AuthMedia'
 
@@ -72,10 +72,13 @@ export default function WorkerPage() {
   async function submit(activate = false) {
     try {
       const values = await form.validateFields()
-      await saveWorker(editing?.id, { ...values, activate, version: editing?.version ?? 0, avatarMediaId: avatar ? Number(avatar.id) : 0, certificateMediaIds: certificates.map(item => Number(item.id)) })
+      const result = await saveWorker(editing?.id, { ...values, activate, version: editing?.version ?? 0, avatarMediaId: avatar ? Number(avatar.id) : 0, certificateMediaIds: certificates.map(item => Number(item.id)) })
       message.success(activate ? '师傅已保存并启用' : '草稿已保存')
       setEditing(null)
       qc.invalidateQueries({ queryKey: ['workers-admin'] })
+      if (result.initialPassword) {
+        Modal.success({ title: '师傅账号已创建', content: `初始密码：${result.initialPassword}。请通过安全渠道交给师傅，关闭后不再显示。` })
+      }
     } catch (e) {
       if (e instanceof Error) message.error(e.message)
     }
@@ -84,7 +87,7 @@ export default function WorkerPage() {
   return <Card>
     <Space direction="vertical" style={{ width: '100%' }} size="large">
       <Space><Typography.Title level={3} style={{ margin: 0 }}>师傅管理</Typography.Title><Button type="primary" onClick={() => open()}>新增师傅</Button><Input.Search allowClear placeholder="编号、姓名或手机号" onSearch={setKeyword} style={{ width: 260 }} /></Space>
-      <Table rowKey="id" loading={workers.isLoading} dataSource={workers.data} columns={[{ title: '系统编号', dataIndex: 'workerNo' }, { title: '姓名', dataIndex: 'displayName' }, { title: '手机号', dataIndex: 'mobileMasked' }, { title: '状态', dataIndex: 'status', render: (v: string) => <Tag color={v === 'ACTIVE' ? 'green' : 'default'}>{statusLabel(v)}</Tag> }, { title: '未完成工单', dataIndex: 'openWorkOrderCount' }, { title: '操作', render: (_: unknown, row: any) => <Space><Button type="link" onClick={() => open(row)}>编辑</Button>{row.status === 'ACTIVE' ? <Button type="link" danger onClick={() => { setDisable(row); disableForm.setFieldsValue({ workOrderPolicy: 'KEEP_ASSIGNMENTS', reason: '' }) }}>停用</Button> : null}</Space> }]} />
+      <Table rowKey="id" loading={workers.isLoading} dataSource={workers.data} columns={[{ title: '系统编号', dataIndex: 'workerNo' }, { title: '姓名', dataIndex: 'displayName' }, { title: '手机号', dataIndex: 'mobileMasked' }, { title: '状态', dataIndex: 'status', render: (v: string) => <Tag color={v === 'ACTIVE' ? 'green' : 'default'}>{statusLabel(v)}</Tag> }, { title: '首次改密', render: (_: unknown, row: any) => <Tag color={row.mustChangePassword ? 'orange' : 'green'}>{row.mustChangePassword ? '待改密' : '已完成'}</Tag> }, { title: '未完成工单', dataIndex: 'openWorkOrderCount' }, { title: '操作', render: (_: unknown, row: any) => <Space><Button type="link" onClick={() => open(row)}>编辑</Button><Button type="link" onClick={() => Modal.confirm({ title: '重置师傅密码', content: '重置后该师傅现有登录将失效，并需要首次登录改密，是否继续？', okText: '确认重置', cancelText: '取消', onOk: async () => { try { const result = await resetWorkerPassword(row.id); Modal.success({ title: '密码已重置', content: `初始密码：${result.temporaryPassword}。请通过安全渠道交给师傅，关闭后不再显示。` }); qc.invalidateQueries({ queryKey: ['workers-admin'] }) } catch (e) { if (e instanceof Error) message.error(e.message); throw e } } })}>重置密码</Button>{row.status === 'ACTIVE' ? <Button type="link" danger onClick={() => { setDisable(row); disableForm.setFieldsValue({ workOrderPolicy: 'KEEP_ASSIGNMENTS', reason: '' }) }}>停用</Button> : null}</Space> }]} />
     </Space>
     <Modal open={!!editing} title={editing?.id ? '编辑师傅' : '新增师傅'} onCancel={() => setEditing(null)} footer={[<Button key="cancel" onClick={() => setEditing(null)}>取消</Button>, <Button key="save" onClick={() => submit(false)}>保存草稿</Button>, <Button key="active" type="primary" onClick={() => submit(true)}>保存并启用</Button>]}>
       <Form form={form} layout="vertical">

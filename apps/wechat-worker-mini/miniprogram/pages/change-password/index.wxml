@@ -1,0 +1,11 @@
+<view class="page password-page">
+  <view class="card password-card">
+    <view class="heading">首次登录，请设置新密码</view>
+    <view class="hint">为保障账号安全，初始密码不能直接用于作业，请设置一个新的登录密码。</view>
+    <input class="field" password data-field="currentPassword" placeholder="请输入当前密码" bindinput="onInput" />
+    <input class="field" password data-field="newPassword" placeholder="请输入新密码（至少 12 位）" bindinput="onInput" />
+    <input class="field" password data-field="confirmPassword" placeholder="请再次输入新密码" bindinput="onInput" />
+    <view wx:if="{{errorMessage}}" class="error">{{errorMessage}}</view>
+    <button class="primary-button" loading="{{submitting}}" disabled="{{submitting}}" bindtap="onSubmit">保存并重新登录</button>
+  </view>
+</view>

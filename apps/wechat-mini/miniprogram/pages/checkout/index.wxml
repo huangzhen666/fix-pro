@@ -1,1 +1,43 @@
-<view class="page"><view class="card"><view class="section-title">服务信息</view><view class="line" wx:for="{{cart.items}}" wx:key="id"><view><view>{{item.name}} × {{item.quantity}}{{item.unit}}</view><view class="muted">{{item.faultDescription}}</view></view><view>¥{{item.subtotal/100}}</view></view></view><view class="card"><view class="section-title">上门信息</view><input placeholder="联系人（2-64字）" data-field="contactName" bindinput="input"/><input type="number" maxlength="11" placeholder="手机号" data-field="contactMobile" bindinput="input"/><textarea placeholder="详细服务地址" data-field="serviceAddress" bindinput="input"/><view class="section-title">客户预约时间段</view><picker mode="date" value="{{appointmentDate}}" start="{{appointmentDate}}" bindchange="chooseDate"><view class="picker-value">日期：{{appointmentDate}}</view></picker><picker mode="selector" range="{{slots}}" bindchange="chooseSlot"><view class="picker-value">时间段：{{appointmentSlot || '请选择'}}（每2小时）</view></picker></view><view class="submit-bar"><view>合计 <text>¥{{totalText}}</text></view><button type="primary" loading="{{submitting}}" bindtap="submit">提交订单</button></view></view>
+<view class="page">
+  <view class="card">
+    <view class="section-title">服务信息</view>
+    <view class="line" wx:for="{{cart.items}}" wx:key="id">
+      <view><view>{{item.name}} × {{item.quantity}}{{item.unit}}</view><view class="muted">{{item.faultDescription}}</view></view>
+      <view>¥{{item.subtotal/100}}</view>
+    </view>
+  </view>
+  <view class="card">
+    <view class="section-title">上门信息</view>
+    <view class="address-selector" bindtap="openAddressPicker">
+      <view class="address-icon">⌖</view>
+      <view class="address-content" wx:if="{{selectedAddress}}"><view class="address-title">{{selectedAddress.city}}</view><view class="address-detail">{{selectedAddress.detailAddress}}{{selectedAddress.buildingDoor}}</view><view class="address-contact">{{selectedAddress.contactName}}　{{selectedAddress.contactMobile}}</view></view>
+      <view class="address-content address-empty" wx:else>请选择服务地址<view>首次下单请先新增地址</view></view>
+      <text class="chevron">›</text>
+    </view>
+    <view class="section-title">客户预约时间段</view>
+    <view class="appointment-trigger" bindtap="openAppointmentPicker">
+      <view class="appointment-trigger-title">上门时间</view>
+      <view class="appointment-trigger-value">{{appointmentDisplayText}}<text class="chevron">›</text></view>
+    </view>
+  </view>
+  <view class="submit-bar"><view>合计 <text>¥{{totalText}}</text></view><button type="primary" loading="{{submitting}}" bindtap="submit">提交订单</button></view>
+
+  <view wx:if="{{showAppointmentPicker}}" class="appointment-modal">
+    <view class="appointment-mask" catchtap="cancelAppointmentPicker"></view>
+    <view class="appointment-sheet">
+      <view class="appointment-header"><view><view class="appointment-title">您什么时间有空？</view><view class="appointment-subtitle">师傅会尽快联系您，确认最终上门时间</view></view><view class="appointment-close" catchtap="cancelAppointmentPicker">×</view></view>
+      <view class="appointment-body">
+        <scroll-view class="appointment-dates" scroll-y="true">
+          <view wx:for="{{appointmentDates}}" wx:key="value" class="date-option {{item.selected ? 'selected' : ''}}" data-value="{{item.value}}" bindtap="chooseAppointmentDate">{{item.label}}</view>
+        </scroll-view>
+        <scroll-view class="appointment-slots" scroll-y="true">
+          <block wx:for="{{appointmentSlots}}" wx:key="value">
+            <view wx:if="{{item.showPeriod}}" class="slot-period">{{item.period}}</view>
+            <view class="slot-option {{item.selected ? 'selected' : ''}}" data-value="{{item.value}}" bindtap="chooseAppointmentSlot">{{item.label}}</view>
+          </block>
+        </scroll-view>
+      </view>
+      <view class="appointment-actions"><button class="cancel-button" bindtap="cancelAppointmentPicker">取消</button><button class="confirm-button" bindtap="confirmAppointmentPicker">确认预约时间</button></view>
+    </view>
+  </view>
+</view>

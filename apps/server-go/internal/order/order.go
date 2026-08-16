@@ -119,8 +119,10 @@ func validate(w Write) error {
 		return httpx.E("APPOINTMENT_SLOT_INVALID", "请选择有效的预约时间段", 400)
 	}
 	date, err := time.ParseInLocation("2006-01-02", w.AppointmentDate, time.Local)
-	if err != nil || date.Before(time.Now().AddDate(0, 0, -1)) {
-		return httpx.E("APPOINTMENT_DATE_INVALID", "预约日期不能为空且不能早于今天", 400)
+	now := time.Now().In(time.Local)
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local)
+	if err != nil || date.Before(today.AddDate(0, 0, 1)) || date.After(today.AddDate(0, 0, 30)) {
+		return httpx.E("APPOINTMENT_DATE_INVALID", "预约日期必须为明天起30天内", 400)
 	}
 	return nil
 }
@@ -206,15 +208,9 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, key string, w Wr
 	var total int64
 	count := 0
 	for _, x := range items {
-		if len([]rune(strings.TrimSpace(x.fault))) < 5 {
-			return Result{}, httpx.E("FAULT_DESCRIPTION_REQUIRED", "请完善故障描述", 400)
-		}
 		var media int
 		if e = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM shopping_cart_item_media cim JOIN media_asset m ON m.id=cim.media_id AND m.org_id=cim.org_id WHERE cim.org_id=$1 AND cim.cart_item_id=$2 AND m.status='READY'`, p.OrgID, x.id).Scan(&media); e != nil {
 			return Result{}, e
-		}
-		if media == 0 {
-			return Result{}, httpx.E("FAULT_MEDIA_REQUIRED", "请上传故障图片或视频", 400)
 		}
 		if x.status != "PUBLISHED" || !x.current.Valid || int(x.current.Int64) != x.version || x.price != x.snap.Price {
 			return Result{}, httpx.E("CART_SKU_CHANGED", "服务价格或版本已变化，请刷新购物车", 409)

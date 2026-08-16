@@ -83,39 +83,50 @@ type AdminEvidence struct {
 	CreatedAt       time.Time `json:"createdAt"`
 }
 
+type AdminInternalReview struct {
+	ID           string    `json:"id"`
+	Level        string    `json:"level"`
+	Decision     string    `json:"decision"`
+	ReviewerID   string    `json:"reviewerId"`
+	ReviewerName string    `json:"reviewerName"`
+	Note         string    `json:"note,omitempty"`
+	CreatedAt    time.Time `json:"createdAt"`
+}
+
 type AdminWorkOrderDetail struct {
-	ID                       string          `json:"id"`
-	OrderID                  string          `json:"orderId"`
-	WorkOrderNo              string          `json:"workOrderNo"`
-	OrderNo                  string          `json:"orderNo"`
-	Status                   string          `json:"status"`
-	Priority                 string          `json:"priority"`
-	AssigneeID               string          `json:"assigneeId,omitempty"`
-	AssigneeName             string          `json:"assigneeName,omitempty"`
-	AppointmentAt            *time.Time      `json:"appointmentAt,omitempty"`
-	AppointmentSlot          string          `json:"appointmentSlot,omitempty"`
-	ServiceAddress           string          `json:"serviceAddress"`
-	ContactName              string          `json:"contactName"`
-	ContactMobile            string          `json:"contactMobile"`
-	CompletionSummary        string          `json:"completionSummary,omitempty"`
-	ReviewNote               string          `json:"reviewNote,omitempty"`
-	Version                  int             `json:"version"`
-	AcceptedAt               *time.Time      `json:"acceptedAt,omitempty"`
-	ArrivedAt                *time.Time      `json:"arrivedAt,omitempty"`
-	StartedAt                *time.Time      `json:"startedAt,omitempty"`
-	CompletionSubmittedAt    *time.Time      `json:"completionSubmittedAt,omitempty"`
-	ReviewedAt               *time.Time      `json:"reviewedAt,omitempty"`
-	FinishedAt               *time.Time      `json:"finishedAt,omitempty"`
-	VisitStatus              string          `json:"visitStatus"`
-	CustomerAcceptanceStatus string          `json:"customerAcceptanceStatus"`
-	CustomerAcceptanceSource string          `json:"customerAcceptanceSource,omitempty"`
-	CustomerAcceptanceAt     *time.Time      `json:"customerAcceptanceAt,omitempty"`
-	InternalReviewStatus     string          `json:"internalReviewStatus"`
-	ClosureStatus            string          `json:"closureStatus"`
-	CompletionOutcome        string          `json:"completionOutcome,omitempty"`
-	CompletionSubmissionAt   *time.Time      `json:"completionSubmissionAt,omitempty"`
-	ClosedAt                 *time.Time      `json:"closedAt,omitempty"`
-	Evidence                 []AdminEvidence `json:"evidence"`
+	ID                       string                `json:"id"`
+	OrderID                  string                `json:"orderId"`
+	WorkOrderNo              string                `json:"workOrderNo"`
+	OrderNo                  string                `json:"orderNo"`
+	Status                   string                `json:"status"`
+	Priority                 string                `json:"priority"`
+	AssigneeID               string                `json:"assigneeId,omitempty"`
+	AssigneeName             string                `json:"assigneeName,omitempty"`
+	AppointmentAt            *time.Time            `json:"appointmentAt,omitempty"`
+	AppointmentSlot          string                `json:"appointmentSlot,omitempty"`
+	ServiceAddress           string                `json:"serviceAddress"`
+	ContactName              string                `json:"contactName"`
+	ContactMobile            string                `json:"contactMobile"`
+	CompletionSummary        string                `json:"completionSummary,omitempty"`
+	ReviewNote               string                `json:"reviewNote,omitempty"`
+	Version                  int                   `json:"version"`
+	AcceptedAt               *time.Time            `json:"acceptedAt,omitempty"`
+	ArrivedAt                *time.Time            `json:"arrivedAt,omitempty"`
+	StartedAt                *time.Time            `json:"startedAt,omitempty"`
+	CompletionSubmittedAt    *time.Time            `json:"completionSubmittedAt,omitempty"`
+	ReviewedAt               *time.Time            `json:"reviewedAt,omitempty"`
+	FinishedAt               *time.Time            `json:"finishedAt,omitempty"`
+	VisitStatus              string                `json:"visitStatus"`
+	CustomerAcceptanceStatus string                `json:"customerAcceptanceStatus"`
+	CustomerAcceptanceSource string                `json:"customerAcceptanceSource,omitempty"`
+	CustomerAcceptanceAt     *time.Time            `json:"customerAcceptanceAt,omitempty"`
+	InternalReviewStatus     string                `json:"internalReviewStatus"`
+	ClosureStatus            string                `json:"closureStatus"`
+	CompletionOutcome        string                `json:"completionOutcome,omitempty"`
+	CompletionSubmissionAt   *time.Time            `json:"completionSubmissionAt,omitempty"`
+	ClosedAt                 *time.Time            `json:"closedAt,omitempty"`
+	Evidence                 []AdminEvidence       `json:"evidence"`
+	InternalReviews          []AdminInternalReview `json:"internalReviews"`
 }
 
 func (s *Service) AdminWorkOrderDetail(ctx context.Context, p auth.Principal, id int64) (AdminWorkOrderDetail, error) {
@@ -141,7 +152,6 @@ func (s *Service) AdminWorkOrderDetail(ctx context.Context, p auth.Principal, id
 	if err != nil {
 		return out, err
 	}
-	defer rows.Close()
 	for rows.Next() {
 		var eid, mid int64
 		var item AdminEvidence
@@ -152,7 +162,28 @@ func (s *Service) AdminWorkOrderDetail(ctx context.Context, p auth.Principal, id
 		item.URL = "/api/v1/admin/media/" + item.MediaID + "/content"
 		out.Evidence = append(out.Evidence, item)
 	}
-	return out, rows.Err()
+	if err = rows.Err(); err != nil {
+		rows.Close()
+		return out, err
+	}
+	rows.Close()
+
+	out.InternalReviews = []AdminInternalReview{}
+	reviewRows, err := s.db.QueryContext(ctx, `SELECT r.id,r.level,r.decision,r.reviewer_id,COALESCE(e.display_name,''),COALESCE(r.note,''),r.created_at FROM internal_review r LEFT JOIN employee_account e ON e.org_id=r.org_id AND e.id=r.reviewer_id WHERE r.org_id=$1 AND r.work_order_id=$2 ORDER BY r.created_at,r.id`, p.OrgID, id)
+	if err != nil {
+		return out, err
+	}
+	defer reviewRows.Close()
+	for reviewRows.Next() {
+		var rid, reviewerID int64
+		var item AdminInternalReview
+		if err = reviewRows.Scan(&rid, &item.Level, &item.Decision, &reviewerID, &item.ReviewerName, &item.Note, &item.CreatedAt); err != nil {
+			return out, err
+		}
+		item.ID, item.ReviewerID = fmt.Sprint(rid), fmt.Sprint(reviewerID)
+		out.InternalReviews = append(out.InternalReviews, item)
+	}
+	return out, reviewRows.Err()
 }
 
 type WorkerWorkOrderDetail struct {
@@ -164,10 +195,28 @@ type WorkerWorkOrderDetail struct {
 	AppointmentAt        *time.Time         `json:"appointmentAt,omitempty"`
 	AppointmentSlot      string             `json:"appointmentSlot,omitempty"`
 	AppointmentSlotLabel string             `json:"appointmentSlotLabel,omitempty"`
+	CustomerName         string             `json:"customerName"`
+	CustomerMobile       string             `json:"customerMobile"`
 	ServiceAddress       string             `json:"serviceAddress"`
+	Items                []WorkerOrderItem  `json:"items"`
 	CompletionSummary    string             `json:"completionSummary,omitempty"`
 	Version              int                `json:"version"`
 	Evidence             []CustomerEvidence `json:"evidence"`
+}
+
+type WorkerOrderItem struct {
+	ID            string             `json:"id"`
+	Name          string             `json:"name"`
+	Unit          string             `json:"unit"`
+	Quantity      int                `json:"quantity"`
+	CustomerNote  string             `json:"customerNote,omitempty"`
+	CustomerMedia []WorkerOrderMedia `json:"customerMedia"`
+}
+
+type WorkerOrderMedia struct {
+	ID        string `json:"id"`
+	MediaType string `json:"mediaType"`
+	URL       string `json:"url"`
 }
 
 func (s *Service) WorkerWorkOrder(ctx context.Context, p auth.Principal, id int64) (WorkerWorkOrderDetail, error) {
@@ -176,13 +225,57 @@ func (s *Service) WorkerWorkOrder(ctx context.Context, p auth.Principal, id int6
 	}
 	var out WorkerWorkOrderDetail
 	var wid int64
-	if err := s.db.QueryRowContext(ctx, `SELECT w.id,w.work_order_no,o.order_no,w.status,COALESCE(e.display_name,''),w.appointment_at,COALESCE(w.appointment_slot,''),o.service_address,COALESCE(w.completion_summary,''),w.version FROM work_order w JOIN customer_order o ON o.org_id=w.org_id AND o.id=w.order_id LEFT JOIN employee_account e ON e.org_id=w.org_id AND e.id=w.assignee_id WHERE w.org_id=$1 AND w.id=$2 AND w.assignee_id=$3`, p.OrgID, id, p.SubjectID).Scan(&wid, &out.WorkOrderNo, &out.OrderNo, &out.Status, &out.AssigneeName, &out.AppointmentAt, &out.AppointmentSlot, &out.ServiceAddress, &out.CompletionSummary, &out.Version); err == sql.ErrNoRows {
+	if err := s.db.QueryRowContext(ctx, `SELECT w.id,w.work_order_no,o.order_no,w.status,COALESCE(e.display_name,''),w.appointment_at,COALESCE(w.appointment_slot,''),o.contact_name,o.contact_mobile,o.service_address,COALESCE(w.completion_summary,''),w.version FROM work_order w JOIN customer_order o ON o.org_id=w.org_id AND o.id=w.order_id LEFT JOIN employee_account e ON e.org_id=w.org_id AND e.id=w.assignee_id WHERE w.org_id=$1 AND w.id=$2 AND w.assignee_id=$3`, p.OrgID, id, p.SubjectID).Scan(&wid, &out.WorkOrderNo, &out.OrderNo, &out.Status, &out.AssigneeName, &out.AppointmentAt, &out.AppointmentSlot, &out.CustomerName, &out.CustomerMobile, &out.ServiceAddress, &out.CompletionSummary, &out.Version); err == sql.ErrNoRows {
 		return out, httpx.E("WORK_ORDER_NOT_ASSIGNED_TO_YOU", "工单不属于当前师傅", 403)
 	} else if err != nil {
 		return out, err
 	}
 	out.AppointmentSlotLabel = appointmentSlotText(out.AppointmentSlot)
 	out.ID = fmt.Sprint(wid)
+	out.Items = []WorkerOrderItem{}
+	itemRows, err := s.db.QueryContext(ctx, `SELECT oi.id,oi.sku_name_snapshot,oi.unit_snapshot,oi.quantity,COALESCE(oi.fault_description,'') FROM work_order_item wi JOIN order_item oi ON oi.org_id=wi.org_id AND oi.id=wi.order_item_id WHERE wi.org_id=$1 AND wi.work_order_id=$2 ORDER BY oi.id`, p.OrgID, id)
+	if err != nil {
+		return out, err
+	}
+	for itemRows.Next() {
+		var itemID int64
+		var item WorkerOrderItem
+		if err = itemRows.Scan(&itemID, &item.Name, &item.Unit, &item.Quantity, &item.CustomerNote); err != nil {
+			itemRows.Close()
+			return out, err
+		}
+		item.ID = fmt.Sprint(itemID)
+		item.CustomerMedia = []WorkerOrderMedia{}
+		mediaRows, mediaErr := s.db.QueryContext(ctx, `SELECT m.id,m.media_type FROM order_item_media om JOIN media_asset m ON m.org_id=om.org_id AND m.id=om.media_id AND m.status='READY' WHERE om.org_id=$1 AND om.order_item_id=$2 ORDER BY om.sort_order,om.id`, p.OrgID, itemID)
+		if mediaErr != nil {
+			itemRows.Close()
+			return out, mediaErr
+		}
+		for mediaRows.Next() {
+			var mediaID int64
+			var mediaItem WorkerOrderMedia
+			if err = mediaRows.Scan(&mediaID, &mediaItem.MediaType); err != nil {
+				mediaRows.Close()
+				itemRows.Close()
+				return out, err
+			}
+			mediaItem.ID = fmt.Sprint(mediaID)
+			mediaItem.URL = "/api/v1/worker/media/" + mediaItem.ID + "/content"
+			item.CustomerMedia = append(item.CustomerMedia, mediaItem)
+		}
+		if err = mediaRows.Err(); err != nil {
+			mediaRows.Close()
+			itemRows.Close()
+			return out, err
+		}
+		mediaRows.Close()
+		out.Items = append(out.Items, item)
+	}
+	if err = itemRows.Err(); err != nil {
+		itemRows.Close()
+		return out, err
+	}
+	itemRows.Close()
 	out.Evidence = []CustomerEvidence{}
 	rows, err := s.db.QueryContext(ctx, `SELECT e.id,e.media_id,e.stage,e.created_at FROM work_order_evidence e WHERE e.org_id=$1 AND e.work_order_id=$2 ORDER BY e.created_at`, p.OrgID, id)
 	if err != nil {
@@ -252,15 +345,33 @@ func (s *Service) CreateWorker(ctx context.Context, p auth.Principal, username, 
 	if p.Role != "ADMIN" {
 		return Worker{}, httpx.E("FORBIDDEN", "无权管理师傅", 403)
 	}
-	if strings.TrimSpace(username) == "" || strings.TrimSpace(displayName) == "" {
-		return Worker{}, httpx.E("VALIDATION_ERROR", "用户名和姓名不能为空", 400)
+	if strings.TrimSpace(displayName) == "" || !validWorkerMobileForFulfillment(mobile) {
+		return Worker{}, httpx.E("VALIDATION_ERROR", "姓名或手机号不合法", 400)
+	}
+	initialPassword := "w" + strings.TrimSpace(mobile)
+	hash, err := auth.HashPassword(initialPassword)
+	if err != nil {
+		return Worker{}, err
 	}
 	var id int64
-	err := s.db.QueryRowContext(ctx, `INSERT INTO employee_account(org_id,username,display_name,password_hash,status,role,mobile) VALUES($1,$2,$3,'!local-worker-no-login','ACTIVE','WORKER',NULLIF($4,'')) RETURNING id`, p.OrgID, strings.TrimSpace(username), strings.TrimSpace(displayName), strings.TrimSpace(mobile)).Scan(&id)
+	err = s.db.QueryRowContext(ctx, `INSERT INTO employee_account(org_id,username,display_name,password_hash,status,role,mobile,must_change_password,password_version) VALUES($1,$2,$3,$4,'ACTIVE','WORKER',$2,TRUE,1) RETURNING id`, p.OrgID, strings.TrimSpace(mobile), strings.TrimSpace(displayName), hash).Scan(&id)
 	if err != nil {
 		return Worker{}, httpx.E("WORKER_USERNAME_EXISTS", "师傅用户名已存在", 409)
 	}
-	return Worker{ID: fmt.Sprint(id), Username: strings.TrimSpace(username), DisplayName: strings.TrimSpace(displayName), Mobile: mobile, Status: "ACTIVE"}, nil
+	return Worker{ID: fmt.Sprint(id), Username: strings.TrimSpace(mobile), DisplayName: strings.TrimSpace(displayName), Mobile: mobile, Status: "ACTIVE"}, nil
+}
+
+func validWorkerMobileForFulfillment(value string) bool {
+	value = strings.TrimSpace(value)
+	if len(value) != 11 || value[0] != '1' {
+		return false
+	}
+	for _, r := range value {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *Service) SetWorkerStatus(ctx context.Context, p auth.Principal, id int64, status string) error {
@@ -866,17 +977,20 @@ type CustomerEvidence struct {
 	CreatedAt time.Time `json:"createdAt"`
 }
 type CustomerOrderDetail struct {
-	ID             string              `json:"id"`
-	OrderNo        string              `json:"orderNo"`
-	Status         string              `json:"status"`
-	StatusText     string              `json:"statusText"`
-	ContactName    string              `json:"contactName"`
-	ContactMobile  string              `json:"contactMobile"`
-	ServiceAddress string              `json:"serviceAddress"`
-	TotalAmount    int64               `json:"totalAmount"`
-	Version        int                 `json:"version"`
-	CreatedAt      time.Time           `json:"createdAt"`
-	WorkOrders     []CustomerWorkOrder `json:"workOrders"`
+	ID                   string              `json:"id"`
+	OrderNo              string              `json:"orderNo"`
+	Status               string              `json:"status"`
+	StatusText           string              `json:"statusText"`
+	ContactName          string              `json:"contactName"`
+	ContactMobile        string              `json:"contactMobile"`
+	ServiceAddress       string              `json:"serviceAddress"`
+	TotalAmount          int64               `json:"totalAmount"`
+	Version              int                 `json:"version"`
+	CreatedAt            time.Time           `json:"createdAt"`
+	AppointmentAt        *time.Time          `json:"appointmentAt,omitempty"`
+	AppointmentSlot      string              `json:"appointmentSlot,omitempty"`
+	AppointmentSlotLabel string              `json:"appointmentSlotLabel,omitempty"`
+	WorkOrders           []CustomerWorkOrder `json:"workOrders"`
 }
 
 func (s *Service) CustomerOrders(ctx context.Context, p auth.Principal, page, size int) (CustomerOrderPage, error) {
@@ -923,13 +1037,18 @@ func (s *Service) CustomerOrder(ctx context.Context, p auth.Principal, id int64)
 	}
 	var out CustomerOrderDetail
 	var oid int64
-	if err := s.db.QueryRowContext(ctx, `SELECT id,order_no,status,contact_name,contact_mobile,service_address,total_amount,version,created_at FROM customer_order WHERE org_id=$1 AND customer_id=$2 AND id=$3`, p.OrgID, p.SubjectID, id).Scan(&oid, &out.OrderNo, &out.Status, &out.ContactName, &out.ContactMobile, &out.ServiceAddress, &out.TotalAmount, &out.Version, &out.CreatedAt); err == sql.ErrNoRows {
+	var appointment sql.NullTime
+	if err := s.db.QueryRowContext(ctx, `SELECT id,order_no,status,contact_name,contact_mobile,service_address,total_amount,version,created_at,appointment_at,COALESCE(appointment_slot,'') FROM customer_order WHERE org_id=$1 AND customer_id=$2 AND id=$3`, p.OrgID, p.SubjectID, id).Scan(&oid, &out.OrderNo, &out.Status, &out.ContactName, &out.ContactMobile, &out.ServiceAddress, &out.TotalAmount, &out.Version, &out.CreatedAt, &appointment, &out.AppointmentSlot); err == sql.ErrNoRows {
 		return out, httpx.E("ORDER_NOT_FOUND", "订单不存在", 404)
 	} else if err != nil {
 		return out, err
 	}
 	out.ID = fmt.Sprint(oid)
 	out.StatusText = statusText(out.Status)
+	if appointment.Valid {
+		out.AppointmentAt = &appointment.Time
+	}
+	out.AppointmentSlotLabel = appointmentSlotText(out.AppointmentSlot)
 	out.WorkOrders = []CustomerWorkOrder{}
 	rows, err := s.db.QueryContext(ctx, `SELECT w.id,w.work_order_no,w.status,COALESCE(e.display_name,''),w.appointment_at,COALESCE(w.appointment_slot,''),COALESCE(w.completion_summary,''),w.version FROM work_order w LEFT JOIN employee_account e ON e.org_id=w.org_id AND e.id=w.assignee_id WHERE w.org_id=$1 AND w.order_id=$2 ORDER BY w.id`, p.OrgID, id)
 	if err != nil {
@@ -1011,10 +1130,10 @@ func (s *Service) CustomerAcceptance(ctx context.Context, p auth.Principal, id i
 		return err
 	}
 	defer tx.Rollback()
-	var status string
+	var status, internalReviewStatus, closureStatus, visitStatus, completionOutcome string
 	var version int
 	var orderID int64
-	if err = tx.QueryRowContext(ctx, `SELECT w.status,w.version,w.order_id FROM work_order w JOIN customer_order o ON o.org_id=w.org_id AND o.id=w.order_id WHERE w.org_id=$1 AND w.id=$2 AND o.customer_id=$3 FOR UPDATE`, p.OrgID, id, p.SubjectID).Scan(&status, &version, &orderID); err == sql.ErrNoRows {
+	if err = tx.QueryRowContext(ctx, `SELECT w.status,w.internal_review_status,w.closure_status,w.visit_status,COALESCE(w.completion_outcome,''),w.version,w.order_id FROM work_order w JOIN customer_order o ON o.org_id=w.org_id AND o.id=w.order_id WHERE w.org_id=$1 AND w.id=$2 AND o.customer_id=$3 FOR UPDATE`, p.OrgID, id, p.SubjectID).Scan(&status, &internalReviewStatus, &closureStatus, &visitStatus, &completionOutcome, &version, &orderID); err == sql.ErrNoRows {
 		return httpx.E("WORK_ORDER_NOT_FOUND", "工单不存在", 404)
 	} else if err != nil {
 		return err
@@ -1026,10 +1145,15 @@ func (s *Service) CustomerAcceptance(ctx context.Context, p auth.Principal, id i
 		return httpx.E("WORK_ORDER_STATUS_CONFLICT", "当前状态不能验收", 409)
 	}
 	to, event := status, "CUSTOMER_ACCEPTED"
+	nextClosure, nextVisit, nextOutcome := closureStatus, visitStatus, completionOutcome
+	finished := false
 	if req.Decision == "REJECT" {
 		to, event = WorkOrderReworkRequired, "CUSTOMER_REJECTED"
+		nextClosure, nextVisit = "SECOND_VISIT_PENDING", "SECOND_VISIT_PENDING"
+	} else if internalReviewStatus == "APPROVED" {
+		to, nextClosure, nextVisit, nextOutcome, finished = WorkOrderFinished, "FINISHED", "FINISHED", "NORMAL", true
 	}
-	if _, err = tx.ExecContext(ctx, `UPDATE work_order SET status=$1,customer_acceptance_status=$2,customer_acceptance_source='MANUAL',customer_acceptance_at=CURRENT_TIMESTAMP(3),closure_status=CASE WHEN $2='REJECTED' THEN 'SECOND_VISIT_PENDING' ELSE closure_status END,visit_status=CASE WHEN $2='REJECTED' THEN 'SECOND_VISIT_PENDING' ELSE visit_status END,version=version+1 WHERE org_id=$3 AND id=$4 AND version=$5`, to, map[bool]string{true: "REJECTED", false: "MANUAL_ACCEPTED"}[req.Decision == "REJECT"], p.OrgID, id, req.Version); err != nil {
+	if _, err = tx.ExecContext(ctx, `UPDATE work_order SET status=$1,customer_acceptance_status=$2,customer_acceptance_source='MANUAL',customer_acceptance_at=CURRENT_TIMESTAMP(3),closure_status=$3,visit_status=$4,completion_outcome=NULLIF($5,''),closed_at=CASE WHEN $6::boolean THEN CURRENT_TIMESTAMP(3) ELSE closed_at END,finished_at=CASE WHEN $6::boolean THEN CURRENT_TIMESTAMP(3) ELSE finished_at END,version=version+1 WHERE org_id=$7 AND id=$8 AND version=$9`, to, map[bool]string{true: "REJECTED", false: "MANUAL_ACCEPTED"}[req.Decision == "REJECT"], nextClosure, nextVisit, nextOutcome, finished, p.OrgID, id, req.Version); err != nil {
 		return err
 	}
 	var submissionID int64
@@ -1058,7 +1182,7 @@ func (s *Service) CustomerAcceptance(ctx context.Context, p auth.Principal, id i
 	if err = tx.QueryRowContext(ctx, `SELECT status FROM customer_order WHERE org_id=$1 AND id=$2 FOR UPDATE`, p.OrgID, orderID).Scan(&previousOrderStatus); err != nil {
 		return err
 	}
-	if _, err = tx.ExecContext(ctx, `UPDATE customer_order SET status=$1,version=version+1,completed_at=CASE WHEN $1='COMPLETED' THEN CURRENT_TIMESTAMP(3) ELSE completed_at END WHERE org_id=$2 AND id=$3`, next, p.OrgID, orderID); err != nil {
+	if _, err = tx.ExecContext(ctx, `UPDATE customer_order SET status=$1,version=version+1,completed_at=CASE WHEN $4::boolean THEN CURRENT_TIMESTAMP(3) ELSE completed_at END WHERE org_id=$2 AND id=$3`, next, p.OrgID, orderID, next == OrderCompleted); err != nil {
 		return err
 	}
 	if previousOrderStatus != next {

@@ -6,6 +6,8 @@
     "pages/cart/index",
     "pages/checkout/index",
     "pages/checkout/result",
+    "pages/addresses/index",
+    "pages/addresses/edit",
     "pages/search/index",
     "pages/orders/index",
     "pages/orders/detail",
@@ -29,5 +31,6 @@
     ]
   },
   "sitemapLocation": "sitemap.json",
+  "requiredPrivateInfos": ["chooseAddress"],
   "lazyCodeLoading": "requiredComponents"
 }

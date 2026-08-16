@@ -12,7 +12,12 @@ components:
       required: true
       schema: {type: string, pattern: '^[1-9][0-9]*$'}
   securitySchemes:
-    adminBasic: {type: http, scheme: basic}
+    adminSession: {type: apiKey, in: cookie, name: fixpro_admin_session}
+    adminBasic: {type: http, scheme: basic, description: Deprecated local compatibility only}
+  headers:
+    CSRFToken:
+      description: Required on state-changing admin requests when using cookie sessions.
+      schema: {type: string}
     miniBearer: {type: http, scheme: bearer}
   schemas:
     ApiResponse:
@@ -24,6 +29,27 @@ components:
         data: {}
         requestId: {type: string}
 paths:
+  /api/v1/admin/auth/login:
+    post:
+      responses: {'200': {description: Admin session created}, '401': {description: Invalid credentials}}
+  /api/v1/admin/auth/logout:
+    post: {security: [{adminSession: []}], responses: {'200': {description: Session revoked}}}
+  /api/v1/admin/auth/me:
+    get: {security: [{adminSession: []}], responses: {'200': {description: Current admin and effective permissions}}}
+  /api/v1/admin/auth/password:
+    post: {security: [{adminSession: []}], parameters: [{name: X-CSRF-Token, in: header, required: true, schema: {type: string}}], responses: {'200': {description: Password changed}}}
+  /api/v1/admin/permissions:
+    get: {security: [{adminSession: []}], responses: {'200': {description: Permission catalog}}}
+  /api/v1/admin/roles:
+    get: {security: [{adminSession: []}], responses: {'200': {description: Role list}}}
+    post: {security: [{adminSession: []}], responses: {'200': {description: Role created}}}
+  /api/v1/admin/users:
+    get: {security: [{adminSession: []}], responses: {'200': {description: Admin user list}}}
+    post: {security: [{adminSession: []}], responses: {'200': {description: Admin user created with one-time temporary password}}}
+  /api/v1/admin/users/{id}/status:
+    post: {security: [{adminSession: []}], parameters: [{$ref: '#/components/parameters/Id'}, {name: X-CSRF-Token, in: header, required: true, schema: {type: string}}], responses: {'200': {description: Admin user status updated}}}
+  /api/v1/admin/audit-logs:
+    get: {security: [{adminSession: []}], responses: {'200': {description: Audit log list}}}
   /actuator/health:
     get: {responses: {'200': {description: Healthy}}}
   /api/v1/public/ping:
@@ -78,6 +104,8 @@ paths:
     post: {security: [{adminBasic: []}], parameters: [{$ref: '#/components/parameters/Id'}], responses: {'200': {description: Worker activated}}}
   /api/v1/admin/workers/{id}/disable:
     post: {security: [{adminBasic: []}], parameters: [{$ref: '#/components/parameters/Id'}], responses: {'200': {description: Worker disabled and optional not-started work orders returned}}}
+  /api/v1/admin/workers/{id}/reset-password:
+    post: {security: [{adminSession: []}], parameters: [{$ref: '#/components/parameters/Id'}], responses: {'200': {description: Worker password reset with one-time temporary password}}}
   /api/v1/admin/workers/candidates:
     get: {security: [{adminBasic: []}], parameters: [{name: workOrderId, in: query, required: true, schema: {type: string}}], responses: {'200': {description: Skill-matched worker candidates}}}
   /api/v1/admin/worker-trades:
@@ -112,6 +140,14 @@ paths:
     post: {security: [{adminBasic: []}], parameters: [{$ref: '#/components/parameters/Id'}, {name: Idempotency-Key, in: header, required: true, schema: {type: string}}], responses: {'200': {description: Completion reviewed}}}
   /api/v1/worker/work-orders:
     get: {security: [{miniBearer: []}], responses: {'200': {description: Assigned worker work order page}}}
+  /api/v1/worker/auth/login:
+    post: {responses: {'200': {description: Worker access token created}, '401': {description: Mobile or password invalid}}}
+  /api/v1/worker/auth/me:
+    get: {security: [{miniBearer: []}], responses: {'200': {description: Current worker profile and password state}}}
+  /api/v1/worker/auth/logout:
+    post: {security: [{miniBearer: []}], responses: {'200': {description: Worker session revoked}}}
+  /api/v1/worker/auth/password:
+    post: {security: [{miniBearer: []}], responses: {'200': {description: Worker password changed}, '423': {description: Password change required}}}
   /api/v1/worker/work-orders/{id}:
     get: {security: [{miniBearer: []}], parameters: [{$ref: '#/components/parameters/Id'}], responses: {'200': {description: Assigned worker work order detail}}}
   /api/v1/worker/work-orders/{id}/{command}:

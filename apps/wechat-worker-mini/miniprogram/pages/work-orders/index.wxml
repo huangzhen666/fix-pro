@@ -6,7 +6,7 @@
     <view wx:for="{{items}}" wx:key="id" class="card" data-id="{{item.id}}" bindtap="open">
       <view class="row"><text class="title">{{item.workOrderNo}}</text><text class="status">{{item.statusText}}</text></view>
       <view class="muted">订单：{{item.orderNo}}</view>
-      <view wx:if="{{item.appointmentAt}}" class="muted">预约：{{item.appointmentSlotLabel || item.appointmentAt}}</view>
+      <view wx:if="{{item.appointmentAt}}" class="muted">预约：{{item.appointmentDateText || item.appointmentAt}} {{item.appointmentSlotLabel || ''}}</view>
       <view wx:if="{{item.serviceAddress}}" class="muted">地址：{{item.serviceAddress}}</view>
     </view>
   </view>

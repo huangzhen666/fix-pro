@@ -5,7 +5,7 @@ export interface CustomerOrderSummary { id:string; orderNo:string; status:string
 export interface CustomerEvidence { id:string; mediaId:string; stage:string; url:string; createdAt:string }
 export interface CustomerTimelineEvent { code:string; operatorType:string; note?:string; createdAt:string }
 export interface CustomerWorkOrder { id:string; workOrderNo:string; status:string; statusText?:string; assigneeName?:string; appointmentAt?:string; appointmentSlot?:string; appointmentSlotLabel?:string; completionSummary?:string; version:number; evidence:CustomerEvidence[] }
-export interface CustomerOrderDetail { id:string; orderNo:string; status:string; statusText?:string; contactName:string; contactMobile:string; serviceAddress:string; totalAmount:number; version:number; createdAt:string; workOrders:CustomerWorkOrder[] }
+export interface CustomerOrderDetail { id:string; orderNo:string; status:string; statusText?:string; contactName:string; contactMobile:string; serviceAddress:string; totalAmount:number; version:number; createdAt:string; appointmentAt?:string; appointmentSlot?:string; appointmentSlotLabel?:string; workOrders:CustomerWorkOrder[] }
 export const listCustomerOrders=()=>request<{items:CustomerOrderSummary[];total:number}>({url:'/api/v1/mini/orders?page=1&pageSize=50',method:'GET'})
 export const getCustomerOrder=(id:string)=>request<CustomerOrderDetail>({url:`/api/v1/mini/orders/${id}`,method:'GET'})
 export const getWorkOrderTimeline=(id:string)=>request<{items:CustomerTimelineEvent[]}>({url:`/api/v1/mini/work-orders/${id}/timeline`,method:'GET'})

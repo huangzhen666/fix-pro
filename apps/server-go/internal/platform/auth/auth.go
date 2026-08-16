@@ -11,8 +11,38 @@ import (
 )
 
 type Principal struct {
-	OrgID, SubjectID int64
-	Role, Name       string
+	OrgID                int64  `json:"orgId"`
+	SubjectID            int64  `json:"subjectId"`
+	AdminUserID          int64  `json:"adminUserId"`
+	SessionID            int64  `json:"sessionId"`
+	Role                 string `json:"role"`
+	Name                 string `json:"name"`
+	SessionAuthenticated bool   `json:"sessionAuthenticated"`
+	PlatformSuperAdmin   bool   `json:"platformSuperAdmin"`
+	LegacyBasic          bool   `json:"legacyBasic,omitempty"`
+	MustChangePassword   bool   `json:"mustChangePassword"`
+}
+
+// AdminSessionOrBasic keeps a local-only compatibility path while the frontend
+// migrates to cookie sessions. The compatibility path is deliberately marked on
+// Principal so authorization checks can be audited and removed after cutover.
+func AdminSessionOrBasic(env string, sessions *SessionStore, username, password string, allowBasic bool, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if sessions != nil {
+			if p, _, err := sessions.Authenticate(r); err == nil {
+				next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), principalKey, p)))
+				return
+			}
+		}
+		if allowBasic && env == "local" {
+			u, p, ok := r.BasicAuth()
+			if ok && subtle.ConstantTimeCompare([]byte(u), []byte(username)) == 1 && subtle.ConstantTimeCompare([]byte(p), []byte(password)) == 1 {
+				next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), principalKey, Principal{OrgID: 1, Role: "ADMIN", Name: u, LegacyBasic: true})))
+				return
+			}
+		}
+		httpx.Failure(w, r, httpx.E("UNAUTHORIZED", "需要管理员登录", http.StatusUnauthorized))
+	})
 }
 
 func Worker(env string, next http.Handler) http.Handler {
