@@ -42,6 +42,26 @@
 
 建议使用三个终端，不要用一个脚本串行等待所有常驻进程。
 
+### 3.0 推荐：一条命令快速启动
+
+从项目根目录执行：
+
+    cd D:\work\fix-pro
+    .\scripts\start-local.ps1
+
+这个脚本会：
+
+- 使用 500 毫秒级 TCP 探测，避免端口未监听时 `Test-NetConnection` 阻塞几十秒；
+- PostgreSQL、Go/Air、Vite 已经运行时直接复用，不重复启动；
+- 默认不重复执行数据库迁移；只有迁移文件或数据库结构发生变化时才执行：
+
+      .\scripts\start-local.ps1 -Migrate
+
+- 在 `.tmp/server-air-local.*.log` 和 `.tmp/admin-web-local.*.log` 保存后台进程日志；
+- 启动完成后自动检查本文第 4 节的四个 HTTP 地址。
+
+日常启动不需要执行 `npm install`、`go mod download` 或 `go run ./cmd/migrate`。这些只属于一次性初始化或明确发生依赖/数据库变更的场景。冷启动通常应在 1 分钟内完成；首次下载 Go 工具或恢复 PostgreSQL WAL 时可能更久。
+
 ### 终端 A：启动 PostgreSQL
 
     $pgData='D:\work\fix-pro\.tmp\postgres-data'
