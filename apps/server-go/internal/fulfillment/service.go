@@ -28,6 +28,11 @@ type ConfirmRequest struct {
 	Priority string `json:"priority"`
 }
 
+type OrderRejectRequest struct {
+	Version int    `json:"version"`
+	Reason  string `json:"reason"`
+}
+
 type WorkOrderResult struct {
 	ID          string `json:"id"`
 	WorkOrderNo string `json:"workOrderNo"`
@@ -40,6 +45,12 @@ type ConfirmResult struct {
 	WorkOrders  []WorkOrderResult `json:"workOrders"`
 }
 
+type RejectResult struct {
+	OrderID      string `json:"orderId"`
+	OrderStatus  string `json:"orderStatus"`
+	CancelReason string `json:"cancelReason"`
+}
+
 type Worker struct {
 	ID                 string `json:"id"`
 	Username           string `json:"username"`
@@ -50,19 +61,20 @@ type Worker struct {
 }
 
 type WorkOrderSummary struct {
-	ID                   string     `json:"id"`
-	WorkOrderNo          string     `json:"workOrderNo"`
-	OrderID              string     `json:"orderId"`
-	OrderNo              string     `json:"orderNo"`
-	Status               string     `json:"status"`
-	Priority             string     `json:"priority"`
-	AssigneeID           string     `json:"assigneeId,omitempty"`
-	AssigneeName         string     `json:"assigneeName,omitempty"`
-	AppointmentAt        *time.Time `json:"appointmentAt,omitempty"`
-	AppointmentSlot      string     `json:"appointmentSlot,omitempty"`
-	AppointmentSlotLabel string     `json:"appointmentSlotLabel,omitempty"`
-	Version              int        `json:"version"`
-	CompletionOutcome    string     `json:"completionOutcome,omitempty"`
+	ID                       string     `json:"id"`
+	WorkOrderNo              string     `json:"workOrderNo"`
+	OrderID                  string     `json:"orderId"`
+	OrderNo                  string     `json:"orderNo"`
+	Status                   string     `json:"status"`
+	CustomerAcceptanceStatus string     `json:"customerAcceptanceStatus"`
+	Priority                 string     `json:"priority"`
+	AssigneeID               string     `json:"assigneeId,omitempty"`
+	AssigneeName             string     `json:"assigneeName,omitempty"`
+	AppointmentAt            *time.Time `json:"appointmentAt,omitempty"`
+	AppointmentSlot          string     `json:"appointmentSlot,omitempty"`
+	AppointmentSlotLabel     string     `json:"appointmentSlotLabel,omitempty"`
+	Version                  int        `json:"version"`
+	CompletionOutcome        string     `json:"completionOutcome,omitempty"`
 }
 
 type WorkOrderPage struct {
@@ -411,7 +423,7 @@ func (s *Service) WorkOrders(ctx context.Context, orgID int64, status string, wo
 	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM work_order w JOIN customer_order o ON o.org_id=w.org_id AND o.id=w.order_id WHERE `+where, orgID, status, workerID, outcome, q).Scan(&out.Total); err != nil {
 		return out, err
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT w.id,w.work_order_no,w.order_id,o.order_no,w.status,w.priority,w.assignee_id,COALESCE(e.display_name,''),w.appointment_at,COALESCE(w.appointment_slot,''),w.version,COALESCE(w.completion_outcome,'') FROM work_order w JOIN customer_order o ON o.org_id=w.org_id AND o.id=w.order_id LEFT JOIN employee_account e ON e.org_id=w.org_id AND e.id=w.assignee_id WHERE `+where+` ORDER BY w.created_at DESC LIMIT $6 OFFSET $7`, orgID, status, workerID, outcome, q, size, (page-1)*size)
+	rows, err := s.db.QueryContext(ctx, `SELECT w.id,w.work_order_no,w.order_id,o.order_no,w.status,COALESCE(w.customer_acceptance_status,''),w.priority,w.assignee_id,COALESCE(e.display_name,''),w.appointment_at,COALESCE(w.appointment_slot,''),w.version,COALESCE(w.completion_outcome,'') FROM work_order w JOIN customer_order o ON o.org_id=w.org_id AND o.id=w.order_id LEFT JOIN employee_account e ON e.org_id=w.org_id AND e.id=w.assignee_id WHERE `+where+` ORDER BY w.created_at DESC LIMIT $6 OFFSET $7`, orgID, status, workerID, outcome, q, size, (page-1)*size)
 	if err != nil {
 		return out, err
 	}
@@ -420,7 +432,7 @@ func (s *Service) WorkOrders(ctx context.Context, orgID int64, status string, wo
 		var id, oid int64
 		var x WorkOrderSummary
 		var aid sql.NullInt64
-		if err = rows.Scan(&id, &x.WorkOrderNo, &oid, &x.OrderNo, &x.Status, &x.Priority, &aid, &x.AssigneeName, &x.AppointmentAt, &x.AppointmentSlot, &x.Version, &x.CompletionOutcome); err != nil {
+		if err = rows.Scan(&id, &x.WorkOrderNo, &oid, &x.OrderNo, &x.Status, &x.CustomerAcceptanceStatus, &x.Priority, &aid, &x.AssigneeName, &x.AppointmentAt, &x.AppointmentSlot, &x.Version, &x.CompletionOutcome); err != nil {
 			return out, err
 		}
 		x.ID = fmt.Sprint(id)
@@ -916,6 +928,80 @@ func (s *Service) ConfirmOrder(ctx context.Context, p auth.Principal, key string
 	return out, nil
 }
 
+func (s *Service) RejectOrder(ctx context.Context, p auth.Principal, key string, orderID int64, req OrderRejectRequest) (RejectResult, error) {
+	if p.Role != "ADMIN" {
+		return RejectResult{}, httpx.E("FORBIDDEN", "无权打回订单", 403)
+	}
+	if strings.TrimSpace(key) == "" || len(key) > 128 {
+		return RejectResult{}, httpx.E("VALIDATION_ERROR", "缺少有效 Idempotency-Key", 400)
+	}
+	reason := strings.TrimSpace(req.Reason)
+	if reason == "" {
+		return RejectResult{}, httpx.E("REASON_REQUIRED", "打回原因必填", 400)
+	}
+	if len([]rune(reason)) > 512 {
+		return RejectResult{}, httpx.E("VALIDATION_ERROR", "打回原因不能超过512字", 400)
+	}
+	body, _ := json.Marshal(req)
+	hash := sha256.Sum256(body)
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+	if err != nil {
+		return RejectResult{}, err
+	}
+	defer tx.Rollback()
+	var idemID int64
+	err = tx.QueryRowContext(ctx, `INSERT INTO idempotency_record(org_id,principal_type,principal_id,idempotency_key,request_hash,response_code,response_body,expires_at) VALUES($1,'ADMIN',$2,$3,$4,'PROCESSING',NULL,$5) ON CONFLICT (org_id,principal_type,principal_id,idempotency_key) DO NOTHING RETURNING id`, p.OrgID, p.SubjectID, key, hash[:], time.Now().UTC().Add(24*time.Hour)).Scan(&idemID)
+	if err == sql.ErrNoRows {
+		var old []byte
+		var raw []byte
+		if err = tx.QueryRowContext(ctx, `SELECT request_hash,response_body FROM idempotency_record WHERE org_id=$1 AND principal_type='ADMIN' AND principal_id=$2 AND idempotency_key=$3`, p.OrgID, p.SubjectID, key).Scan(&old, &raw); err != nil {
+			return RejectResult{}, err
+		}
+		if len(old) != len(hash) || subtle.ConstantTimeCompare(old, hash[:]) != 1 {
+			return RejectResult{}, httpx.E("ORDER_SUBMIT_DUPLICATED", "幂等键已用于不同请求", 409)
+		}
+		if len(raw) == 0 {
+			return RejectResult{}, httpx.E("COMMAND_IN_PROGRESS", "命令正在处理", 409)
+		}
+		var out RejectResult
+		if err = json.Unmarshal(raw, &out); err != nil {
+			return RejectResult{}, err
+		}
+		return out, nil
+	}
+	if err != nil {
+		return RejectResult{}, err
+	}
+	var status string
+	var version int
+	if err = tx.QueryRowContext(ctx, `SELECT status,version FROM customer_order WHERE org_id=$1 AND id=$2 FOR UPDATE`, p.OrgID, orderID).Scan(&status, &version); err == sql.ErrNoRows {
+		return RejectResult{}, httpx.E("ORDER_NOT_FOUND", "订单不存在", 404)
+	} else if err != nil {
+		return RejectResult{}, err
+	}
+	if status != OrderPendingConfirmation {
+		return RejectResult{}, httpx.E("ORDER_STATUS_CONFLICT", "只有待确认订单可以打回", 409)
+	}
+	if version != req.Version {
+		return RejectResult{}, httpx.E("RESOURCE_VERSION_CONFLICT", "订单已被其他操作修改", 409)
+	}
+	if _, err = tx.ExecContext(ctx, `UPDATE customer_order SET status=$1,version=version+1,cancelled_at=CURRENT_TIMESTAMP(3),cancel_reason=$2 WHERE org_id=$3 AND id=$4 AND version=$5`, OrderCancelled, reason, p.OrgID, orderID, req.Version); err != nil {
+		return RejectResult{}, err
+	}
+	if _, err = tx.ExecContext(ctx, `INSERT INTO order_status_history(org_id,order_id,from_status,to_status,event_code,operator_type,operator_id,operator_name,reason) VALUES($1,$2,$3,$4,'ORDER_REJECTED','ADMIN',$5,$6,$7)`, p.OrgID, orderID, status, OrderCancelled, p.SubjectID, p.Name, reason); err != nil {
+		return RejectResult{}, err
+	}
+	out := RejectResult{OrderID: fmt.Sprint(orderID), OrderStatus: OrderCancelled, CancelReason: reason}
+	raw, _ := json.Marshal(out)
+	if _, err = tx.ExecContext(ctx, `UPDATE idempotency_record SET response_code='OK',response_body=$1 WHERE id=$2`, raw, idemID); err != nil {
+		return RejectResult{}, err
+	}
+	if err = tx.Commit(); err != nil {
+		return RejectResult{}, err
+	}
+	return out, nil
+}
+
 func priority(value string) string {
 	if value == "HIGH" || value == "URGENT" {
 		return value
@@ -944,6 +1030,7 @@ type CustomerOrderSummary struct {
 	OrderNo           string    `json:"orderNo"`
 	Status            string    `json:"status"`
 	StatusText        string    `json:"statusText"`
+	CancelReason      string    `json:"cancelReason,omitempty"`
 	TotalAmount       int64     `json:"totalAmount"`
 	ItemCount         int       `json:"itemCount"`
 	WorkOrderTotal    int       `json:"workOrderTotal"`
@@ -957,17 +1044,18 @@ type CustomerOrderPage struct {
 	PageSize int                    `json:"pageSize"`
 }
 type CustomerWorkOrder struct {
-	ID                   string             `json:"id"`
-	WorkOrderNo          string             `json:"workOrderNo"`
-	Status               string             `json:"status"`
-	StatusText           string             `json:"statusText"`
-	AssigneeName         string             `json:"assigneeName,omitempty"`
-	AppointmentAt        *time.Time         `json:"appointmentAt,omitempty"`
-	AppointmentSlot      string             `json:"appointmentSlot,omitempty"`
-	AppointmentSlotLabel string             `json:"appointmentSlotLabel,omitempty"`
-	CompletionSummary    string             `json:"completionSummary,omitempty"`
-	Version              int                `json:"version"`
-	Evidence             []CustomerEvidence `json:"evidence"`
+	ID                       string             `json:"id"`
+	WorkOrderNo              string             `json:"workOrderNo"`
+	Status                   string             `json:"status"`
+	StatusText               string             `json:"statusText"`
+	CustomerAcceptanceStatus string             `json:"customerAcceptanceStatus"`
+	AssigneeName             string             `json:"assigneeName,omitempty"`
+	AppointmentAt            *time.Time         `json:"appointmentAt,omitempty"`
+	AppointmentSlot          string             `json:"appointmentSlot,omitempty"`
+	AppointmentSlotLabel     string             `json:"appointmentSlotLabel,omitempty"`
+	CompletionSummary        string             `json:"completionSummary,omitempty"`
+	Version                  int                `json:"version"`
+	Evidence                 []CustomerEvidence `json:"evidence"`
 }
 type CustomerEvidence struct {
 	ID        string    `json:"id"`
@@ -981,6 +1069,7 @@ type CustomerOrderDetail struct {
 	OrderNo              string              `json:"orderNo"`
 	Status               string              `json:"status"`
 	StatusText           string              `json:"statusText"`
+	CancelReason         string              `json:"cancelReason,omitempty"`
 	ContactName          string              `json:"contactName"`
 	ContactMobile        string              `json:"contactMobile"`
 	ServiceAddress       string              `json:"serviceAddress"`
@@ -993,7 +1082,7 @@ type CustomerOrderDetail struct {
 	WorkOrders           []CustomerWorkOrder `json:"workOrders"`
 }
 
-func (s *Service) CustomerOrders(ctx context.Context, p auth.Principal, page, size int) (CustomerOrderPage, error) {
+func (s *Service) CustomerOrders(ctx context.Context, p auth.Principal, status string, page, size int) (CustomerOrderPage, error) {
 	if p.Role != "CUSTOMER" {
 		return CustomerOrderPage{}, httpx.E("FORBIDDEN", "无权查看客户订单", 403)
 	}
@@ -1010,22 +1099,30 @@ func (s *Service) CustomerOrders(ctx context.Context, p auth.Principal, page, si
 	out.Page = page
 	out.PageSize = size
 	out.Items = []CustomerOrderSummary{}
-	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM customer_order WHERE org_id=$1 AND customer_id=$2`, p.OrgID, p.SubjectID).Scan(&out.Total); err != nil {
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM customer_order WHERE org_id=$1 AND customer_id=$2 AND ($3='' OR status=$3)`, p.OrgID, p.SubjectID, status).Scan(&out.Total); err != nil {
 		return out, err
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT o.id,o.order_no,o.status,o.total_amount,o.item_count,o.created_at,COUNT(w.id),COUNT(w.id) FILTER (WHERE w.status='FINISHED') FROM customer_order o LEFT JOIN work_order w ON w.org_id=o.org_id AND w.order_id=o.id WHERE o.org_id=$1 AND o.customer_id=$2 GROUP BY o.id ORDER BY o.created_at DESC LIMIT $3 OFFSET $4`, p.OrgID, p.SubjectID, size, (page-1)*size)
+	rows, err := s.db.QueryContext(ctx, `SELECT o.id,o.order_no,o.status,COALESCE(o.cancel_reason,''),o.total_amount,o.item_count,o.created_at,COUNT(w.id),COUNT(w.id) FILTER (WHERE w.status='FINISHED'),COUNT(w.id) FILTER (WHERE COALESCE(w.customer_acceptance_status,'') IN ('MANUAL_ACCEPTED','AUTO_ACCEPTED')) FROM customer_order o LEFT JOIN work_order w ON w.org_id=o.org_id AND w.order_id=o.id WHERE o.org_id=$1 AND o.customer_id=$2 AND ($3='' OR o.status=$3) GROUP BY o.id ORDER BY o.created_at DESC LIMIT $4 OFFSET $5`, p.OrgID, p.SubjectID, status, size, (page-1)*size)
 	if err != nil {
 		return out, err
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var id int64
+		var acceptedWorkOrderTotal int
 		var x CustomerOrderSummary
-		if err = rows.Scan(&id, &x.OrderNo, &x.Status, &x.TotalAmount, &x.ItemCount, &x.CreatedAt, &x.WorkOrderTotal, &x.WorkOrderFinished); err != nil {
+		if err = rows.Scan(&id, &x.OrderNo, &x.Status, &x.CancelReason, &x.TotalAmount, &x.ItemCount, &x.CreatedAt, &x.WorkOrderTotal, &x.WorkOrderFinished, &acceptedWorkOrderTotal); err != nil {
 			return out, err
 		}
 		x.ID = fmt.Sprint(id)
 		x.StatusText = statusText(x.Status)
+		if x.Status == OrderCancelled && x.CancelReason != "" {
+			x.StatusText = "商家已打回"
+		}
+		if x.WorkOrderTotal > 0 && acceptedWorkOrderTotal == x.WorkOrderTotal {
+			x.StatusText = statusText(OrderCompleted)
+			x.WorkOrderFinished = x.WorkOrderTotal
+		}
 		out.Items = append(out.Items, x)
 	}
 	return out, rows.Err()
@@ -1038,19 +1135,22 @@ func (s *Service) CustomerOrder(ctx context.Context, p auth.Principal, id int64)
 	var out CustomerOrderDetail
 	var oid int64
 	var appointment sql.NullTime
-	if err := s.db.QueryRowContext(ctx, `SELECT id,order_no,status,contact_name,contact_mobile,service_address,total_amount,version,created_at,appointment_at,COALESCE(appointment_slot,'') FROM customer_order WHERE org_id=$1 AND customer_id=$2 AND id=$3`, p.OrgID, p.SubjectID, id).Scan(&oid, &out.OrderNo, &out.Status, &out.ContactName, &out.ContactMobile, &out.ServiceAddress, &out.TotalAmount, &out.Version, &out.CreatedAt, &appointment, &out.AppointmentSlot); err == sql.ErrNoRows {
+	if err := s.db.QueryRowContext(ctx, `SELECT id,order_no,status,COALESCE(cancel_reason,''),contact_name,contact_mobile,service_address,total_amount,version,created_at,appointment_at,COALESCE(appointment_slot,'') FROM customer_order WHERE org_id=$1 AND customer_id=$2 AND id=$3`, p.OrgID, p.SubjectID, id).Scan(&oid, &out.OrderNo, &out.Status, &out.CancelReason, &out.ContactName, &out.ContactMobile, &out.ServiceAddress, &out.TotalAmount, &out.Version, &out.CreatedAt, &appointment, &out.AppointmentSlot); err == sql.ErrNoRows {
 		return out, httpx.E("ORDER_NOT_FOUND", "订单不存在", 404)
 	} else if err != nil {
 		return out, err
 	}
 	out.ID = fmt.Sprint(oid)
 	out.StatusText = statusText(out.Status)
+	if out.Status == OrderCancelled && out.CancelReason != "" {
+		out.StatusText = "商家已打回"
+	}
 	if appointment.Valid {
 		out.AppointmentAt = &appointment.Time
 	}
 	out.AppointmentSlotLabel = appointmentSlotText(out.AppointmentSlot)
 	out.WorkOrders = []CustomerWorkOrder{}
-	rows, err := s.db.QueryContext(ctx, `SELECT w.id,w.work_order_no,w.status,COALESCE(e.display_name,''),w.appointment_at,COALESCE(w.appointment_slot,''),COALESCE(w.completion_summary,''),w.version FROM work_order w LEFT JOIN employee_account e ON e.org_id=w.org_id AND e.id=w.assignee_id WHERE w.org_id=$1 AND w.order_id=$2 ORDER BY w.id`, p.OrgID, id)
+	rows, err := s.db.QueryContext(ctx, `SELECT w.id,w.work_order_no,w.status,COALESCE(w.customer_acceptance_status,''),COALESCE(e.display_name,''),w.appointment_at,COALESCE(w.appointment_slot,''),COALESCE(w.completion_summary,''),w.version FROM work_order w LEFT JOIN employee_account e ON e.org_id=w.org_id AND e.id=w.assignee_id WHERE w.org_id=$1 AND w.order_id=$2 ORDER BY w.id`, p.OrgID, id)
 	if err != nil {
 		return out, err
 	}
@@ -1058,7 +1158,7 @@ func (s *Service) CustomerOrder(ctx context.Context, p auth.Principal, id int64)
 	for rows.Next() {
 		var wid int64
 		var x CustomerWorkOrder
-		if err = rows.Scan(&wid, &x.WorkOrderNo, &x.Status, &x.AssigneeName, &x.AppointmentAt, &x.AppointmentSlot, &x.CompletionSummary, &x.Version); err != nil {
+		if err = rows.Scan(&wid, &x.WorkOrderNo, &x.Status, &x.CustomerAcceptanceStatus, &x.AssigneeName, &x.AppointmentAt, &x.AppointmentSlot, &x.CompletionSummary, &x.Version); err != nil {
 			return out, err
 		}
 		x.ID = fmt.Sprint(wid)
@@ -1083,6 +1183,18 @@ func (s *Service) CustomerOrder(ctx context.Context, p auth.Principal, id int64)
 		}
 		ers.Close()
 		out.WorkOrders = append(out.WorkOrders, x)
+	}
+	if len(out.WorkOrders) > 0 {
+		allAccepted := true
+		for _, work := range out.WorkOrders {
+			if work.CustomerAcceptanceStatus != "MANUAL_ACCEPTED" && work.CustomerAcceptanceStatus != "AUTO_ACCEPTED" {
+				allAccepted = false
+				break
+			}
+		}
+		if allAccepted {
+			out.StatusText = statusText(OrderCompleted)
+		}
 	}
 	return out, rows.Err()
 }

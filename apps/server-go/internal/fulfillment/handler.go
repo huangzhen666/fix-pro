@@ -32,6 +32,26 @@ func (h *Handler) ConfirmOrder(w http.ResponseWriter, r *http.Request) {
 	httpx.Success(w, r, out)
 }
 
+func (h *Handler) RejectOrder(w http.ResponseWriter, r *http.Request) {
+	p, _ := auth.From(r.Context())
+	id, err := httpx.PathID(r, "id")
+	if err != nil {
+		httpx.Failure(w, r, err)
+		return
+	}
+	var req OrderRejectRequest
+	if err = httpx.DecodeJSON(w, r, &req); err != nil {
+		httpx.Failure(w, r, err)
+		return
+	}
+	out, err := h.service.RejectOrder(r.Context(), p, r.Header.Get("Idempotency-Key"), id, req)
+	if err != nil {
+		httpx.Failure(w, r, err)
+		return
+	}
+	httpx.Success(w, r, out)
+}
+
 func (h *Handler) Workers(w http.ResponseWriter, r *http.Request) {
 	p, _ := auth.From(r.Context())
 	out, err := h.service.Workers(r.Context(), p.OrgID, r.URL.Query().Get("status"))
@@ -352,7 +372,7 @@ func (h *Handler) CustomerOrders(w http.ResponseWriter, r *http.Request) {
 	p, _ := auth.From(r.Context())
 	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
 	size, _ := strconv.Atoi(r.URL.Query().Get("pageSize"))
-	out, err := h.service.CustomerOrders(r.Context(), p, page, size)
+	out, err := h.service.CustomerOrders(r.Context(), p, r.URL.Query().Get("status"), page, size)
 	if err != nil {
 		httpx.Failure(w, r, err)
 		return

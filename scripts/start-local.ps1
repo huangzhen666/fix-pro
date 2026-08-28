@@ -11,6 +11,7 @@ $TmpDir = Join-Path $ProjectRoot '.tmp'
 $PgData = Join-Path $TmpDir 'postgres-data'
 $PgBinDir = Join-Path $TmpDir 'postgres-portable\pgsql\bin'
 $Pg = Join-Path $PgBinDir 'postgres.exe'
+$SystemPg = 'C:\Program Files\PostgreSQL\18\bin\postgres.exe'
 $PgErr = Join-Path $TmpDir 'postgres-local.err.log'
 $PgOut = Join-Path $TmpDir 'postgres-local.out.log'
 $MediaRoot = Join-Path $TmpDir 'media-current'
@@ -92,6 +93,9 @@ function Invoke-GoCommand {
 $script:Go = (Get-Command go.exe -ErrorAction Stop).Source
 $script:Npm = (Get-Command npm.cmd -ErrorAction Stop).Source
 $env:GOCACHE = Join-Path $ProjectRoot '.gocache'
+$env:GOPATH = Join-Path $ProjectRoot '.gopath'
+$env:GOMODCACHE = Join-Path $env:GOPATH 'pkg\mod'
+New-Item -ItemType Directory -Force -Path $env:GOPATH, $env:GOMODCACHE | Out-Null
 $env:DB_DSN = 'postgres://fixpro:fixpro-local@localhost:5433/fix_pro?sslmode=disable&timezone=UTC'
 $env:APP_ENV = 'local'
 $env:HTTP_ADDR = ':8080'
@@ -105,8 +109,12 @@ $env:WORKER_DEV_TOKEN_ENABLED = 'false'
 $env:CORS_ALLOWED_ORIGINS = 'http://localhost:5173'
 
 if (-not (Test-LocalPort -Port 5433)) {
-  if (-not (Test-Path $Pg)) {
-    throw "找不到 PostgreSQL: $Pg"
+  $postgresExecutable = $Pg
+  if (-not (Test-Path $postgresExecutable)) {
+    $postgresExecutable = $SystemPg
+  }
+  if (-not (Test-Path $postgresExecutable)) {
+    throw "找不到 PostgreSQL: $Pg 或 $SystemPg"
   }
   $pidPath = Join-Path $PgData 'postmaster.pid'
   if (Test-Path $pidPath) {
@@ -116,7 +124,7 @@ if (-not (Test-LocalPort -Port 5433)) {
       Move-Item -LiteralPath $pidPath -Destination ($pidPath + '.stale') -Force
     }
   }
-  Start-Process -FilePath $Pg -ArgumentList '-D', $PgData, '-p', '5433', '-h', '127.0.0.1' -WorkingDirectory $PgBinDir -RedirectStandardOutput $PgOut -RedirectStandardError $PgErr -WindowStyle Hidden | Out-Null
+  Start-Process -FilePath $postgresExecutable -ArgumentList '-D', $PgData, '-p', '5433', '-h', '127.0.0.1' -WorkingDirectory (Split-Path -Parent $postgresExecutable) -RedirectStandardOutput $PgOut -RedirectStandardError $PgErr -WindowStyle Hidden | Out-Null
   Wait-LocalPort -Port 5433 -TimeoutSeconds 30
   Write-Host 'PostgreSQL ready: 127.0.0.1:5433'
 } else {

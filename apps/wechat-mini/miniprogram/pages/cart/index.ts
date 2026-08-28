@@ -14,5 +14,20 @@ Page({
   async persist(index:number):Promise<boolean>{const item=this.data.cart.items[index] as any;if(!item)return true;this.setData({savingId:item.id});try{await saveFault(item.id,item.faultDescription||'',item.faultMedia.map((x:any)=>x.id));return true}catch(err){wx.showToast({title:err instanceof Error?err.message:'补充信息同步失败',icon:'none'});return false}finally{this.setData({savingId:''})}},
   async remove(e:any){const item=this.data.cart.items[Number(e.currentTarget.dataset.index)] as any;const result=await wx.showModal({title:'删除服务',content:`确认移除“${item.name}”？`});if(result.confirm){await removeItem(item.id);this.load()}},
   goServices(){wx.switchTab({url:'/pages/services/index'})},
-  async checkout(){if(this.data.checkoutLoading)return;this.setData({checkoutLoading:true});try{for(let i=0;i<this.data.cart.items.length;i++){if(!await this.persist(i))return}wx.navigateTo({url:'/pages/checkout/index'})}finally{this.setData({checkoutLoading:false})}}
+  checkout(){
+    if(this.data.checkoutLoading)return
+    this.setData({checkoutLoading:true})
+    const url='/pages/checkout/index'
+    const fail=(error:any)=>{
+      wx.redirectTo({
+        url,
+        success:()=>this.setData({checkoutLoading:false}),
+        fail:()=>{
+          this.setData({checkoutLoading:false})
+          wx.showToast({title:error?.errMsg||'结算页打开失败，请重试',icon:'none'})
+        },
+      })
+    }
+    wx.navigateTo({url,success:()=>this.setData({checkoutLoading:false}),fail})
+  }
 })

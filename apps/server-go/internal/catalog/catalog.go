@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"reflect"
 	"regexp"
 	"strings"
 	"time"
@@ -134,6 +135,12 @@ type PublishResult struct {
 	Status           string    `json:"status"`
 	PublishedVersion int       `json:"publishedVersion"`
 	PublishedAt      time.Time `json:"publishedAt"`
+}
+
+func samePublishedSKU(a, b PublishedSKU) bool {
+	a.PublishedVersion = 0
+	b.PublishedVersion = 0
+	return reflect.DeepEqual(a, b)
 }
 
 func id(v string) (int64, error) {
@@ -512,6 +519,20 @@ func (s *Service) Publish(ctx context.Context, n int64, user string) (PublishRes
 		urls = append(urls, "/api/v1/public/media/"+m)
 	}
 	snap := PublishedSKU{x.ID, x.SKUCode, x.Name, x.Description, x.ServiceScope, x.Exclusions, x.WarrantyDescription, x.PriceMode, x.BasePrice, x.Unit, urls[0], urls, next}
+	if x.PublishedVersion != nil {
+		var currentRaw []byte
+		var publishedAt time.Time
+		e = s.db.QueryRowContext(ctx, `SELECT snapshot_json,published_at FROM service_sku_version WHERE org_id=1 AND sku_id=$1 AND version_no=$2`, n, *x.PublishedVersion).Scan(&currentRaw, &publishedAt)
+		if e != nil && e != sql.ErrNoRows {
+			return PublishResult{}, e
+		}
+		if e == nil {
+			var current PublishedSKU
+			if json.Unmarshal(currentRaw, &current) == nil && samePublishedSKU(current, snap) {
+				return PublishResult{x.ID, "PUBLISHED", *x.PublishedVersion, publishedAt}, nil
+			}
+		}
+	}
 	raw, _ := json.Marshal(snap)
 	now := time.Now().UTC()
 	tx, e := s.db.BeginTx(ctx, nil)

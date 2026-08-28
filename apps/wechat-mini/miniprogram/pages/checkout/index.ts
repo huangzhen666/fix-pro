@@ -1,6 +1,7 @@
 import { getCart, type Cart } from '../../services/cart'
 import { createOrder } from '../../services/orders'
 import { formatAddress, listAddresses, type CustomerAddress } from '../../services/addresses'
+import { ApiError } from '../../services/request'
 type AppointmentDateOption = { value: string; label: string; selected: boolean }
 type AppointmentSlotOption = { value: string; label: string; period: string; showPeriod: boolean; selected: boolean }
 
@@ -123,7 +124,16 @@ Page({
       const result = await createOrder({ contactName, contactMobile, serviceAddress, appointmentDate, appointmentSlot }, key)
       wx.redirectTo({ url: `/pages/checkout/result?orderNo=${result.orderNo}&status=${result.status}&amount=${result.totalAmount}` })
     } catch (e: any) {
-      wx.showToast({ title: e instanceof Error ? e.message : '下单失败', icon: 'none' })
+      if (e instanceof ApiError && e.code === 'CART_SKU_CHANGED') {
+        wx.showModal({
+          title: '服务信息已更新',
+          content: '服务价格或内容已变化，请返回购物车刷新并确认后再提交。',
+          showCancel: false,
+          success: () => wx.navigateBack(),
+        })
+      } else {
+        wx.showToast({ title: e instanceof Error ? e.message : '下单失败', icon: 'none' })
+      }
     } finally {
       this.setData({ submitting: false })
     }

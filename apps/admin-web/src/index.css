@@ -46,6 +46,32 @@ body {
   padding: 24px;
 }
 
+.order-list-page .ant-table-cell {
+  white-space: nowrap;
+}
+
+.order-list-page .ant-table-thead > tr > th,
+.order-list-page .ant-table-tbody > tr > td {
+  padding: 9px 10px;
+}
+
+.order-list-page .ant-table-cell .ant-tag {
+  margin-inline-end: 0;
+}
+
+.order-list-page .order-action-space {
+  width: 100%;
+  gap: 0 !important;
+}
+
+.order-list-page .order-action-space .ant-btn-link {
+  padding-inline: 4px;
+}
+
+.order-list-page .order-date {
+  white-space: nowrap;
+}
+
 .login-shell {
   min-height: 100vh;
   display: grid;

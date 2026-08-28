@@ -13,6 +13,7 @@ import (
 	"github.com/fixpro/server/internal/platform/httpx"
 	"math"
 	"net/http"
+	"reflect"
 	"regexp"
 	"strings"
 	"time"
@@ -40,6 +41,7 @@ type Summary struct {
 	ID            string    `json:"id"`
 	OrderNo       string    `json:"orderNo"`
 	Status        string    `json:"status"`
+	CancelReason  string    `json:"cancelReason,omitempty"`
 	ContactName   string    `json:"contactName"`
 	ContactMobile string    `json:"contactMobile"`
 	TotalAmount   int64     `json:"totalAmount"`
@@ -58,6 +60,7 @@ type Base struct {
 	OrderNo         string     `json:"orderNo"`
 	CustomerID      string     `json:"customerId"`
 	Status          string     `json:"status"`
+	CancelReason    string     `json:"cancelReason,omitempty"`
 	ContactName     string     `json:"contactName"`
 	ContactMobile   string     `json:"contactMobile"`
 	ServiceAddress  string     `json:"serviceAddress"`
@@ -94,13 +97,22 @@ type Detail struct {
 	Order Base       `json:"order"`
 	Items []ItemView `json:"items"`
 }
+type RepeatResult struct {
+	ItemsCopied int `json:"itemsCopied"`
+}
 type checkout struct {
 	id, sku           int64
 	version, quantity int
 	price             int64
 	fault, status     string
 	current           sql.NullInt64
-	snap              catalog.PublishedSKU
+	snap, currentSnap catalog.PublishedSKU
+}
+
+func samePublishedSKU(a, b catalog.PublishedSKU) bool {
+	a.PublishedVersion = 0
+	b.PublishedVersion = 0
+	return reflect.DeepEqual(a, b)
 }
 
 var mobile = regexp.MustCompile(`^1\d{10}$`)
@@ -183,21 +195,27 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, key string, w Wr
 	if e != nil {
 		return Result{}, e
 	}
-	rows, e := tx.QueryContext(ctx, `SELECT ci.id,ci.sku_id,ci.sku_version,ci.quantity,ci.unit_price,COALESCE(ci.fault_description,''),v.snapshot_json,s.status,s.current_published_version FROM shopping_cart_item ci JOIN service_sku_version v ON v.org_id=ci.org_id AND v.sku_id=ci.sku_id AND v.version_no=ci.sku_version JOIN service_sku s ON s.id=ci.sku_id AND s.org_id=ci.org_id WHERE ci.org_id=$1 AND ci.cart_id=$2 FOR UPDATE`, p.OrgID, cart)
+	rows, e := tx.QueryContext(ctx, `SELECT ci.id,ci.sku_id,ci.sku_version,ci.quantity,ci.unit_price,COALESCE(ci.fault_description,''),v.snapshot_json,s.status,s.current_published_version,cv.snapshot_json FROM shopping_cart_item ci JOIN service_sku_version v ON v.org_id=ci.org_id AND v.sku_id=ci.sku_id AND v.version_no=ci.sku_version JOIN service_sku s ON s.id=ci.sku_id AND s.org_id=ci.org_id LEFT JOIN service_sku_version cv ON cv.org_id=s.org_id AND cv.sku_id=s.id AND cv.version_no=s.current_published_version WHERE ci.org_id=$1 AND ci.cart_id=$2 FOR UPDATE OF ci, v, s`, p.OrgID, cart)
 	if e != nil {
 		return Result{}, e
 	}
 	items := []checkout{}
 	for rows.Next() {
 		var x checkout
-		var raw []byte
-		if e = rows.Scan(&x.id, &x.sku, &x.version, &x.quantity, &x.price, &x.fault, &raw, &x.status, &x.current); e != nil {
+		var raw, currentRaw []byte
+		if e = rows.Scan(&x.id, &x.sku, &x.version, &x.quantity, &x.price, &x.fault, &raw, &x.status, &x.current, &currentRaw); e != nil {
 			rows.Close()
 			return Result{}, e
 		}
 		if e = json.Unmarshal(raw, &x.snap); e != nil {
 			rows.Close()
 			return Result{}, e
+		}
+		if len(currentRaw) > 0 {
+			if e = json.Unmarshal(currentRaw, &x.currentSnap); e != nil {
+				rows.Close()
+				return Result{}, e
+			}
 		}
 		items = append(items, x)
 	}
@@ -212,8 +230,16 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, key string, w Wr
 		if e = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM shopping_cart_item_media cim JOIN media_asset m ON m.id=cim.media_id AND m.org_id=cim.org_id WHERE cim.org_id=$1 AND cim.cart_item_id=$2 AND m.status='READY'`, p.OrgID, x.id).Scan(&media); e != nil {
 			return Result{}, e
 		}
-		if x.status != "PUBLISHED" || !x.current.Valid || int(x.current.Int64) != x.version || x.price != x.snap.Price {
+		if x.status != "PUBLISHED" || !x.current.Valid || x.currentSnap.ID == "" || x.price != x.currentSnap.Price {
 			return Result{}, httpx.E("CART_SKU_CHANGED", "服务价格或版本已变化，请刷新购物车", 409)
+		}
+		if int(x.current.Int64) != x.version {
+			if !samePublishedSKU(x.snap, x.currentSnap) {
+				return Result{}, httpx.E("CART_SKU_CHANGED", "服务价格或版本已变化，请刷新购物车", 409)
+			}
+			x.version = int(x.current.Int64)
+			x.snap = x.currentSnap
+			x.price = x.currentSnap.Price
 		}
 		if x.quantity <= 0 || x.price > math.MaxInt64/int64(x.quantity) {
 			return Result{}, httpx.E("VALIDATION_ERROR", "订单金额超出范围", 400)
@@ -262,6 +288,100 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, key string, w Wr
 	}
 	return out, nil
 }
+
+type repeatItem struct {
+	orderItemID, skuID int64
+	quantity           int
+	fault              string
+	status             string
+	currentVersion     sql.NullInt64
+	snap               catalog.PublishedSKU
+}
+
+func (s *Service) Repeat(ctx context.Context, p auth.Principal, orderID int64) (RepeatResult, error) {
+	if p.Role != "CUSTOMER" {
+		return RepeatResult{}, httpx.E("FORBIDDEN", "无权重新下单", 403)
+	}
+	tx, e := s.db.BeginTx(ctx, nil)
+	if e != nil {
+		return RepeatResult{}, e
+	}
+	defer tx.Rollback()
+
+	var orderStatus, cancelReason string
+	e = tx.QueryRowContext(ctx, `SELECT status,COALESCE(cancel_reason,'') FROM customer_order WHERE org_id=$1 AND id=$2 AND customer_id=$3 FOR SHARE`, p.OrgID, orderID, p.SubjectID).Scan(&orderStatus, &cancelReason)
+	if e == sql.ErrNoRows {
+		return RepeatResult{}, httpx.E("ORDER_NOT_FOUND", "订单不存在", 404)
+	}
+	if e != nil {
+		return RepeatResult{}, e
+	}
+	if orderStatus != fulfillment.OrderCancelled || strings.TrimSpace(cancelReason) == "" {
+		return RepeatResult{}, httpx.E("ORDER_STATUS_CONFLICT", "只有商家打回的订单可以重新下单", 409)
+	}
+
+	rows, e := tx.QueryContext(ctx, `SELECT oi.id,oi.sku_id,oi.quantity,COALESCE(oi.fault_description,''),s.status,s.current_published_version,cv.snapshot_json FROM order_item oi JOIN service_sku s ON s.org_id=oi.org_id AND s.id=oi.sku_id LEFT JOIN service_sku_version cv ON cv.org_id=s.org_id AND cv.sku_id=s.id AND cv.version_no=s.current_published_version WHERE oi.org_id=$1 AND oi.order_id=$2 ORDER BY oi.id`, p.OrgID, orderID)
+	if e != nil {
+		return RepeatResult{}, e
+	}
+	items := []repeatItem{}
+	for rows.Next() {
+		var item repeatItem
+		var raw []byte
+		if e = rows.Scan(&item.orderItemID, &item.skuID, &item.quantity, &item.fault, &item.status, &item.currentVersion, &raw); e != nil {
+			rows.Close()
+			return RepeatResult{}, e
+		}
+		if item.quantity < 1 || item.quantity > 99 {
+			rows.Close()
+			return RepeatResult{}, httpx.E("VALIDATION_ERROR", "订单服务数量不合法", 400)
+		}
+		if item.status != "PUBLISHED" || !item.currentVersion.Valid || len(raw) == 0 {
+			rows.Close()
+			return RepeatResult{}, httpx.E("SKU_NOT_AVAILABLE", "原订单中的服务已下架，暂时不能重新下单", 409)
+		}
+		if e = json.Unmarshal(raw, &item.snap); e != nil {
+			rows.Close()
+			return RepeatResult{}, e
+		}
+		if item.snap.ID == "" {
+			rows.Close()
+			return RepeatResult{}, httpx.E("SKU_NOT_AVAILABLE", "原订单中的服务已下架，暂时不能重新下单", 409)
+		}
+		items = append(items, item)
+	}
+	rows.Close()
+	if e = rows.Err(); e != nil {
+		return RepeatResult{}, e
+	}
+	if len(items) == 0 {
+		return RepeatResult{}, httpx.E("ORDER_EMPTY", "订单没有可复制的服务", 400)
+	}
+
+	var cartID int64
+	e = tx.QueryRowContext(ctx, `INSERT INTO shopping_cart(org_id,customer_id) VALUES($1,$2) ON CONFLICT (org_id,customer_id) DO UPDATE SET updated_at=shopping_cart.updated_at RETURNING id`, p.OrgID, p.SubjectID).Scan(&cartID)
+	if e != nil {
+		return RepeatResult{}, e
+	}
+	for _, item := range items {
+		var cartItemID int64
+		e = tx.QueryRowContext(ctx, `INSERT INTO shopping_cart_item(org_id,cart_id,sku_id,sku_version,quantity,unit_price,fault_description) VALUES($1,$2,$3,$4,$5,$6,NULLIF($7,'')) ON CONFLICT (org_id,cart_id,sku_id,sku_version) DO UPDATE SET quantity=shopping_cart_item.quantity+EXCLUDED.quantity,fault_description=CASE WHEN NULLIF(BTRIM(shopping_cart_item.fault_description),'') IS NULL THEN EXCLUDED.fault_description ELSE shopping_cart_item.fault_description END,updated_at=CURRENT_TIMESTAMP(3) WHERE shopping_cart_item.quantity+EXCLUDED.quantity<=99 RETURNING id`, p.OrgID, cartID, item.skuID, item.currentVersion.Int64, item.quantity, item.snap.Price, strings.TrimSpace(item.fault)).Scan(&cartItemID)
+		if e == sql.ErrNoRows {
+			return RepeatResult{}, httpx.E("CART_QUANTITY_EXCEEDED", "购物车数量不能超过99", 400)
+		}
+		if e != nil {
+			return RepeatResult{}, e
+		}
+		if _, e = tx.ExecContext(ctx, `INSERT INTO shopping_cart_item_media(org_id,cart_item_id,media_id,sort_order) SELECT $1,$2,oim.media_id,oim.sort_order FROM order_item_media oim WHERE oim.org_id=$1 AND oim.order_item_id=$3 ON CONFLICT (org_id,cart_item_id,media_id) DO NOTHING`, p.OrgID, cartItemID, item.orderItemID); e != nil {
+			return RepeatResult{}, e
+		}
+	}
+	if e = tx.Commit(); e != nil {
+		return RepeatResult{}, e
+	}
+	return RepeatResult{ItemsCopied: len(items)}, nil
+}
+
 func (s *Service) List(ctx context.Context, key, status, contact, createdFrom, createdTo string, page, size int) (Page, error) {
 	if page < 1 {
 		page = 1
@@ -279,7 +399,7 @@ func (s *Service) List(ctx context.Context, key, status, contact, createdFrom, c
 	if e := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM customer_order WHERE `+where, q, status, c, createdFrom, createdTo).Scan(&out.Total); e != nil {
 		return out, e
 	}
-	rows, e := s.db.QueryContext(ctx, `SELECT id,order_no,status,contact_name,contact_mobile,total_amount,item_count,created_at,version FROM customer_order WHERE `+where+` ORDER BY created_at DESC LIMIT $6 OFFSET $7`, q, status, c, createdFrom, createdTo, size, (page-1)*size)
+	rows, e := s.db.QueryContext(ctx, `SELECT id,order_no,status,COALESCE(cancel_reason,''),contact_name,contact_mobile,total_amount,item_count,created_at,version FROM customer_order WHERE `+where+` ORDER BY created_at DESC LIMIT $6 OFFSET $7`, q, status, c, createdFrom, createdTo, size, (page-1)*size)
 	if e != nil {
 		return out, e
 	}
@@ -287,7 +407,7 @@ func (s *Service) List(ctx context.Context, key, status, contact, createdFrom, c
 	for rows.Next() {
 		var x Summary
 		var n int64
-		if e = rows.Scan(&n, &x.OrderNo, &x.Status, &x.ContactName, &x.ContactMobile, &x.TotalAmount, &x.ItemCount, &x.CreatedAt, &x.Version); e != nil {
+		if e = rows.Scan(&n, &x.OrderNo, &x.Status, &x.CancelReason, &x.ContactName, &x.ContactMobile, &x.TotalAmount, &x.ItemCount, &x.CreatedAt, &x.Version); e != nil {
 			return out, e
 		}
 		x.ID = fmt.Sprint(n)
@@ -320,7 +440,7 @@ func (s *Service) media(ctx context.Context, item int64) ([]Media, error) {
 func (s *Service) Detail(ctx context.Context, n int64) (Detail, error) {
 	var out Detail
 	var id, customer int64
-	e := s.db.QueryRowContext(ctx, `SELECT id,order_no,customer_id,status,contact_name,contact_mobile,service_address,total_amount,item_count,version,created_at,appointment_at,COALESCE(appointment_slot,'') FROM customer_order WHERE org_id=1 AND id=$1`, n).Scan(&id, &out.Order.OrderNo, &customer, &out.Order.Status, &out.Order.ContactName, &out.Order.ContactMobile, &out.Order.ServiceAddress, &out.Order.TotalAmount, &out.Order.ItemCount, &out.Order.Version, &out.Order.CreatedAt, &out.Order.AppointmentAt, &out.Order.AppointmentSlot)
+	e := s.db.QueryRowContext(ctx, `SELECT id,order_no,customer_id,status,COALESCE(cancel_reason,''),contact_name,contact_mobile,service_address,total_amount,item_count,version,created_at,appointment_at,COALESCE(appointment_slot,'') FROM customer_order WHERE org_id=1 AND id=$1`, n).Scan(&id, &out.Order.OrderNo, &customer, &out.Order.Status, &out.Order.CancelReason, &out.Order.ContactName, &out.Order.ContactMobile, &out.Order.ServiceAddress, &out.Order.TotalAmount, &out.Order.ItemCount, &out.Order.Version, &out.Order.CreatedAt, &out.Order.AppointmentAt, &out.Order.AppointmentSlot)
 	if e == sql.ErrNoRows {
 		return out, httpx.E("RESOURCE_NOT_FOUND", "订单不存在", 404)
 	}
@@ -370,6 +490,16 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	v, e := h.s.Create(r.Context(), p, r.Header.Get("Idempotency-Key"), b)
+	send(w, r, v, e)
+}
+func (h *Handler) Repeat(w http.ResponseWriter, r *http.Request) {
+	p, _ := auth.From(r.Context())
+	n, e := httpx.PathID(r, "id")
+	if e != nil {
+		httpx.Failure(w, r, e)
+		return
+	}
+	v, e := h.s.Repeat(r.Context(), p, n)
 	send(w, r, v, e)
 }
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {

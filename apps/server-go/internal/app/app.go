@@ -132,6 +132,7 @@ func New(c config.Config, db *sql.DB, log *slog.Logger) (http.Handler, error) {
 	mux.Handle("GET /api/v1/admin/orders", admin(ord.List))
 	mux.Handle("GET /api/v1/admin/orders/{id}", admin(ord.Detail))
 	mux.Handle("POST /api/v1/admin/orders/{id}/confirm", admin(ful.ConfirmOrder))
+	mux.Handle("POST /api/v1/admin/orders/{id}/reject", admin(ful.RejectOrder))
 	mux.Handle("GET /api/v1/admin/worker-trades", admin(work.Trades))
 	mux.Handle("POST /api/v1/admin/worker-trades", admin(work.CreateTrade))
 	mux.Handle("PUT /api/v1/admin/worker-trades/{id}", admin(work.UpdateTrade))
@@ -198,6 +199,7 @@ func New(c config.Config, db *sql.DB, log *slog.Logger) (http.Handler, error) {
 	mux.Handle("PUT /api/v1/mini/cart/items/{id}/fault", customer(crt.Fault))
 	mux.Handle("DELETE /api/v1/mini/cart/items/{id}", customer(crt.Delete))
 	mux.Handle("POST /api/v1/mini/orders", customer(ord.Create))
+	mux.Handle("POST /api/v1/mini/orders/{id}/repeat", customer(ord.Repeat))
 	mux.Handle("GET /api/v1/mini/addresses", customer(addr.List))
 	mux.Handle("POST /api/v1/mini/addresses", customer(addr.Create))
 	mux.Handle("PUT /api/v1/mini/addresses/{id}", customer(addr.Update))
@@ -264,7 +266,7 @@ func adminPermission(r *http.Request) string {
 		}
 		return "catalog.sku.update"
 	case strings.HasPrefix(path, "/api/v1/admin/orders"):
-		if strings.HasSuffix(path, "/confirm") {
+		if strings.HasSuffix(path, "/confirm") || strings.HasSuffix(path, "/reject") {
 			return "order.confirm"
 		}
 		return "order.view"

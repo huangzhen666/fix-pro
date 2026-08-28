@@ -1,12 +1,12 @@
 import { Alert, Card, Col, Row, Skeleton, Statistic, Typography } from 'antd'
 import { useQuery } from '@tanstack/react-query'
 import { apiRequest } from '../api/http'
-import { statusLabel } from '../utils/enums'
 
 interface PingResponse {
-  service: string
-  status: string
-  time: string
+  message?: string
+  service?: string
+  status?: string
+  time?: string
 }
 
 export function DashboardPage() {
@@ -38,7 +38,7 @@ export function DashboardPage() {
           <Skeleton active paragraph={{ rows: 1 }} />
         ) : (
           <Typography.Text>
-            {ping.data ? `${ping.data.service} · ${statusLabel(ping.data.status)} · ${ping.data.time}` : '等待后端服务'}
+            {ping.data ? (ping.data.status ? `${ping.data.service ?? '后端服务'} · ${ping.data.status} · ${ping.data.time ?? ''}` : `后端服务已连接 · ${ping.data.message ?? '运行正常'}`) : '等待后端服务'}
           </Typography.Text>
         )}
       </Card>

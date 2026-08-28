@@ -3,6 +3,7 @@
   <view wx:for="{{items}}" wx:key="id" class="card order" data-id="{{item.id}}" bindtap="openDetail">
     <view class="row"><text class="title">{{item.orderNo}}</text><text class="status">{{item.statusText}}</text></view>
     <view class="muted">{{item.createdAt}}</view>
+    <view wx:if="{{item.cancelReason}}" class="cancel-reason">商家说明：{{item.cancelReason}}</view>
     <view class="row summary"><text>{{item.itemCount}} 项服务 · {{item.workOrderFinished}}/{{item.workOrderTotal}} 个工单完成</text><text class="amount">¥{{item.amountText}}</text></view>
   </view>
 </view>

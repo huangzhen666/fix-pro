@@ -26,6 +26,8 @@
 
     cd D:\work\fix-pro\apps\server-go
     $env:GOCACHE='D:\work\fix-pro\.gocache'
+    $env:GOPATH='D:\work\fix-pro\.gopath'
+    $env:GOMODCACHE='D:\work\fix-pro\.gopath\pkg\mod'
     go mod download
     go tool air -v
 
@@ -105,6 +107,8 @@
 
     cd D:\work\fix-pro\apps\server-go
     $env:GOCACHE='D:\work\fix-pro\.gocache'
+    $env:GOPATH='D:\work\fix-pro\.gopath'
+    $env:GOMODCACHE='D:\work\fix-pro\.gopath\pkg\mod'
     $env:DB_DSN='postgres://fixpro:fixpro-local@localhost:5433/fix_pro?sslmode=disable&timezone=UTC'
     go run ./cmd/migrate
 
@@ -191,6 +195,8 @@ Vite 会将 /api 代理到 http://127.0.0.1:8080。
 出现 Access is denied 时，先执行：
 
     $env:GOCACHE='D:\work\fix-pro\.gocache'
+    $env:GOPATH='D:\work\fix-pro\.gopath'
+    $env:GOMODCACHE='D:\work\fix-pro\.gopath\pkg\mod'
 
 再执行 go tool air、go test 或 go build。
 
@@ -209,6 +215,8 @@ Vite 会将 /api 代理到 http://127.0.0.1:8080。
 
     cd D:\work\fix-pro\apps\server-go
     $env:GOCACHE='D:\work\fix-pro\.gocache'
+    $env:GOPATH='D:\work\fix-pro\.gopath'
+    $env:GOMODCACHE='D:\work\fix-pro\.gopath\pkg\mod'
     go build ./cmd/server
     go tool air -c .air.toml -d
 

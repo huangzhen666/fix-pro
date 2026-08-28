@@ -10,6 +10,8 @@
     <view class="info-row"><text class="info-label">联系人</text><text class="info-value">{{order.contactName}} {{order.contactMobile}}</text></view>
     <view class="info-row address"><text class="info-label">服务地址</text><text class="info-value">{{order.serviceAddress}}</text></view>
     <view class="info-row"><text class="info-label">预约时间</text><text class="info-value">{{order.appointmentText}}</text></view>
+    <view wx:if="{{order.cancelReason}}" class="cancel-reason">商家说明：{{order.cancelReason}}</view>
+    <button wx:if="{{order.status === 'CANCELLED' && order.cancelReason}}" class="reorder-button" loading="{{reordering}}" disabled="{{reordering}}" bindtap="reorder">重新下单</button>
   </view>
 
   <view wx:for="{{order.workOrders}}" wx:key="id" class="card fulfillment-card">
@@ -37,7 +39,7 @@
     </view>
     <view wx:if="{{item.completionSummary}}" class="completion-summary">服务说明：{{item.completionSummary}}</view>
     <view class="evidence"><image wx:for="{{item.evidence}}" wx:key="id" src="{{item.url}}" mode="aspectFill" /></view>
-    <view wx:if="{{item.status === 'WAITING_ACCEPTANCE' || item.status === 'WAITING_QA_AUDIT' || item.status === 'WAITING_DIRECTOR_AUDIT'}}" class="actions"><button size="mini" type="primary" data-work-id="{{item.id}}" data-decision="ACCEPT" bindtap="acceptance">确认完成</button><button size="mini" data-work-id="{{item.id}}" data-decision="REJECT" bindtap="acceptance">需要返工</button></view>
+    <view wx:if="{{(item.status === 'WAITING_ACCEPTANCE' || item.status === 'WAITING_QA_AUDIT' || item.status === 'WAITING_DIRECTOR_AUDIT') && (!item.customerAcceptanceStatus || item.customerAcceptanceStatus === 'PENDING')}}" class="actions"><button size="mini" type="primary" loading="{{acceptingWorkOrderId === item.id}}" disabled="{{acceptingWorkOrderId === item.id}}" data-work-id="{{item.id}}" data-decision="ACCEPT" bindtap="acceptance">确认完成</button><button size="mini" loading="{{acceptingWorkOrderId === item.id}}" disabled="{{acceptingWorkOrderId === item.id}}" data-work-id="{{item.id}}" data-decision="REJECT" bindtap="acceptance">需要返工</button></view>
     <button wx:if="{{item.status === 'FINISHED' || item.status === 'FINISHED_WITH_REVIEW_EXCEPTION'}}" size="mini" data-work-id="{{item.id}}" bindtap="rating">评价服务</button>
   </view>
 </view>

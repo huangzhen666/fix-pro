@@ -1,4 +1,4 @@
-import { getCustomerOrder, getWorkOrderTimeline, acceptWorkOrder, rateWorkOrder, type CustomerOrderDetail, type CustomerTimelineEvent, type CustomerWorkOrder } from '../../services/orders'
+import { getCustomerOrder, getWorkOrderTimeline, acceptWorkOrder, rateWorkOrder, repeatCustomerOrder, type CustomerOrderDetail, type CustomerTimelineEvent, type CustomerWorkOrder } from '../../services/orders'
 import { download } from '../../services/request'
 
 type StageKey = 'ORDER_PLACED' | 'DISPATCHED' | 'PREPARING' | 'COMPLETED'
@@ -126,7 +126,7 @@ function buildFlow(work: CustomerWorkOrder, orderCreatedAt: string, events: Cust
 }
 
 Page({
-  data: { loading: true, orderId: '', order: null as CustomerOrderView | null },
+  data: { loading: true, orderId: '', order: null as CustomerOrderView | null, acceptingWorkOrderId: '', reordering: false },
 
   onLoad(query: { id?: string }) {
     if (query.id) this.setData({ orderId: query.id }, () => this.load())
@@ -153,7 +153,8 @@ Page({
       }))
       const stageIndex = workOrders.length ? Math.min(...workOrders.map(work => stageMeta.findIndex(stage => stage.label === work.currentStageLabel))) : 0
       const appointmentText = detail.appointmentAt ? `${formatDateTime(detail.appointmentAt)}${detail.appointmentSlotLabel ? `（${detail.appointmentSlotLabel}）` : ''}` : '待确认'
-      this.setData({ order: { ...detail, workOrders, stageLabel: stageMeta[stageIndex].label, totalAmountText: (detail.totalAmount / 100).toFixed(2), createdAtText: formatDateTime(detail.createdAt), appointmentText } })
+      const stageLabel = detail.status === 'CANCELLED' ? (detail.statusText || '已取消') : detail.statusText === '已完成' ? '已完成' : stageMeta[stageIndex].label
+      this.setData({ order: { ...detail, workOrders, stageLabel, totalAmountText: (detail.totalAmount / 100).toFixed(2), createdAtText: formatDateTime(detail.createdAt), appointmentText } })
     } catch (e) {
       wx.showToast({ title: e instanceof Error ? e.message : '订单加载失败', icon: 'none' })
     } finally {
@@ -161,10 +162,27 @@ Page({
     }
   },
 
+  async reorder() {
+    const order = this.data.order
+    if (!order || order.status !== 'CANCELLED' || !order.cancelReason || this.data.reordering) return
+    const result = await new Promise<WechatMiniprogram.ShowModalSuccessCallbackResult>(resolve => wx.showModal({ title: '重新下单', content: '将原订单的服务和补充信息复制到购物车，当前购物车内容会保留，是否继续？', success: resolve }))
+    if (!result.confirm) return
+    this.setData({ reordering: true })
+    try {
+      const copied = await repeatCustomerOrder(order.id)
+      wx.showToast({ title: `已复制${copied.itemsCopied}项服务`, icon: 'success' })
+      setTimeout(() => wx.navigateTo({ url: '/pages/cart/index' }), 400)
+    } catch (e) {
+      wx.showToast({ title: e instanceof Error ? e.message : '重新下单失败', icon: 'none' })
+    } finally {
+      this.setData({ reordering: false })
+    }
+  },
+
   async acceptance(e: any) {
     const workId = e.currentTarget.dataset.workId as string
     const work = this.data.order?.workOrders.find(item => item.id === workId)
-    if (!work) return
+    if (!work || this.data.acceptingWorkOrderId === workId || (work.customerAcceptanceStatus && work.customerAcceptanceStatus !== 'PENDING')) return
     const decision = e.currentTarget.dataset.decision as 'ACCEPT' | 'REJECT'
     let reason = ''
     if (decision === 'REJECT') {
@@ -175,12 +193,17 @@ Page({
       const result = await new Promise<WechatMiniprogram.ShowModalSuccessCallbackResult>(resolve => wx.showModal({ title: '确认验收', content: '确认本次服务已完成吗？', success: resolve }))
       if (!result.confirm) return
     }
+    this.setData({ acceptingWorkOrderId: work.id })
     try {
       await acceptWorkOrder(work.id, decision, work.version, reason)
+      const workOrders = this.data.order?.workOrders.map(item => item.id === work.id ? { ...item, customerAcceptanceStatus: decision === 'ACCEPT' ? 'MANUAL_ACCEPTED' : 'REJECTED', version: item.version + 1 } : item) || []
+      if (this.data.order) this.setData({ order: { ...this.data.order, workOrders } })
       wx.showToast({ title: decision === 'ACCEPT' ? '已确认完成' : '已提交返工', icon: 'success' })
       this.load()
     } catch (e) {
       wx.showToast({ title: e instanceof Error ? e.message : '操作失败', icon: 'none' })
+    } finally {
+      this.setData({ acceptingWorkOrderId: '' })
     }
   },
 
