@@ -25,4 +25,5 @@ docs/.qa-*/
 server-initializr.zip
 go-cache/
 .gocache/
+.gopath/
 /fixpro-server-*.exe
