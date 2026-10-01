@@ -1,9 +1,9 @@
 import { request } from './request'
 export interface OrderResult { id:string;orderNo:string;status:string;totalAmount:number;createdAt:string }
-export const createOrder=(data:{contactName:string;contactMobile:string;serviceAddress:string;appointmentDate:string;appointmentSlot:string},key:string)=>request<OrderResult>({url:'/api/v1/mini/orders',method:'POST',data,header:{'Idempotency-Key':key}})
+export const createOrder=(data:{contactName:string;contactMobile:string;serviceAddress:string;appointmentDate:string;appointmentSlot:string;cartItemIds?:string[]},key:string)=>request<OrderResult>({url:'/api/v1/mini/orders',method:'POST',data,header:{'Idempotency-Key':key}})
 export const repeatCustomerOrder=(id:string)=>request<{itemsCopied:number}>({url:`/api/v1/mini/orders/${id}/repeat`,method:'POST'})
-export interface CustomerOrderSummary { id:string; orderNo:string; status:string; statusText?:string; cancelReason?:string; totalAmount:number; itemCount:number; workOrderTotal:number; workOrderFinished:number; createdAt:string }
-export interface CustomerEvidence { id:string; mediaId:string; stage:string; url:string; createdAt:string }
+export interface CustomerOrderSummary { id:string; orderNo:string; status:string; statusText?:string; cancelReason?:string; totalAmount:number; itemCount:number; workOrderTotal:number; workOrderFinished:number; createdAt:string; statusUpdatedAt?:string }
+export interface CustomerEvidence { id:string; mediaId:string; stage:string; workOrderItemId?:string; unitNo?:number; itemName?:string; url:string; createdAt:string }
 export interface CustomerTimelineEvent { code:string; operatorType:string; note?:string; createdAt:string }
 export interface CustomerWorkOrder { id:string; workOrderNo:string; status:string; statusText?:string; customerAcceptanceStatus?:string; assigneeName?:string; appointmentAt?:string; appointmentSlot?:string; appointmentSlotLabel?:string; completionSummary?:string; version:number; evidence:CustomerEvidence[] }
 export interface CustomerOrderDetail { id:string; orderNo:string; status:string; statusText?:string; cancelReason?:string; contactName:string; contactMobile:string; serviceAddress:string; totalAmount:number; version:number; createdAt:string; appointmentAt?:string; appointmentSlot?:string; appointmentSlotLabel?:string; workOrders:CustomerWorkOrder[] }

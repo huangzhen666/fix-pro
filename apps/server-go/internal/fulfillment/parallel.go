@@ -114,38 +114,8 @@ func (s *Service) InternalReview(ctx context.Context, p auth.Principal, id int64
 	if _, err = tx.ExecContext(ctx, `INSERT INTO work_order_event(org_id,work_order_id,event_code,operator_type,operator_id,note) VALUES($1,$2,$3,'ADMIN',$4,NULLIF($5,''))`, p.OrgID, id, event, p.SubjectID, strings.TrimSpace(req.Note)); err != nil {
 		return err
 	}
-	if finished {
-		var statuses []string
-		rows, queryErr := tx.QueryContext(ctx, `SELECT status FROM work_order WHERE org_id=$1 AND order_id=$2`, p.OrgID, orderID)
-		if queryErr != nil {
-			return queryErr
-		}
-		for rows.Next() {
-			var value string
-			if queryErr = rows.Scan(&value); queryErr != nil {
-				rows.Close()
-				return queryErr
-			}
-			statuses = append(statuses, value)
-		}
-		if queryErr = rows.Err(); queryErr != nil {
-			rows.Close()
-			return queryErr
-		}
-		rows.Close()
-		nextOrderStatus := rollupOrder(statuses)
-		var previousOrderStatus string
-		if queryErr = tx.QueryRowContext(ctx, `SELECT status FROM customer_order WHERE org_id=$1 AND id=$2 FOR UPDATE`, p.OrgID, orderID).Scan(&previousOrderStatus); queryErr != nil {
-			return queryErr
-		}
-		if _, queryErr = tx.ExecContext(ctx, `UPDATE customer_order SET status=$1,version=version+1,completed_at=CASE WHEN $4::boolean THEN CURRENT_TIMESTAMP(3) ELSE completed_at END WHERE org_id=$2 AND id=$3`, nextOrderStatus, p.OrgID, orderID, nextOrderStatus == OrderCompleted); queryErr != nil {
-			return queryErr
-		}
-		if previousOrderStatus != nextOrderStatus {
-			if _, queryErr = tx.ExecContext(ctx, `INSERT INTO order_status_history(org_id,order_id,from_status,to_status,event_code,operator_type,operator_id,operator_name) VALUES($1,$2,$3,$4,'ORDER_ROLLED_UP','SYSTEM',0,'system')`, p.OrgID, orderID, previousOrderStatus, nextOrderStatus); queryErr != nil {
-				return queryErr
-			}
-		}
+	if err = s.syncCustomerOrderStatus(ctx, tx, p.OrgID, orderID); err != nil {
+		return err
 	}
 	return tx.Commit()
 }
@@ -177,8 +147,9 @@ func (s *Service) CustomerServiceConfirmation(ctx context.Context, p auth.Princi
 	}
 	defer tx.Rollback()
 	var status string
+	var orderID int64
 	var version int
-	if err = tx.QueryRowContext(ctx, `SELECT status,version FROM work_order WHERE org_id=$1 AND id=$2 FOR UPDATE`, p.OrgID, id).Scan(&status, &version); err == sql.ErrNoRows {
+	if err = tx.QueryRowContext(ctx, `SELECT order_id,status,version FROM work_order WHERE org_id=$1 AND id=$2 FOR UPDATE`, p.OrgID, id).Scan(&orderID, &status, &version); err == sql.ErrNoRows {
 		return httpx.E("WORK_ORDER_NOT_FOUND", "工单不存在", 404)
 	} else if err != nil {
 		return err
@@ -208,6 +179,9 @@ func (s *Service) CustomerServiceConfirmation(ctx context.Context, p auth.Princi
 	}
 	_, err = tx.ExecContext(ctx, `INSERT INTO work_order_event(org_id,work_order_id,event_code,operator_type,operator_id,note) VALUES($1,$2,$3,'ADMIN',$4,NULLIF($5,''))`, p.OrgID, id, event, p.SubjectID, strings.TrimSpace(req.Note))
 	if err != nil {
+		return err
+	}
+	if err = s.syncCustomerOrderStatus(ctx, tx, p.OrgID, orderID); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -290,50 +264,72 @@ func (s *Service) AutoAcceptDue(ctx context.Context) error {
 			tx.Rollback()
 			return err
 		}
-		if finished {
-			var statuses []string
-			statusRows, queryErr := tx.QueryContext(ctx, `SELECT status FROM work_order WHERE org_id=$1 AND order_id=$2`, orgID, orderID)
-			if queryErr != nil {
-				tx.Rollback()
-				return queryErr
-			}
-			for statusRows.Next() {
-				var value string
-				if queryErr = statusRows.Scan(&value); queryErr != nil {
-					statusRows.Close()
-					tx.Rollback()
-					return queryErr
-				}
-				statuses = append(statuses, value)
-			}
-			if queryErr = statusRows.Err(); queryErr != nil {
-				statusRows.Close()
-				tx.Rollback()
-				return queryErr
-			}
-			statusRows.Close()
-			nextOrderStatus := rollupOrder(statuses)
-			var previousOrderStatus string
-			if queryErr = tx.QueryRowContext(ctx, `SELECT status FROM customer_order WHERE org_id=$1 AND id=$2 FOR UPDATE`, orgID, orderID).Scan(&previousOrderStatus); queryErr != nil {
-				tx.Rollback()
-				return queryErr
-			}
-			if _, queryErr = tx.ExecContext(ctx, `UPDATE customer_order SET status=$1,version=version+1,completed_at=CASE WHEN $4::boolean THEN CURRENT_TIMESTAMP(3) ELSE completed_at END WHERE org_id=$2 AND id=$3`, nextOrderStatus, orgID, orderID, nextOrderStatus == OrderCompleted); queryErr != nil {
-				tx.Rollback()
-				return queryErr
-			}
-			if previousOrderStatus != nextOrderStatus {
-				if _, queryErr = tx.ExecContext(ctx, `INSERT INTO order_status_history(org_id,order_id,from_status,to_status,event_code,operator_type,operator_id,operator_name) VALUES($1,$2,$3,$4,'ORDER_ROLLED_UP','SYSTEM',0,'system')`, orgID, orderID, previousOrderStatus, nextOrderStatus); queryErr != nil {
-					tx.Rollback()
-					return queryErr
-				}
-			}
+		if err = s.syncCustomerOrderStatus(ctx, tx, orgID, orderID); err != nil {
+			tx.Rollback()
+			return err
 		}
 		if err = tx.Commit(); err != nil {
 			return err
 		}
 	}
 	return rows.Err()
+}
+
+// AutoRecallUnstartedDue returns an expired appointment to dispatch when the
+// assigned worker accepted it but never started the service. Once a work order
+// is in service, it is deliberately left untouched so the worker can complete
+// an overdue visit.
+func (s *Service) AutoRecallUnstartedDue(ctx context.Context) error {
+	rows, err := s.db.QueryContext(ctx, `SELECT id,org_id FROM work_order WHERE status IN ('PENDING_ARRIVAL','ARRIVED')`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var id, orgID int64
+		if err := rows.Scan(&id, &orgID); err != nil {
+			return err
+		}
+		if err := s.autoRecallUnstartedWorkOrder(ctx, orgID, id); err != nil {
+			return err
+		}
+	}
+	return rows.Err()
+}
+
+func (s *Service) autoRecallUnstartedWorkOrder(ctx context.Context, orgID, id int64) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	var assignee sql.NullInt64
+	var appointment sql.NullTime
+	var slot, status string
+	var version int
+	err = tx.QueryRowContext(ctx, `SELECT w.assignee_id,COALESCE(w.appointment_at,o.appointment_at),CASE WHEN w.appointment_at IS NULL THEN COALESCE(o.appointment_slot,'') ELSE COALESCE(w.appointment_slot,'') END,w.status,w.version FROM work_order w JOIN customer_order o ON o.org_id=w.org_id AND o.id=w.order_id WHERE w.org_id=$1 AND w.id=$2 FOR UPDATE OF w`, orgID, id).Scan(&assignee, &appointment, &slot, &status, &version)
+	if err == sql.ErrNoRows {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if (status != WorkOrderPendingArrival && status != WorkOrderArrived) || !assignee.Valid || !appointment.Valid || !acceptanceExpired(appointment.Time, slot, time.Now()) {
+		return nil
+	}
+
+	if _, err = tx.ExecContext(ctx, `UPDATE work_order SET status=$1,assignee_id=NULL,version=version+1 WHERE org_id=$2 AND id=$3 AND version=$4`, WorkOrderPendingDispatch, orgID, id, version); err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, `INSERT INTO work_order_assignment_history(org_id,work_order_id,from_assignee_id,to_assignee_id,from_appointment_at,to_appointment_at,event_code,operator_type,operator_id,operator_name,reason) VALUES($1,$2,$3,NULL,$4,$4,'SYSTEM_RECALLED_NO_SERVICE','SYSTEM',0,'system','预约结束后未开始服务，系统自动收回')`, orgID, id, assignee.Int64, appointment.Time); err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, `INSERT INTO work_order_status_history(org_id,work_order_id,from_status,to_status,event_code,operator_type,operator_id,operator_name,reason) VALUES($1,$2,$3,$4,'SYSTEM_RECALLED_NO_SERVICE','SYSTEM',0,'system','预约结束后未开始服务，系统自动收回')`, orgID, id, status, WorkOrderPendingDispatch); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *Service) StringifyOutcome(v sql.NullString) string {

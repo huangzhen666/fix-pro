@@ -32,29 +32,38 @@ func canCancelOrder(status string) bool {
 	return status == OrderPendingConfirmation || status == OrderFulfilling
 }
 
-func rollupOrder(statuses []string) string {
-	if len(statuses) == 0 {
+type workOrderRollupState struct {
+	status                   string
+	customerAcceptanceStatus string
+}
+
+func acceptedByCustomer(status string) bool {
+	return status == "MANUAL_ACCEPTED" || status == "AUTO_ACCEPTED"
+}
+
+func rollupOrderStates(states []workOrderRollupState) string {
+	if len(states) == 0 {
 		return OrderFulfilling
 	}
-	allFinished := true
+	allCompleted := true
 	allCancelled := true
 	waitingAcceptance := false
-	for _, status := range statuses {
-		if status != WorkOrderFinished {
-			allFinished = false
+	for _, state := range states {
+		if state.status != WorkOrderFinished && state.status != WorkOrderFinishedReviewException && !acceptedByCustomer(state.customerAcceptanceStatus) {
+			allCompleted = false
 		}
-		if status != WorkOrderCancelled {
+		if state.status != WorkOrderCancelled {
 			allCancelled = false
 		}
-		if status == WorkOrderWaitingAcceptance {
+		if state.status == WorkOrderWaitingAcceptance && !acceptedByCustomer(state.customerAcceptanceStatus) {
 			waitingAcceptance = true
 		}
-		switch status {
-		case WorkOrderPendingDispatch, WorkOrderPendingAccept, WorkOrderPendingArrival, WorkOrderArrived, WorkOrderInService, WorkOrderWaitingCompletionReview, WorkOrderReworkRequired:
+		switch state.status {
+		case WorkOrderPendingDispatch, WorkOrderPendingAccept, WorkOrderPendingArrival, WorkOrderArrived, WorkOrderInService, WorkOrderWaitingCompletionReview, WorkOrderReworkRequired, WorkOrderWaitingCustomerService, WorkOrderSecondVisitPending:
 			return OrderFulfilling
 		}
 	}
-	if allFinished {
+	if allCompleted {
 		return OrderCompleted
 	}
 	if waitingAcceptance {
@@ -64,6 +73,14 @@ func rollupOrder(statuses []string) string {
 		return OrderCancelled
 	}
 	return OrderFulfilling
+}
+
+func rollupOrder(statuses []string) string {
+	states := make([]workOrderRollupState, 0, len(statuses))
+	for _, status := range statuses {
+		states = append(states, workOrderRollupState{status: status})
+	}
+	return rollupOrderStates(states)
 }
 
 func invalidTransition(code, message string) error { return fmt.Errorf("%s: %s", code, message) }

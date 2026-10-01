@@ -10,6 +10,8 @@
 .schedule-label { color: #667085; font-size: 23rpx; }
 .schedule-date { margin-top: 10rpx; color: #101828; font-size: 31rpx; font-weight: 700; }
 .schedule-slot { margin-top: 8rpx; color: #1677ff; font-size: 27rpx; font-weight: 600; }
+.acceptance-alert { margin-top: 18rpx; padding: 14rpx 16rpx; color: #b54708; background: #fffaeb; border-radius: 12rpx; font-size: 23rpx; line-height: 1.5; }
+.acceptance-alert-expired { color: #b42318; background: #fef3f2; }
 .address { display: flex; margin-top: 22rpx; padding-top: 22rpx; border-top: 1rpx solid #eaecf0; }
 .address-label { width: 130rpx; flex: none; color: #667085; font-size: 24rpx; }
 .address-value { color: #344054; font-size: 25rpx; line-height: 1.5; }
@@ -37,6 +39,14 @@
 .actions button { margin-bottom: 16rpx; }
 .actions button:last-child { margin-bottom: 0; }
 .media-row { display: flex; gap: 16rpx; }
+.evidence-hint { margin-top: -6rpx; }
+.evidence-service { margin-top: 22rpx; padding: 20rpx; background: #f8fafc; border-radius: 14rpx; }
+.evidence-service-title { color: #101828; font-size: 27rpx; font-weight: 700; }
+.evidence-pair { display: flex; align-items: center; justify-content: space-between; margin-top: 16rpx; padding-top: 16rpx; border-top: 1rpx solid #eaecf0; }
+.evidence-pair-title { color: #667085; font-size: 24rpx; }
+.evidence-pair-actions { display: flex; align-items: center; gap: 12rpx; }
+.evidence-pair-actions button { margin: 0; font-size: 22rpx; }
+.evidence-uploaded { color: #039855; font-size: 22rpx; }
 textarea { width: 100%; min-height: 180rpx; margin-bottom: 20rpx; padding: 16rpx; background: #f8fafc; box-sizing: border-box; border-radius: 12rpx; }
 .state { padding: 120rpx 24rpx; color: #667085; text-align: center; }
 .error { color: #d92d20; }

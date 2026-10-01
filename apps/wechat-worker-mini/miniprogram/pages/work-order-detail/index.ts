@@ -1,8 +1,10 @@
-import { bindEvidence, commandWorkOrder, getWorkOrder, submitCompletion, uploadEvidence, workerReschedule, workerReturn, type Evidence, type WorkOrder } from '../../services/work-orders'
+import { bindEvidence, commandWorkOrder, getWorkOrder, submitCompletion, uploadEvidence, workerReschedule, workerReturn, type WorkOrder } from '../../services/work-orders'
 import { workOrderStatusLabel } from '../../services/status'
 import { getApiBaseUrl } from '../../config/env'
+import { acceptanceReminder } from '../../services/appointment'
 
 const weekNames = ['日', '一', '二', '三', '四', '五', '六']
+let reminderTimer: ReturnType<typeof setInterval> | undefined
 
 function pad(value: number) { return String(value).padStart(2, '0') }
 
@@ -13,11 +15,32 @@ function formatAppointmentDate(value?: string) {
   return `${date.getFullYear()}年${pad(date.getMonth() + 1)}月${pad(date.getDate())}日（周${weekNames[date.getDay()]}）`
 }
 
+function workOrderView(order: WorkOrder) {
+  const reminder = acceptanceReminder(order.status, order.appointmentAt, order.appointmentSlot)
+  return { ...order, statusText: workOrderStatusLabel(order.status), appointmentDateText: formatAppointmentDate(order.appointmentAt), acceptanceExpired: reminder.expired, acceptanceReminder: reminder.message }
+}
+
 Page({
   data: { loading: true, submitting: false, error: '', order: null as WorkOrder | null, orderId: '', summary: '', beforeMediaId: '', afterMediaId: '' },
   onLoad(query: { id?: string }) { if (query.id) this.setData({ orderId: query.id }, () => this.load()) },
+  onShow() { this.startReminderTimer() },
+  onHide() { this.stopReminderTimer() },
+  onUnload() { this.stopReminderTimer() },
+  startReminderTimer() {
+    this.stopReminderTimer()
+    reminderTimer = setInterval(() => this.refreshAcceptanceReminder(), 60 * 1000)
+  },
+  stopReminderTimer() {
+    if (reminderTimer !== undefined) clearInterval(reminderTimer)
+    reminderTimer = undefined
+  },
+  refreshAcceptanceReminder() {
+    if (!this.data.order) return
+    const reminder = acceptanceReminder(this.data.order.status, this.data.order.appointmentAt, this.data.order.appointmentSlot)
+    this.setData({ 'order.acceptanceExpired': reminder.expired, 'order.acceptanceReminder': reminder.message })
+  },
   async load() {
-    try { this.setData({ loading: true, error: '' }); const order = await getWorkOrder(this.data.orderId); const view = { ...order, statusText: workOrderStatusLabel(order.status), appointmentDateText: formatAppointmentDate(order.appointmentAt) }; this.setData({ order: view }); this.loadCustomerMedia(view.items ?? []) }
+    try { this.setData({ loading: true, error: '' }); const order = await getWorkOrder(this.data.orderId); const view = workOrderView(order); this.setData({ order: view }); this.loadCustomerMedia(view.items ?? []) }
     catch (error) { this.setData({ error: error instanceof Error ? error.message : '工单加载失败' }) }
     finally { this.setData({ loading: false }) }
   },
@@ -66,12 +89,15 @@ Page({
   async returnWorkOrder() { if (!this.data.order) return; const result = await new Promise<WechatMiniprogram.ShowModalSuccessCallbackResult>(resolve => wx.showModal({ title: '退回待重新派单', editable: true, placeholderText: '请输入退回原因', success: resolve })); if (!result.confirm || !result.content?.trim()) return; const confirm = await new Promise<WechatMiniprogram.ShowModalSuccessCallbackResult>(resolve => wx.showModal({ title: '确认退回工单？', content: '退回后由履约调度员重新派单。', success: resolve })); if (!confirm.confirm) return; try { await workerReturn(this.data.order.id, this.data.order.version, result.content.trim()); wx.showToast({ title: '已退回调度', icon: 'success' }); await this.load() } catch (e) { wx.showToast({ title: e instanceof Error ? e.message : '退回失败', icon: 'none' }) } },
   chooseMedia(e: WechatMiniprogram.TouchEvent) {
     const stage = (e.currentTarget as any).dataset.stage as 'BEFORE' | 'AFTER'
+    const workOrderItemId = String((e.currentTarget as any).dataset.workOrderItemId || '')
+    const unitNo = Number((e.currentTarget as any).dataset.unitNo)
+    if (!workOrderItemId || !Number.isInteger(unitNo) || unitNo < 1) { wx.showToast({ title: '凭证位置无效，请重新加载页面', icon: 'none' }); return }
     wx.chooseMedia({ count: 1, mediaType: ['image', 'video'], sourceType: ['album', 'camera'], success: async result => {
       const file = result.tempFiles[0]
       if (!file) return
       try {
         const uploaded = await uploadEvidence(this.data.orderId, file.tempFilePath)
-        await bindEvidence(this.data.orderId, uploaded.id, stage, this.data.order?.version ?? 0)
+        await bindEvidence(this.data.orderId, uploaded.id, stage, workOrderItemId, unitNo, this.data.order?.version ?? 0)
         wx.showToast({ title: '凭证已上传', icon: 'success' }); await this.load()
       } catch (error) { wx.showToast({ title: error instanceof Error ? error.message : '上传失败', icon: 'none' }) }
     } })
@@ -83,5 +109,4 @@ Page({
     catch (error) { wx.showToast({ title: error instanceof Error ? error.message : '提交失败', icon: 'none' }) }
     finally { this.setData({ submitting: false }) }
   },
-  hasStage(stage: Evidence['stage']): boolean { return Boolean(this.data.order?.evidence?.some(item => item.stage === stage)) },
 })

@@ -18,6 +18,8 @@ const timelineLabels: Record<string, string> = {
   WORKER_RESCHEDULE_REQUESTED: '师傅发起改期',
   RESCHEDULED: '已改期',
   WORKER_RETURNED: '师傅退回调度',
+  ADMIN_RECALLED: '派单员收回工单',
+  SYSTEM_RECALLED_NO_SERVICE: '预约结束未开工，系统自动收回',
   ACCEPTED: '师傅已接单',
   ARRIVED: '师傅已到达',
   STARTED: '已开始服务',
@@ -74,6 +76,10 @@ export interface FulfillmentReviewOptions {
 function Evidence({ item }: { item: AdminEvidence }) { const [src, setSrc] = useState(''); useEffect(() => { let u=''; apiBlob(item.url).then(b => { u=URL.createObjectURL(b); setSrc(u) }); return () => { if (u) URL.revokeObjectURL(u) } }, [item.url]); return src ? (item.mediaType === 'VIDEO' ? <video controls src={src} style={{ width: 220, maxHeight: 160 }} /> : <Image width={180} src={src} />) : <Typography.Text type="secondary">加载凭证中</Typography.Text> }
 function reviewTag(review: AdminInternalReview) { return <Tag color={review.decision === 'APPROVE' ? 'success' : 'error'}>{reviewDecisionLabels[review.decision] || review.decision}</Tag> }
 function reviewerText(review: AdminInternalReview) { return review.reviewerName || (review.reviewerId === '0' ? '后台管理员' : review.reviewerId) }
+function evidenceLabel(item: AdminEvidence) {
+  const stage = evidenceStageLabels[item.stage] || item.stage
+  return item.itemName && item.unitNo ? `${item.itemName} · 第${item.unitNo}个 · ${stage}` : stage
+}
 
 export function FulfillmentDetailDrawer({ open, workOrderId, onClose, review }: { open: boolean; workOrderId?: string; onClose: () => void; review?: FulfillmentReviewOptions }) {
   const work = useQuery({ queryKey: ['fulfillment-drawer-work-order', workOrderId], queryFn: () => getWorkOrder(workOrderId!), enabled: open && Boolean(workOrderId) })
@@ -89,7 +95,7 @@ export function FulfillmentDetailDrawer({ open, workOrderId, onClose, review }: 
       {review ? <><Divider>审核关键信息</Divider><Descriptions bordered size="small" column={2} items={[{ key: 'level', label: '本次审核层级', children: reviewLevelLabels[review.level] }, { key: 'status', label: '当前履约状态', children: <Tag color="blue">{adminWorkOrderStatusLabel(work.data.status, work.data.customerAcceptanceStatus)}</Tag> }, { key: 'acceptance', label: '客户验收结果', children: acceptanceLabels[work.data.customerAcceptanceStatus] || work.data.customerAcceptanceStatus || '-' }, { key: 'outcome', label: '完工结果', children: work.data.completionOutcome || '-' }, { key: 'qa', label: '质检初审结果', span: 2, children: review.level === 'DIRECTOR' ? (qaReview ? <Space direction="vertical" size={2}><Space>{reviewTag(qaReview)}<Typography.Text>{reviewerText(qaReview)}</Typography.Text><Typography.Text type="secondary">{formatDateTime(qaReview.createdAt)}</Typography.Text></Space><Typography.Text>{qaReview.note || '初审未填写备注'}</Typography.Text></Space> : <Typography.Text type="secondary">未找到质检初审记录</Typography.Text>) : <Typography.Text type="secondary">本次为质检初审，审核结果将在提交后记录</Typography.Text> }]} /><Typography.Title level={5} style={{ marginTop: 0 }}>审核备注</Typography.Title><Typography.Text type="secondary">请通过底部按钮选择“通过”或“打回”；打回时必须填写原因。</Typography.Text><Input.TextArea rows={4} placeholder="通过时备注可选，打回时原因必填" value={review.note} onChange={event => review.onNoteChange(event.target.value)} /></> : null}
       <Divider>当前履约状态</Divider><Descriptions bordered size="small" column={2} items={[{ key: 'status', label: '工单状态', children: <Tag color="blue">{adminWorkOrderStatusLabel(work.data.status, work.data.customerAcceptanceStatus)}</Tag> }, { key: 'worker', label: '当前师傅', children: work.data.assigneeName || '待派单' }, { key: 'appointment', label: '客户预约时间段', children: appointmentText(work.data.appointmentAt, work.data.appointmentSlot) }, { key: 'visit', label: '上门状态', children: enumLabel(work.data.visitStatus) }, { key: 'acceptance', label: '客户验收', children: acceptanceLabels[work.data.customerAcceptanceStatus] || work.data.customerAcceptanceStatus || '-' }, { key: 'acceptanceAt', label: '验收时间', children: formatAt(work.data.customerAcceptanceAt) }, { key: 'review', label: '内部审核', children: reviewLabels[work.data.internalReviewStatus] || work.data.internalReviewStatus || '-' }, { key: 'closure', label: '结案状态', children: closureLabels[work.data.closureStatus] || work.data.closureStatus || '-' }, { key: 'outcome', label: '完工结果', children: work.data.completionOutcome || '-' }, { key: 'summary', label: '完工说明', span: 2, children: work.data.completionSummary || '暂无' }]} />
       <Divider>上门与完工节点</Divider><Descriptions bordered size="small" column={2} items={[{ key: 'acceptedAt', label: '师傅接单', children: formatAt(work.data.acceptedAt) }, { key: 'arrivedAt', label: '师傅到达', children: formatAt(work.data.arrivedAt) }, { key: 'startedAt', label: '开始服务', children: formatAt(work.data.startedAt) }, { key: 'completionSubmittedAt', label: '提交完工', children: formatAt(work.data.completionSubmittedAt || work.data.completionSubmissionAt) }, { key: 'reviewedAt', label: '审核完成', children: formatAt(work.data.reviewedAt) }, { key: 'finishedAt', label: '工单完结', children: formatAt(work.data.finishedAt || work.data.closedAt) }]} />
-      <Divider>施工凭证</Divider><Space wrap>{work.data.evidence.length ? work.data.evidence.map(item => <div key={item.id}><Typography.Text>{evidenceStageLabels[item.stage] || item.stage} · {item.customerVisible ? '客户可见' : '内部可见'}</Typography.Text><br /><Evidence item={item} /></div>) : <Typography.Text type="secondary">暂无凭证</Typography.Text>}</Space>
+      <Divider>施工凭证</Divider><Space wrap>{work.data.evidence.length ? work.data.evidence.map(item => <div key={item.id}><Typography.Text>{evidenceLabel(item)} · {item.customerVisible ? '客户可见' : '内部可见'}</Typography.Text><br /><Evidence item={item} /></div>) : <Typography.Text type="secondary">暂无凭证</Typography.Text>}</Space>
     </Space>}
   </Drawer>
 }

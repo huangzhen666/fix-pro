@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"reflect"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -24,11 +25,12 @@ type Service struct{ db *sql.DB }
 func New(db *sql.DB) *Service { return &Service{db} }
 
 type Write struct {
-	ContactName     string `json:"contactName"`
-	ContactMobile   string `json:"contactMobile"`
-	ServiceAddress  string `json:"serviceAddress"`
-	AppointmentDate string `json:"appointmentDate"`
-	AppointmentSlot string `json:"appointmentSlot"`
+	ContactName     string   `json:"contactName"`
+	ContactMobile   string   `json:"contactMobile"`
+	ServiceAddress  string   `json:"serviceAddress"`
+	AppointmentDate string   `json:"appointmentDate"`
+	AppointmentSlot string   `json:"appointmentSlot"`
+	CartItemIDs     []string `json:"cartItemIds"`
 }
 type Result struct {
 	ID          string    `json:"id"`
@@ -145,11 +147,34 @@ func validSlot(slot string) bool {
 	}
 	return false
 }
+
+func selectedCartItemIDs(values []string) (map[int64]bool, error) {
+	if values == nil {
+		return nil, nil
+	}
+	if len(values) == 0 {
+		return nil, httpx.E("CART_EMPTY", "请选择至少一项服务", 400)
+	}
+	ids := make(map[int64]bool, len(values))
+	for _, value := range values {
+		id, err := strconv.ParseInt(strings.TrimSpace(value), 10, 64)
+		if err != nil || id < 1 {
+			return nil, httpx.E("VALIDATION_ERROR", "购物车服务 ID 格式错误", 400)
+		}
+		ids[id] = true
+	}
+	return ids, nil
+}
+
 func (s *Service) Create(ctx context.Context, p auth.Principal, key string, w Write) (Result, error) {
 	if strings.TrimSpace(key) == "" || len(key) > 128 {
 		return Result{}, httpx.E("VALIDATION_ERROR", "缺少有效 Idempotency-Key", 400)
 	}
 	if e := validate(w); e != nil {
+		return Result{}, e
+	}
+	selectedIDs, e := selectedCartItemIDs(w.CartItemIDs)
+	if e != nil {
 		return Result{}, e
 	}
 	date, _ := time.ParseInLocation("2006-01-02", w.AppointmentDate, time.Local)
@@ -200,12 +225,19 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, key string, w Wr
 		return Result{}, e
 	}
 	items := []checkout{}
+	selectedFound := 0
 	for rows.Next() {
 		var x checkout
 		var raw, currentRaw []byte
 		if e = rows.Scan(&x.id, &x.sku, &x.version, &x.quantity, &x.price, &x.fault, &raw, &x.status, &x.current, &currentRaw); e != nil {
 			rows.Close()
 			return Result{}, e
+		}
+		if selectedIDs != nil {
+			if !selectedIDs[x.id] {
+				continue
+			}
+			selectedFound++
 		}
 		if e = json.Unmarshal(raw, &x.snap); e != nil {
 			rows.Close()
@@ -220,6 +252,9 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, key string, w Wr
 		items = append(items, x)
 	}
 	rows.Close()
+	if selectedIDs != nil && selectedFound != len(selectedIDs) {
+		return Result{}, httpx.E("CART_ITEM_NOT_FOUND", "所选服务已不在购物车中", 404)
+	}
 	if len(items) == 0 {
 		return Result{}, httpx.E("CART_EMPTY", "购物车为空", 400)
 	}
@@ -272,11 +307,22 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, key string, w Wr
 	if _, e = tx.ExecContext(ctx, `INSERT INTO order_status_history(org_id,order_id,from_status,to_status,event_code,operator_type,operator_id,operator_name) VALUES($1,$2,NULL,$3,'ORDER_CREATED','CUSTOMER',$4,$5)`, p.OrgID, orderID, fulfillment.OrderPendingConfirmation, p.SubjectID, p.Name); e != nil {
 		return Result{}, e
 	}
-	if _, e = tx.ExecContext(ctx, `DELETE FROM shopping_cart_item_media cim USING shopping_cart_item ci WHERE ci.id=cim.cart_item_id AND ci.org_id=cim.org_id AND ci.org_id=$1 AND ci.cart_id=$2`, p.OrgID, cart); e != nil {
-		return Result{}, e
-	}
-	if _, e = tx.ExecContext(ctx, `DELETE FROM shopping_cart_item WHERE org_id=$1 AND cart_id=$2`, p.OrgID, cart); e != nil {
-		return Result{}, e
+	if selectedIDs == nil {
+		if _, e = tx.ExecContext(ctx, `DELETE FROM shopping_cart_item_media cim USING shopping_cart_item ci WHERE ci.id=cim.cart_item_id AND ci.org_id=cim.org_id AND ci.org_id=$1 AND ci.cart_id=$2`, p.OrgID, cart); e != nil {
+			return Result{}, e
+		}
+		if _, e = tx.ExecContext(ctx, `DELETE FROM shopping_cart_item WHERE org_id=$1 AND cart_id=$2`, p.OrgID, cart); e != nil {
+			return Result{}, e
+		}
+	} else {
+		for _, item := range items {
+			if _, e = tx.ExecContext(ctx, `DELETE FROM shopping_cart_item_media WHERE org_id=$1 AND cart_item_id=$2`, p.OrgID, item.id); e != nil {
+				return Result{}, e
+			}
+			if _, e = tx.ExecContext(ctx, `DELETE FROM shopping_cart_item WHERE org_id=$1 AND cart_id=$2 AND id=$3`, p.OrgID, cart, item.id); e != nil {
+				return Result{}, e
+			}
+		}
 	}
 	out := Result{fmt.Sprint(orderID), orderNo, fulfillment.OrderPendingConfirmation, total, time.Now().UTC()}
 	raw, _ := json.Marshal(out)

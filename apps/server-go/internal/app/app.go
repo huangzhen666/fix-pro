@@ -38,14 +38,20 @@ func New(c config.Config, db *sql.DB, log *slog.Logger) (http.Handler, error) {
 	addr := address.NewHandler(address.New(db))
 	fulService := fulfillment.New(db, ms)
 	ful := fulfillment.NewHandler(fulService)
+	runFulfillmentTimers := func() {
+		if err := fulService.AutoRecallUnstartedDue(context.Background()); err != nil {
+			log.Error("auto recall unstarted work orders", "error", err)
+		}
+		if err := fulService.AutoAcceptDue(context.Background()); err != nil {
+			log.Error("auto acceptance", "error", err)
+		}
+	}
 	go func() {
-		ticker := time.NewTicker(time.Hour)
+		ticker := time.NewTicker(time.Minute)
 		defer ticker.Stop()
-		_ = fulService.AutoAcceptDue(context.Background())
+		runFulfillmentTimers()
 		for range ticker.C {
-			if err := fulService.AutoAcceptDue(context.Background()); err != nil {
-				log.Error("auto acceptance", "error", err)
-			}
+			runFulfillmentTimers()
 		}
 	}()
 	workerSessions := auth.NewWorkerSessionStore(db, c.WorkerDevTokenEnabled)
@@ -155,6 +161,7 @@ func New(c config.Config, db *sql.DB, log *slog.Logger) (http.Handler, error) {
 	mux.Handle("GET /api/v1/admin/work-orders/{id}", admin(ful.AdminWorkOrderDetail))
 	mux.Handle("POST /api/v1/admin/work-orders/{id}/assign", admin(ful.Assign))
 	mux.Handle("POST /api/v1/admin/work-orders/{id}/reassign", admin(ful.Reassign))
+	mux.Handle("POST /api/v1/admin/work-orders/{id}/recall", admin(ful.Recall))
 	mux.Handle("POST /api/v1/admin/work-orders/{id}/reschedule", admin(ful.Reschedule))
 	mux.Handle("POST /api/v1/admin/work-orders/{id}/completion-review", admin(ful.ReviewCompletion))
 	mux.Handle("POST /api/v1/admin/work-orders/{id}/internal-review", admin(ful.InternalReview))
@@ -272,7 +279,7 @@ func adminPermission(r *http.Request) string {
 		return "order.view"
 	case strings.HasPrefix(path, "/api/v1/admin/work-orders"):
 		switch {
-		case strings.HasSuffix(path, "/assign"), strings.HasSuffix(path, "/reassign"):
+		case strings.HasSuffix(path, "/assign"), strings.HasSuffix(path, "/reassign"), strings.HasSuffix(path, "/recall"):
 			return "fulfillment.dispatch"
 		case strings.HasSuffix(path, "/reschedule"):
 			return "fulfillment.reschedule"

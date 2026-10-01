@@ -1,22 +1,36 @@
 import { getApiBaseUrl } from '../../config/env'
 import { getCart, removeItem, saveFault, updateQuantity, uploadFault, type Cart, type CartItem } from '../../services/cart'
 
+const checkoutItemsStorageKey = 'fixpro.checkoutCartItemIds'
+type DisplayCartItem = CartItem & { coverImageUrl: string; subtotalText: string; selected: boolean }
+type DisplayCart = Omit<Cart, 'items'> & { items: DisplayCartItem[] }
+let selectedByItemID: Record<string, boolean> = {}
+
+function selectedSummary(items: DisplayCartItem[]) {
+  return items.filter(item => item.selected).reduce((summary, item) => ({ itemCount: summary.itemCount + item.quantity, totalAmount: summary.totalAmount + item.subtotal }), { itemCount: 0, totalAmount: 0 })
+}
+
 Page({
-  data:{loading:true,cart:{items:[],itemCount:0,totalAmount:0} as Cart,totalText:'0.00',savingId:'',checkoutLoading:false},
+  data:{loading:true,cart:{items:[],itemCount:0,totalAmount:0} as DisplayCart,totalText:'0.00',selectedCount:0,savingId:'',checkoutLoading:false},
   onShow(){this.load()},onPullDownRefresh(){this.load().finally(()=>wx.stopPullDownRefresh())},
-  async load(){this.setData({loading:true});try{const cart=await getCart();const items=cart.items.map(i=>({...i,coverImageUrl:`${getApiBaseUrl()}${i.coverImageUrl}`,subtotalText:(i.subtotal/100).toFixed(2)}));this.setData({cart:{...cart,items},totalText:(cart.totalAmount/100).toFixed(2)});this.loadPrivateMedia(items)}catch(e){wx.showToast({title:e instanceof Error?e.message:'购物车加载失败',icon:'none'})}finally{this.setData({loading:false})}},
+  onUnload(){selectedByItemID={}},
+  async load(){this.setData({loading:true});try{const cart=await getCart();const items=cart.items.map(i=>({...i,coverImageUrl:`${getApiBaseUrl()}${i.coverImageUrl}`,subtotalText:(i.subtotal/100).toFixed(2),selected:selectedByItemID[i.id]??true}));const summary=selectedSummary(items);this.setData({cart:{...cart,items},totalText:(summary.totalAmount/100).toFixed(2),selectedCount:items.filter(item=>item.selected).length});this.loadPrivateMedia(items)}catch(e){wx.showToast({title:e instanceof Error?e.message:'购物车加载失败',icon:'none'})}finally{this.setData({loading:false})}},
   loadPrivateMedia(items:CartItem[]){const token=wx.getStorageSync<string>('fixpro.accessToken');items.forEach((item,itemIndex)=>item.faultMedia.forEach((media,mediaIndex)=>wx.downloadFile({url:`${getApiBaseUrl()}${media.url}`,header:{Authorization:`Bearer ${token}`},success:r=>{if(r.statusCode===200)this.setData({[`cart.items[${itemIndex}].faultMedia[${mediaIndex}].localUrl`]:r.tempFilePath})}})))},
+  toggleSelected(e:any){const index=Number(e.currentTarget.dataset.index);const item=this.data.cart.items[index];if(!item)return;selectedByItemID[item.id]=!item.selected;const items=this.data.cart.items.map((entry,itemIndex)=>itemIndex===index?{...entry,selected:selectedByItemID[entry.id]}:entry);const summary=selectedSummary(items);this.setData({['cart.items']:items,totalText:(summary.totalAmount/100).toFixed(2),selectedCount:items.filter(entry=>entry.selected).length})},
   inputFault(e:any){const index=Number(e.currentTarget.dataset.index);this.setData({[`cart.items[${index}].faultDescription`]:e.detail.value})},
   async blurFault(e:any){await this.persist(Number(e.currentTarget.dataset.index))},
-  async change(e:any){const item=this.data.cart.items[Number(e.currentTarget.dataset.index)] as any;const quantity=Math.max(1,Math.min(99,item.quantity+Number(e.currentTarget.dataset.delta)));try{await updateQuantity(item.id,quantity);this.load()}catch(err){wx.showToast({title:err instanceof Error?err.message:'修改失败',icon:'none'})}},
+  async change(e:any){const item=this.data.cart.items[Number(e.currentTarget.dataset.index)] as any;const quantity=item.quantity+Number(e.currentTarget.dataset.delta);try{if(quantity<1){await removeItem(item.id);delete selectedByItemID[item.id]}else{await updateQuantity(item.id,Math.min(99,quantity))}this.load()}catch(err){wx.showToast({title:err instanceof Error?err.message:'修改失败',icon:'none'})}},
   async choose(e:any){const index=Number(e.currentTarget.dataset.index);const item=this.data.cart.items[index] as any;try{const chosen=await wx.chooseMedia({count:1,mediaType:['image','video'],sourceType:['album','camera']});if(!chosen.tempFiles.length)return;wx.showLoading({title:'上传中'});const uploaded=await uploadFault(chosen.tempFiles[0].tempFilePath);const faultMedia=[...item.faultMedia,{id:String(uploaded.id),mediaType:uploaded.mediaType,name:'新上传文件',url:'',localUrl:chosen.tempFiles[0].tempFilePath}];this.setData({[`cart.items[${index}].faultMedia`]:faultMedia});await this.persist(index)}catch(err){wx.showToast({title:err instanceof Error?err.message:'上传失败',icon:'none'})}finally{wx.hideLoading()}},
   async removeMedia(e:any){const index=Number(e.currentTarget.dataset.index),mediaIndex=Number(e.currentTarget.dataset.mediaIndex);const list=[...(this.data.cart.items[index] as any).faultMedia];list.splice(mediaIndex,1);this.setData({[`cart.items[${index}].faultMedia`]:list});await this.persist(index)},
   async persist(index:number):Promise<boolean>{const item=this.data.cart.items[index] as any;if(!item)return true;this.setData({savingId:item.id});try{await saveFault(item.id,item.faultDescription||'',item.faultMedia.map((x:any)=>x.id));return true}catch(err){wx.showToast({title:err instanceof Error?err.message:'补充信息同步失败',icon:'none'});return false}finally{this.setData({savingId:''})}},
-  async remove(e:any){const item=this.data.cart.items[Number(e.currentTarget.dataset.index)] as any;const result=await wx.showModal({title:'删除服务',content:`确认移除“${item.name}”？`});if(result.confirm){await removeItem(item.id);this.load()}},
+  async remove(e:any){const item=this.data.cart.items[Number(e.currentTarget.dataset.index)] as any;const result=await wx.showModal({title:'删除服务',content:`确认移除“${item.name}”？`});if(result.confirm){await removeItem(item.id);delete selectedByItemID[item.id];this.load()}},
   goServices(){wx.switchTab({url:'/pages/services/index'})},
   checkout(){
     if(this.data.checkoutLoading)return
+    const selectedItems=this.data.cart.items.filter(item=>item.selected)
+    if(!selectedItems.length){wx.showToast({title:'请至少选择一项服务',icon:'none'});return}
     this.setData({checkoutLoading:true})
+    wx.setStorageSync(checkoutItemsStorageKey,selectedItems.map(item=>item.id))
     const url='/pages/checkout/index'
     const fail=(error:any)=>{
       wx.redirectTo({
@@ -24,6 +38,7 @@ Page({
         success:()=>this.setData({checkoutLoading:false}),
         fail:()=>{
           this.setData({checkoutLoading:false})
+          wx.removeStorageSync(checkoutItemsStorageKey)
           wx.showToast({title:error?.errMsg||'结算页打开失败，请重试',icon:'none'})
         },
       })

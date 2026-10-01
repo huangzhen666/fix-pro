@@ -1,5 +1,6 @@
 import { listWorkOrders, type WorkOrder } from '../../services/work-orders'
 import { workOrderStatusLabel } from '../../services/status'
+import { acceptanceReminder } from '../../services/appointment'
 
 const weekNames = ['日', '一', '二', '三', '四', '五', '六']
 
@@ -21,7 +22,10 @@ Page({
     this.setData({ loading: true, error: '' })
     try {
       const result = await listWorkOrders()
-      this.setData({ items: (result.items ?? []).map(item => ({ ...item, statusText: workOrderStatusLabel(item.status), appointmentDateText: formatAppointmentDate(item.appointmentAt) })) })
+      this.setData({ items: (result.items ?? []).map(item => {
+        const reminder = acceptanceReminder(item.status, item.appointmentAt, item.appointmentSlot)
+        return { ...item, statusText: workOrderStatusLabel(item.status), appointmentDateText: formatAppointmentDate(item.appointmentAt), acceptanceExpired: reminder.expired, acceptanceReminder: reminder.message }
+      }) })
     } catch (error) {
       this.setData({ error: error instanceof Error ? error.message : '工单加载失败' })
     } finally {

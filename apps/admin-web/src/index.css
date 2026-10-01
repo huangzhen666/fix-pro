@@ -72,6 +72,66 @@ body {
   white-space: nowrap;
 }
 
+.order-list-page .order-quick-filters {
+  flex-wrap: nowrap;
+}
+
+.order-list-page .order-quick-filters .ant-btn {
+  width: 104px;
+}
+
+.work-order-table .ant-table-cell {
+  white-space: nowrap;
+}
+
+.work-order-table .ant-table-thead > tr > th {
+  padding: 11px 12px;
+  color: #4b5563;
+  font-weight: 600;
+}
+
+.work-order-table .ant-table-tbody > tr > td {
+  padding: 13px 12px;
+  vertical-align: middle;
+}
+
+.work-order-table .ant-tag {
+  margin-inline-end: 0;
+}
+
+.work-order-status {
+  max-width: 100%;
+}
+
+.work-order-fulfillment {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+  white-space: normal;
+}
+
+.work-order-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  color: #344054;
+  font-variant-numeric: tabular-nums;
+}
+
+.work-order-meta span {
+  white-space: nowrap;
+}
+
+.work-order-actions {
+  width: 100%;
+  justify-content: flex-start;
+}
+
+.work-order-actions .ant-btn-link {
+  padding-inline: 5px;
+}
+
 .login-shell {
   min-height: 100vh;
   display: grid;

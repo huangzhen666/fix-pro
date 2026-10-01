@@ -2,6 +2,8 @@ import { getCart, type Cart } from '../../services/cart'
 import { createOrder } from '../../services/orders'
 import { formatAddress, listAddresses, type CustomerAddress } from '../../services/addresses'
 import { ApiError } from '../../services/request'
+
+const checkoutItemsStorageKey = 'fixpro.checkoutCartItemIds'
 type AppointmentDateOption = { value: string; label: string; selected: boolean }
 type AppointmentSlotOption = { value: string; label: string; period: string; showPeriod: boolean; selected: boolean }
 
@@ -16,6 +18,13 @@ const slotDefinitions: Array<Pick<AppointmentSlotOption, 'value' | 'label' | 'pe
 ]
 
 const weekNames = ['日', '一', '二', '三', '四', '五', '六']
+
+function selectedCart(cart: Cart, itemIDs: string[] | null): Cart {
+  if (!itemIDs) return cart
+  const ids = new Set(itemIDs)
+  const items = cart.items.filter(item => ids.has(item.id))
+  return { ...cart, items, itemCount: items.reduce((total, item) => total + item.quantity, 0), totalAmount: items.reduce((total, item) => total + item.subtotal, 0) }
+}
 
 function pad(value: number) {
   return String(value).padStart(2, '0')
@@ -64,9 +73,13 @@ Page({
     submitting: false,
   },
   async onLoad() {
-    const [cart, addresses] = await Promise.all([getCart(), listAddresses()])
+    const storedItemIDs = wx.getStorageSync<unknown>(checkoutItemsStorageKey)
+    wx.removeStorageSync(checkoutItemsStorageKey)
+    const itemIDs = Array.isArray(storedItemIDs) ? storedItemIDs.filter((id): id is string => typeof id === 'string') : null
+    const [cartResult, addresses] = await Promise.all([getCart(), listAddresses()])
+    const cart = selectedCart(cartResult, itemIDs)
     if (!cart.items.length) {
-      wx.showToast({ title: '购物车为空', icon: 'none' })
+      wx.showToast({ title: itemIDs ? '所选服务已不在购物车中' : '购物车为空', icon: 'none' })
       setTimeout(() => wx.navigateBack(), 500)
       return
     }
@@ -121,7 +134,7 @@ Page({
     this.setData({ submitting: true })
     const key = `${Date.now()}-${Math.random().toString(16).slice(2)}`
     try {
-      const result = await createOrder({ contactName, contactMobile, serviceAddress, appointmentDate, appointmentSlot }, key)
+      const result = await createOrder({ contactName, contactMobile, serviceAddress, appointmentDate, appointmentSlot, cartItemIds: this.data.cart.items.map(item => item.id) }, key)
       wx.redirectTo({ url: `/pages/checkout/result?orderNo=${result.orderNo}&status=${result.status}&amount=${result.totalAmount}` })
     } catch (e: any) {
       if (e instanceof ApiError && e.code === 'CART_SKU_CHANGED') {

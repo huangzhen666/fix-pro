@@ -164,6 +164,24 @@ func (h *Handler) Reassign(w http.ResponseWriter, r *http.Request) {
 	}
 	httpx.Success(w, r, map[string]bool{"updated": true})
 }
+func (h *Handler) Recall(w http.ResponseWriter, r *http.Request) {
+	p, _ := auth.From(r.Context())
+	id, err := httpx.PathID(r, "id")
+	if err != nil {
+		httpx.Failure(w, r, err)
+		return
+	}
+	var req RecallRequest
+	if err = httpx.DecodeJSON(w, r, &req); err != nil {
+		httpx.Failure(w, r, err)
+		return
+	}
+	if err = h.service.Recall(r.Context(), p, id, req); err != nil {
+		httpx.Failure(w, r, err)
+		return
+	}
+	httpx.Success(w, r, map[string]bool{"updated": true})
+}
 func (h *Handler) Reschedule(w http.ResponseWriter, r *http.Request) {
 	p, _ := auth.From(r.Context())
 	id, err := httpx.PathID(r, "id")

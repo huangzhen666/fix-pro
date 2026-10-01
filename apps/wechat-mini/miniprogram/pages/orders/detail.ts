@@ -78,6 +78,11 @@ function formatDateTime(value?: string) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
+function evidenceLabel(item: CustomerWorkOrder['evidence'][number]) {
+  const stage = item.stage === 'BEFORE' ? '施工前' : item.stage === 'AFTER' ? '施工后' : item.stage
+  return item.itemName && item.unitNo ? `${item.itemName} · 第${item.unitNo}个 · ${stage}` : stage
+}
+
 function firstEvent(events: CustomerTimelineEvent[], codes: Set<string>) {
   return events.find(event => codes.has(event.code))
 }
@@ -138,7 +143,7 @@ Page({
       const workOrders = await Promise.all(detail.workOrders.map(async work => {
         const [timeline, evidence] = await Promise.all([
           getWorkOrderTimeline(work.id).catch(() => ({ items: [] as CustomerTimelineEvent[] })),
-          Promise.all(work.evidence.map(async item => ({ ...item, url: await download(item.url) }))),
+          Promise.all(work.evidence.map(async item => ({ ...item, url: await download(item.url), label: evidenceLabel(item) }))),
         ])
         const flow = buildFlow(work, detail.createdAt, timeline.items)
         const timelineSteps = flow.steps.filter(step => step.visible).map((step, index, visibleSteps) => ({ ...step, last: index === visibleSteps.length - 1 }))

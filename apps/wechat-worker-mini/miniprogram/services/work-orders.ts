@@ -10,6 +10,8 @@ export interface WorkOrder {
   appointmentSlot?: string
   appointmentSlotLabel?: string
   appointmentDateText?: string
+  acceptanceExpired?: boolean
+  acceptanceReminder?: string
   customerName?: string
   customerMobile?: string
   serviceAddress?: string
@@ -26,6 +28,13 @@ export interface WorkOrderItem {
   quantity: number
   customerNote?: string
   customerMedia: WorkOrderMedia[]
+	 evidencePairs: EvidencePair[]
+}
+
+export interface EvidencePair {
+  unitNo: number
+  before?: Evidence
+  after?: Evidence
 }
 
 export interface WorkOrderMedia {
@@ -64,8 +73,8 @@ export function uploadEvidence(id: string, filePath: string): Promise<{ id: stri
   return upload(`/api/v1/worker/work-orders/${id}/media/images`, filePath)
 }
 
-export function bindEvidence(id: string, mediaId: string, stage: Evidence['stage'], version: number): Promise<{ updated: boolean }> {
-  return request({ url: `/api/v1/worker/work-orders/${id}/evidence`, method: 'POST', data: { mediaId: Number(mediaId), stage, customerVisible: true, version } })
+export function bindEvidence(id: string, mediaId: string, stage: Evidence['stage'], workOrderItemId: string, unitNo: number, version: number): Promise<{ updated: boolean }> {
+  return request({ url: `/api/v1/worker/work-orders/${id}/evidence`, method: 'POST', data: { mediaId: Number(mediaId), stage, workOrderItemId: Number(workOrderItemId), unitNo, customerVisible: true, version } })
 }
 
 export function submitCompletion(id: string, completionSummary: string, version: number): Promise<{ updated: boolean }> {

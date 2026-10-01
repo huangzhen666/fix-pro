@@ -7,6 +7,7 @@
       <view class="row"><text class="title">{{item.workOrderNo}}</text><text class="status">{{item.statusText}}</text></view>
       <view class="muted">订单：{{item.orderNo}}</view>
       <view wx:if="{{item.appointmentAt}}" class="muted">预约：{{item.appointmentDateText || item.appointmentAt}} {{item.appointmentSlotLabel || ''}}</view>
+      <view wx:if="{{item.acceptanceReminder}}" class="deadline {{item.acceptanceExpired ? 'deadline-expired' : ''}}">{{item.acceptanceReminder}}</view>
       <view wx:if="{{item.serviceAddress}}" class="muted">地址：{{item.serviceAddress}}</view>
     </view>
   </view>

@@ -23,6 +23,40 @@ type Service struct {
 
 func New(db *sql.DB, ms *media.Service) *Service { return &Service{db: db, media: ms} }
 
+func (s *Service) syncCustomerOrderStatus(ctx context.Context, tx *sql.Tx, orgID, orderID int64) error {
+	rows, err := tx.QueryContext(ctx, `SELECT status,COALESCE(customer_acceptance_status,'') FROM work_order WHERE org_id=$1 AND order_id=$2`, orgID, orderID)
+	if err != nil {
+		return err
+	}
+	states := []workOrderRollupState{}
+	for rows.Next() {
+		var state workOrderRollupState
+		if err = rows.Scan(&state.status, &state.customerAcceptanceStatus); err != nil {
+			rows.Close()
+			return err
+		}
+		states = append(states, state)
+	}
+	if err = rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	rows.Close()
+	next := rollupOrderStates(states)
+	var previous string
+	if err = tx.QueryRowContext(ctx, `SELECT status FROM customer_order WHERE org_id=$1 AND id=$2 FOR UPDATE`, orgID, orderID).Scan(&previous); err != nil {
+		return err
+	}
+	if previous == next {
+		return nil
+	}
+	if _, err = tx.ExecContext(ctx, `UPDATE customer_order SET status=$1,version=version+1,updated_at=CURRENT_TIMESTAMP(3),completed_at=CASE WHEN $4::boolean THEN CURRENT_TIMESTAMP(3) ELSE completed_at END WHERE org_id=$2 AND id=$3`, next, orgID, orderID, next == OrderCompleted); err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO order_status_history(org_id,order_id,from_status,to_status,event_code,operator_type,operator_id,operator_name) VALUES($1,$2,$3,$4,'ORDER_ROLLED_UP','SYSTEM',0,'system')`, orgID, orderID, previous, next)
+	return err
+}
+
 type ConfirmRequest struct {
 	Version  int    `json:"version"`
 	Priority string `json:"priority"`
@@ -88,6 +122,9 @@ type AdminEvidence struct {
 	ID              string    `json:"id"`
 	MediaID         string    `json:"mediaId"`
 	Stage           string    `json:"stage"`
+	WorkOrderItemID string    `json:"workOrderItemId,omitempty"`
+	UnitNo          int       `json:"unitNo,omitempty"`
+	ItemName        string    `json:"itemName,omitempty"`
 	CustomerVisible bool      `json:"customerVisible"`
 	MediaType       string    `json:"mediaType"`
 	ContentType     string    `json:"contentType"`
@@ -149,7 +186,7 @@ func (s *Service) AdminWorkOrderDetail(ctx context.Context, p auth.Principal, id
 	var wid int64
 	var aid sql.NullInt64
 	var orderID int64
-	if err := s.db.QueryRowContext(ctx, `SELECT w.id,w.order_id,w.work_order_no,o.order_no,w.status,w.priority,w.assignee_id,COALESCE(e.display_name,''),w.appointment_at,COALESCE(w.appointment_slot,''),o.service_address,o.contact_name,o.contact_mobile,COALESCE(w.completion_summary,''),COALESCE(w.review_note,''),w.version,w.accepted_at,w.arrived_at,w.started_at,w.completion_submitted_at,w.reviewed_at,w.finished_at,COALESCE(w.visit_status,''),COALESCE(w.customer_acceptance_status,''),COALESCE(w.customer_acceptance_source,''),w.customer_acceptance_at,COALESCE(w.internal_review_status,''),COALESCE(w.closure_status,''),COALESCE(w.completion_outcome,''),w.completion_submission_at,w.closed_at FROM work_order w JOIN customer_order o ON o.org_id=w.org_id AND o.id=w.order_id LEFT JOIN employee_account e ON e.org_id=w.org_id AND e.id=w.assignee_id WHERE w.org_id=$1 AND w.id=$2`, p.OrgID, id).Scan(&wid, &orderID, &out.WorkOrderNo, &out.OrderNo, &out.Status, &out.Priority, &aid, &out.AssigneeName, &out.AppointmentAt, &out.AppointmentSlot, &out.ServiceAddress, &out.ContactName, &out.ContactMobile, &out.CompletionSummary, &out.ReviewNote, &out.Version, &out.AcceptedAt, &out.ArrivedAt, &out.StartedAt, &out.CompletionSubmittedAt, &out.ReviewedAt, &out.FinishedAt, &out.VisitStatus, &out.CustomerAcceptanceStatus, &out.CustomerAcceptanceSource, &out.CustomerAcceptanceAt, &out.InternalReviewStatus, &out.ClosureStatus, &out.CompletionOutcome, &out.CompletionSubmissionAt, &out.ClosedAt); err == sql.ErrNoRows {
+	if err := s.db.QueryRowContext(ctx, `SELECT w.id,w.order_id,w.work_order_no,o.order_no,w.status,w.priority,w.assignee_id,COALESCE(e.display_name,''),COALESCE(w.appointment_at,o.appointment_at),CASE WHEN w.appointment_at IS NULL THEN COALESCE(o.appointment_slot,'') ELSE COALESCE(w.appointment_slot,'') END,o.service_address,o.contact_name,o.contact_mobile,COALESCE(w.completion_summary,''),COALESCE(w.review_note,''),w.version,w.accepted_at,w.arrived_at,w.started_at,w.completion_submitted_at,w.reviewed_at,w.finished_at,COALESCE(w.visit_status,''),COALESCE(w.customer_acceptance_status,''),COALESCE(w.customer_acceptance_source,''),w.customer_acceptance_at,COALESCE(w.internal_review_status,''),COALESCE(w.closure_status,''),COALESCE(w.completion_outcome,''),w.completion_submission_at,w.closed_at FROM work_order w JOIN customer_order o ON o.org_id=w.org_id AND o.id=w.order_id LEFT JOIN employee_account e ON e.org_id=w.org_id AND e.id=w.assignee_id WHERE w.org_id=$1 AND w.id=$2`, p.OrgID, id).Scan(&wid, &orderID, &out.WorkOrderNo, &out.OrderNo, &out.Status, &out.Priority, &aid, &out.AssigneeName, &out.AppointmentAt, &out.AppointmentSlot, &out.ServiceAddress, &out.ContactName, &out.ContactMobile, &out.CompletionSummary, &out.ReviewNote, &out.Version, &out.AcceptedAt, &out.ArrivedAt, &out.StartedAt, &out.CompletionSubmittedAt, &out.ReviewedAt, &out.FinishedAt, &out.VisitStatus, &out.CustomerAcceptanceStatus, &out.CustomerAcceptanceSource, &out.CustomerAcceptanceAt, &out.InternalReviewStatus, &out.ClosureStatus, &out.CompletionOutcome, &out.CompletionSubmissionAt, &out.ClosedAt); err == sql.ErrNoRows {
 		return out, httpx.E("WORK_ORDER_NOT_FOUND", "工单不存在", 404)
 	} else if err != nil {
 		return out, err
@@ -160,17 +197,20 @@ func (s *Service) AdminWorkOrderDetail(ctx context.Context, p auth.Principal, id
 		out.AssigneeID = fmt.Sprint(aid.Int64)
 	}
 	out.Evidence = []AdminEvidence{}
-	rows, err := s.db.QueryContext(ctx, `SELECT e.id,e.media_id,e.stage,e.customer_visible,m.media_type,m.content_type,e.created_at FROM work_order_evidence e JOIN media_asset m ON m.org_id=e.org_id AND m.id=e.media_id WHERE e.org_id=$1 AND e.work_order_id=$2 ORDER BY e.created_at,e.id`, p.OrgID, id)
+	rows, err := s.db.QueryContext(ctx, `SELECT e.id,e.media_id,e.stage,COALESCE(e.work_order_item_id,0),COALESCE(e.unit_no,0),COALESCE(oi.sku_name_snapshot,''),e.customer_visible,m.media_type,m.content_type,e.created_at FROM work_order_evidence e JOIN media_asset m ON m.org_id=e.org_id AND m.id=e.media_id LEFT JOIN work_order_item wi ON wi.org_id=e.org_id AND wi.id=e.work_order_item_id LEFT JOIN order_item oi ON oi.org_id=wi.org_id AND oi.id=wi.order_item_id WHERE e.org_id=$1 AND e.work_order_id=$2 ORDER BY e.work_order_item_id NULLS LAST,e.unit_no,e.stage,e.created_at,e.id`, p.OrgID, id)
 	if err != nil {
 		return out, err
 	}
 	for rows.Next() {
-		var eid, mid int64
+		var eid, mid, itemID int64
 		var item AdminEvidence
-		if err = rows.Scan(&eid, &mid, &item.Stage, &item.CustomerVisible, &item.MediaType, &item.ContentType, &item.CreatedAt); err != nil {
+		if err = rows.Scan(&eid, &mid, &item.Stage, &itemID, &item.UnitNo, &item.ItemName, &item.CustomerVisible, &item.MediaType, &item.ContentType, &item.CreatedAt); err != nil {
 			return out, err
 		}
 		item.ID, item.MediaID = fmt.Sprint(eid), fmt.Sprint(mid)
+		if itemID > 0 {
+			item.WorkOrderItemID = fmt.Sprint(itemID)
+		}
 		item.URL = "/api/v1/admin/media/" + item.MediaID + "/content"
 		out.Evidence = append(out.Evidence, item)
 	}
@@ -217,12 +257,26 @@ type WorkerWorkOrderDetail struct {
 }
 
 type WorkerOrderItem struct {
-	ID            string             `json:"id"`
-	Name          string             `json:"name"`
-	Unit          string             `json:"unit"`
-	Quantity      int                `json:"quantity"`
-	CustomerNote  string             `json:"customerNote,omitempty"`
-	CustomerMedia []WorkerOrderMedia `json:"customerMedia"`
+	ID            string               `json:"id"`
+	Name          string               `json:"name"`
+	Unit          string               `json:"unit"`
+	Quantity      int                  `json:"quantity"`
+	CustomerNote  string               `json:"customerNote,omitempty"`
+	CustomerMedia []WorkerOrderMedia   `json:"customerMedia"`
+	EvidencePairs []WorkerEvidencePair `json:"evidencePairs"`
+}
+
+type WorkerEvidence struct {
+	ID      string `json:"id"`
+	MediaID string `json:"mediaId"`
+	Stage   string `json:"stage"`
+	URL     string `json:"url"`
+}
+
+type WorkerEvidencePair struct {
+	UnitNo int             `json:"unitNo"`
+	Before *WorkerEvidence `json:"before,omitempty"`
+	After  *WorkerEvidence `json:"after,omitempty"`
 }
 
 type WorkerOrderMedia struct {
@@ -245,20 +299,24 @@ func (s *Service) WorkerWorkOrder(ctx context.Context, p auth.Principal, id int6
 	out.AppointmentSlotLabel = appointmentSlotText(out.AppointmentSlot)
 	out.ID = fmt.Sprint(wid)
 	out.Items = []WorkerOrderItem{}
-	itemRows, err := s.db.QueryContext(ctx, `SELECT oi.id,oi.sku_name_snapshot,oi.unit_snapshot,oi.quantity,COALESCE(oi.fault_description,'') FROM work_order_item wi JOIN order_item oi ON oi.org_id=wi.org_id AND oi.id=wi.order_item_id WHERE wi.org_id=$1 AND wi.work_order_id=$2 ORDER BY oi.id`, p.OrgID, id)
+	itemRows, err := s.db.QueryContext(ctx, `SELECT wi.id,oi.id,oi.sku_name_snapshot,oi.unit_snapshot,oi.quantity,COALESCE(oi.fault_description,'') FROM work_order_item wi JOIN order_item oi ON oi.org_id=wi.org_id AND oi.id=wi.order_item_id WHERE wi.org_id=$1 AND wi.work_order_id=$2 ORDER BY oi.id`, p.OrgID, id)
 	if err != nil {
 		return out, err
 	}
 	for itemRows.Next() {
-		var itemID int64
+		var workOrderItemID, orderItemID int64
 		var item WorkerOrderItem
-		if err = itemRows.Scan(&itemID, &item.Name, &item.Unit, &item.Quantity, &item.CustomerNote); err != nil {
+		if err = itemRows.Scan(&workOrderItemID, &orderItemID, &item.Name, &item.Unit, &item.Quantity, &item.CustomerNote); err != nil {
 			itemRows.Close()
 			return out, err
 		}
-		item.ID = fmt.Sprint(itemID)
+		item.ID = fmt.Sprint(workOrderItemID)
 		item.CustomerMedia = []WorkerOrderMedia{}
-		mediaRows, mediaErr := s.db.QueryContext(ctx, `SELECT m.id,m.media_type FROM order_item_media om JOIN media_asset m ON m.org_id=om.org_id AND m.id=om.media_id AND m.status='READY' WHERE om.org_id=$1 AND om.order_item_id=$2 ORDER BY om.sort_order,om.id`, p.OrgID, itemID)
+		item.EvidencePairs = make([]WorkerEvidencePair, item.Quantity)
+		for index := range item.EvidencePairs {
+			item.EvidencePairs[index].UnitNo = index + 1
+		}
+		mediaRows, mediaErr := s.db.QueryContext(ctx, `SELECT m.id,m.media_type FROM order_item_media om JOIN media_asset m ON m.org_id=om.org_id AND m.id=om.media_id AND m.status='READY' WHERE om.org_id=$1 AND om.order_item_id=$2 ORDER BY om.sort_order,om.id`, p.OrgID, orderItemID)
 		if mediaErr != nil {
 			itemRows.Close()
 			return out, mediaErr
@@ -281,6 +339,36 @@ func (s *Service) WorkerWorkOrder(ctx context.Context, p auth.Principal, id int6
 			return out, err
 		}
 		mediaRows.Close()
+		evidenceRows, evidenceErr := s.db.QueryContext(ctx, `SELECT id,media_id,stage,unit_no FROM work_order_evidence WHERE org_id=$1 AND work_order_id=$2 AND work_order_item_id=$3 AND unit_no IS NOT NULL ORDER BY unit_no,stage,created_at,id`, p.OrgID, id, workOrderItemID)
+		if evidenceErr != nil {
+			itemRows.Close()
+			return out, evidenceErr
+		}
+		for evidenceRows.Next() {
+			var evidenceID, mediaID int64
+			var stage string
+			var unitNo int
+			if err = evidenceRows.Scan(&evidenceID, &mediaID, &stage, &unitNo); err != nil {
+				evidenceRows.Close()
+				itemRows.Close()
+				return out, err
+			}
+			if unitNo < 1 || unitNo > len(item.EvidencePairs) {
+				continue
+			}
+			evidence := &WorkerEvidence{ID: fmt.Sprint(evidenceID), MediaID: fmt.Sprint(mediaID), Stage: stage, URL: "/api/v1/worker/media/" + fmt.Sprint(mediaID) + "/content"}
+			if stage == "BEFORE" {
+				item.EvidencePairs[unitNo-1].Before = evidence
+			} else if stage == "AFTER" {
+				item.EvidencePairs[unitNo-1].After = evidence
+			}
+		}
+		if err = evidenceRows.Err(); err != nil {
+			evidenceRows.Close()
+			itemRows.Close()
+			return out, err
+		}
+		evidenceRows.Close()
 		out.Items = append(out.Items, item)
 	}
 	if err = itemRows.Err(); err != nil {
@@ -326,6 +414,10 @@ type RescheduleRequest struct {
 	AppointmentAt   time.Time `json:"appointmentAt"`
 	AppointmentSlot string    `json:"appointmentSlot"`
 	Version         int       `json:"version"`
+}
+type RecallRequest struct {
+	Reason  string `json:"reason"`
+	Version int    `json:"version"`
 }
 
 func (s *Service) Workers(ctx context.Context, orgID int64, status string) ([]Worker, error) {
@@ -423,7 +515,7 @@ func (s *Service) WorkOrders(ctx context.Context, orgID int64, status string, wo
 	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM work_order w JOIN customer_order o ON o.org_id=w.org_id AND o.id=w.order_id WHERE `+where, orgID, status, workerID, outcome, q).Scan(&out.Total); err != nil {
 		return out, err
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT w.id,w.work_order_no,w.order_id,o.order_no,w.status,COALESCE(w.customer_acceptance_status,''),w.priority,w.assignee_id,COALESCE(e.display_name,''),w.appointment_at,COALESCE(w.appointment_slot,''),w.version,COALESCE(w.completion_outcome,'') FROM work_order w JOIN customer_order o ON o.org_id=w.org_id AND o.id=w.order_id LEFT JOIN employee_account e ON e.org_id=w.org_id AND e.id=w.assignee_id WHERE `+where+` ORDER BY w.created_at DESC LIMIT $6 OFFSET $7`, orgID, status, workerID, outcome, q, size, (page-1)*size)
+	rows, err := s.db.QueryContext(ctx, `SELECT w.id,w.work_order_no,w.order_id,o.order_no,w.status,COALESCE(w.customer_acceptance_status,''),w.priority,w.assignee_id,COALESCE(e.display_name,''),COALESCE(w.appointment_at,o.appointment_at),CASE WHEN w.appointment_at IS NULL THEN COALESCE(o.appointment_slot,'') ELSE COALESCE(w.appointment_slot,'') END,w.version,COALESCE(w.completion_outcome,'') FROM work_order w JOIN customer_order o ON o.org_id=w.org_id AND o.id=w.order_id LEFT JOIN employee_account e ON e.org_id=w.org_id AND e.id=w.assignee_id WHERE `+where+` ORDER BY w.created_at DESC LIMIT $6 OFFSET $7`, orgID, status, workerID, outcome, q, size, (page-1)*size)
 	if err != nil {
 		return out, err
 	}
@@ -454,15 +546,31 @@ func validAppointmentSlot(slot string) bool {
 	return false
 }
 
+var shanghaiLocation = time.FixedZone("Asia/Shanghai", 8*60*60)
+
+func appointmentEndAt(appointment time.Time, slot string) (time.Time, bool) {
+	if !validAppointmentSlot(slot) {
+		return time.Time{}, false
+	}
+	date := appointment.In(shanghaiLocation)
+	hour := int(slot[0]-'0')*10 + int(slot[1]-'0')
+	return time.Date(date.Year(), date.Month(), date.Day(), hour, 0, 0, 0, shanghaiLocation).Add(2 * time.Hour), true
+}
+
+func acceptanceExpired(appointment time.Time, slot string, now time.Time) bool {
+	deadline, ok := appointmentEndAt(appointment, slot)
+	return ok && !now.Before(deadline)
+}
+
 func (s *Service) assign(ctx context.Context, p auth.Principal, id, workerID int64, appointment time.Time, slot, reason, event string, version int, reassign bool) error {
 	if p.Role != "ADMIN" {
 		return httpx.E("FORBIDDEN", "无权派单", 403)
 	}
-	if appointment.Before(time.Now().UTC()) {
-		return httpx.E("APPOINTMENT_REQUIRED", "预约时间必须晚于当前时间", 400)
-	}
 	if !validAppointmentSlot(slot) {
 		return httpx.E("APPOINTMENT_SLOT_INVALID", "预约时间段必须为08:00至22:00每两小时一个时段", 400)
+	}
+	if acceptanceExpired(appointment, slot, time.Now()) {
+		return httpx.E("APPOINTMENT_EXPIRED", "预约时间段已结束，请先重新预约后再派单", 409)
 	}
 	if reassign && strings.TrimSpace(reason) == "" {
 		return httpx.E("REASON_REQUIRED", "改派原因必填", 400)
@@ -547,7 +655,7 @@ func (s *Service) assign(ctx context.Context, p auth.Principal, id, workerID int
 func (s *Service) Assign(ctx context.Context, p auth.Principal, id int64, req AssignRequest) error {
 	var at sql.NullTime
 	var slot string
-	if err := s.db.QueryRowContext(ctx, `SELECT appointment_at,COALESCE(appointment_slot,'') FROM work_order WHERE org_id=$1 AND id=$2`, p.OrgID, id).Scan(&at, &slot); err == sql.ErrNoRows {
+	if err := s.db.QueryRowContext(ctx, `SELECT COALESCE(w.appointment_at,o.appointment_at),CASE WHEN w.appointment_at IS NULL THEN COALESCE(o.appointment_slot,'') ELSE COALESCE(w.appointment_slot,'') END FROM work_order w JOIN customer_order o ON o.org_id=w.org_id AND o.id=w.order_id WHERE w.org_id=$1 AND w.id=$2`, p.OrgID, id).Scan(&at, &slot); err == sql.ErrNoRows {
 		return httpx.E("WORK_ORDER_NOT_FOUND", "工单不存在", 404)
 	} else if err != nil {
 		return err
@@ -560,15 +668,64 @@ func (s *Service) Assign(ctx context.Context, p auth.Principal, id int64, req As
 func (s *Service) Reassign(ctx context.Context, p auth.Principal, id int64, req ReassignRequest) error {
 	return s.assign(ctx, p, id, req.WorkerID, req.AppointmentAt, req.AppointmentSlot, req.Reason, "REASSIGNED", req.Version, true)
 }
+
+func (s *Service) Recall(ctx context.Context, p auth.Principal, id int64, req RecallRequest) error {
+	if p.Role != "ADMIN" {
+		return httpx.E("FORBIDDEN", "无权收回派单", 403)
+	}
+	reason := strings.TrimSpace(req.Reason)
+	if reason == "" {
+		return httpx.E("REASON_REQUIRED", "收回原因必填", 400)
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var assignee sql.NullInt64
+	var appointment sql.NullTime
+	var slot, status string
+	var version int
+	if err = tx.QueryRowContext(ctx, `SELECT w.assignee_id,COALESCE(w.appointment_at,o.appointment_at),CASE WHEN w.appointment_at IS NULL THEN COALESCE(o.appointment_slot,'') ELSE COALESCE(w.appointment_slot,'') END,w.status,w.version FROM work_order w JOIN customer_order o ON o.org_id=w.org_id AND o.id=w.order_id WHERE w.org_id=$1 AND w.id=$2 FOR UPDATE OF w`, p.OrgID, id).Scan(&assignee, &appointment, &slot, &status, &version); err == sql.ErrNoRows {
+		return httpx.E("WORK_ORDER_NOT_FOUND", "工单不存在", 404)
+	} else if err != nil {
+		return err
+	}
+	if version != req.Version {
+		return httpx.E("RESOURCE_VERSION_CONFLICT", "工单已被修改", 409)
+	}
+	if status != WorkOrderPendingAccept {
+		return httpx.E("WORK_ORDER_STATUS_CONFLICT", "当前状态不能收回派单", 409)
+	}
+	var appointmentValue any
+	if appointment.Valid {
+		appointmentValue = appointment.Time
+	}
+	if _, err = tx.ExecContext(ctx, `UPDATE work_order SET status=$1,assignee_id=NULL,appointment_at=$2,appointment_slot=$3,version=version+1 WHERE org_id=$4 AND id=$5 AND version=$6`, WorkOrderPendingDispatch, appointmentValue, slot, p.OrgID, id, req.Version); err != nil {
+		return err
+	}
+	var assigneeValue any
+	if assignee.Valid {
+		assigneeValue = assignee.Int64
+	}
+	if _, err = tx.ExecContext(ctx, `INSERT INTO work_order_assignment_history(org_id,work_order_id,from_assignee_id,to_assignee_id,from_appointment_at,to_appointment_at,event_code,operator_type,operator_id,operator_name,reason) VALUES($1,$2,$3,NULL,$4,$4,'ADMIN_RECALLED','ADMIN',$5,$6,$7)`, p.OrgID, id, assigneeValue, appointmentValue, p.SubjectID, p.Name, reason); err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, `INSERT INTO work_order_status_history(org_id,work_order_id,from_status,to_status,event_code,operator_type,operator_id,operator_name,reason) VALUES($1,$2,$3,$4,'ADMIN_RECALLED','ADMIN',$5,$6,$7)`, p.OrgID, id, status, WorkOrderPendingDispatch, p.SubjectID, p.Name, reason); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 func (s *Service) Reschedule(ctx context.Context, p auth.Principal, id int64, req RescheduleRequest) error {
 	if p.Role != "ADMIN" {
 		return httpx.E("FORBIDDEN", "无权改期", 403)
 	}
-	if req.AppointmentAt.Before(time.Now().UTC()) {
-		return httpx.E("APPOINTMENT_REQUIRED", "预约时间必须晚于当前时间", 400)
-	}
 	if !validAppointmentSlot(req.AppointmentSlot) {
 		return httpx.E("APPOINTMENT_SLOT_INVALID", "预约时间段必须为08:00至22:00每两小时一个时段", 400)
+	}
+	if acceptanceExpired(req.AppointmentAt, req.AppointmentSlot, time.Now()) {
+		return httpx.E("APPOINTMENT_EXPIRED", "预约时间段已结束，请选择新的预约时间", 400)
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -588,7 +745,7 @@ func (s *Service) Reschedule(ctx context.Context, p auth.Principal, id int64, re
 	if v != req.Version {
 		return httpx.E("RESOURCE_VERSION_CONFLICT", "工单已被修改", 409)
 	}
-	if status != WorkOrderPendingAccept && status != WorkOrderPendingArrival {
+	if status != WorkOrderPendingDispatch && status != WorkOrderPendingAccept && status != WorkOrderPendingArrival {
 		return httpx.E("WORK_ORDER_STATUS_CONFLICT", "当前状态不能改期", 409)
 	}
 	if worker.Valid {
@@ -630,7 +787,7 @@ func (s *Service) WorkerReschedule(ctx context.Context, p auth.Principal, id int
 	if !req.CommunicationConfirmed {
 		return httpx.E("COMMUNICATION_CONFIRMATION_REQUIRED", "请确认已与客户沟通改期", 400)
 	}
-	if req.AppointmentAt.Before(time.Now().UTC()) || !validAppointmentSlot(req.AppointmentSlot) {
+	if !validAppointmentSlot(req.AppointmentSlot) || acceptanceExpired(req.AppointmentAt, req.AppointmentSlot, time.Now()) {
 		return httpx.E("APPOINTMENT_SLOT_INVALID", "预约时间段不合法", 400)
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -691,7 +848,7 @@ func (s *Service) WorkerReturn(ctx context.Context, p auth.Principal, id int64, 
 	if status != WorkOrderPendingAccept && status != WorkOrderPendingArrival {
 		return httpx.E("WORK_ORDER_STATUS_CONFLICT", "当前状态不能退回", 409)
 	}
-	if _, err = tx.ExecContext(ctx, `UPDATE work_order SET status=$1,assignee_id=NULL,appointment_at=NULL,appointment_slot=NULL,version=version+1 WHERE org_id=$2 AND id=$3 AND version=$4`, WorkOrderPendingDispatch, p.OrgID, id, version); err != nil {
+	if _, err = tx.ExecContext(ctx, `UPDATE work_order SET status=$1,assignee_id=NULL,version=version+1 WHERE org_id=$2 AND id=$3 AND version=$4`, WorkOrderPendingDispatch, p.OrgID, id, version); err != nil {
 		return err
 	}
 	_, err = tx.ExecContext(ctx, `INSERT INTO work_order_status_history(org_id,work_order_id,from_status,to_status,event_code,operator_type,operator_id,operator_name,reason) VALUES($1,$2,$3,$4,'WORKER_RETURNED','WORKER',$5,$6,$7)`, p.OrgID, id, status, WorkOrderPendingDispatch, p.SubjectID, p.Name, reason)
@@ -742,9 +899,10 @@ func (s *Service) WorkerCommand(ctx context.Context, p auth.Principal, id int64,
 	if err != nil {
 		return err
 	}
-	var status string
+	var status, appointmentSlot string
+	var appointment sql.NullTime
 	var version int
-	if err = tx.QueryRowContext(ctx, `SELECT status,version FROM work_order WHERE org_id=$1 AND id=$2 AND assignee_id=$3 FOR UPDATE`, p.OrgID, id, p.SubjectID).Scan(&status, &version); err == sql.ErrNoRows {
+	if err = tx.QueryRowContext(ctx, `SELECT w.status,w.version,COALESCE(w.appointment_at,o.appointment_at),CASE WHEN w.appointment_at IS NULL THEN COALESCE(o.appointment_slot,'') ELSE COALESCE(w.appointment_slot,'') END FROM work_order w JOIN customer_order o ON o.org_id=w.org_id AND o.id=w.order_id WHERE w.org_id=$1 AND w.id=$2 AND w.assignee_id=$3 FOR UPDATE OF w`, p.OrgID, id, p.SubjectID).Scan(&status, &version, &appointment, &appointmentSlot); err == sql.ErrNoRows {
 		return httpx.E("WORK_ORDER_NOT_ASSIGNED_TO_YOU", "工单不属于当前师傅", 403)
 	}
 	if err != nil {
@@ -759,6 +917,12 @@ func (s *Service) WorkerCommand(ctx context.Context, p auth.Principal, id int64,
 		if status != WorkOrderPendingAccept {
 			return httpx.E("WORK_ORDER_STATUS_CONFLICT", "当前状态不能接单", 409)
 		}
+		if !appointment.Valid || !validAppointmentSlot(appointmentSlot) {
+			return httpx.E("APPOINTMENT_REQUIRED", "预约时间段未确定，不能接单", 409)
+		}
+		if acceptanceExpired(appointment.Time, appointmentSlot, time.Now()) {
+			return httpx.E("WORK_ORDER_ACCEPTANCE_EXPIRED", "预约时间段已结束，不能接单", 409)
+		}
 		to = WorkOrderPendingArrival
 	case "REJECT":
 		if status != WorkOrderPendingAccept {
@@ -772,10 +936,16 @@ func (s *Service) WorkerCommand(ctx context.Context, p auth.Principal, id int64,
 		if status != WorkOrderPendingArrival {
 			return httpx.E("WORK_ORDER_STATUS_CONFLICT", "当前状态不能标记到达", 409)
 		}
+		if !appointment.Valid || acceptanceExpired(appointment.Time, appointmentSlot, time.Now()) {
+			return httpx.E("WORK_ORDER_SERVICE_EXPIRED", "预约时间段已结束，工单将由系统自动收回", 409)
+		}
 		to = WorkOrderArrived
 	case "START":
 		if status != WorkOrderArrived {
 			return httpx.E("WORK_ORDER_STATUS_CONFLICT", "当前状态不能开始服务", 409)
+		}
+		if !appointment.Valid || acceptanceExpired(appointment.Time, appointmentSlot, time.Now()) {
+			return httpx.E("WORK_ORDER_SERVICE_EXPIRED", "预约时间段已结束，工单将由系统自动收回", 409)
 		}
 		to = WorkOrderInService
 	default:
@@ -1016,6 +1186,8 @@ type CompletionRequest struct {
 type EvidenceRequest struct {
 	MediaID         int64  `json:"mediaId"`
 	Stage           string `json:"stage"`
+	WorkOrderItemID int64  `json:"workOrderItemId"`
+	UnitNo          int    `json:"unitNo"`
 	CustomerVisible *bool  `json:"customerVisible"`
 	Version         int    `json:"version"`
 }
@@ -1036,6 +1208,7 @@ type CustomerOrderSummary struct {
 	WorkOrderTotal    int       `json:"workOrderTotal"`
 	WorkOrderFinished int       `json:"workOrderFinished"`
 	CreatedAt         time.Time `json:"createdAt"`
+	StatusUpdatedAt   time.Time `json:"statusUpdatedAt"`
 }
 type CustomerOrderPage struct {
 	Items    []CustomerOrderSummary `json:"items"`
@@ -1058,11 +1231,14 @@ type CustomerWorkOrder struct {
 	Evidence                 []CustomerEvidence `json:"evidence"`
 }
 type CustomerEvidence struct {
-	ID        string    `json:"id"`
-	MediaID   string    `json:"mediaId"`
-	Stage     string    `json:"stage"`
-	URL       string    `json:"url"`
-	CreatedAt time.Time `json:"createdAt"`
+	ID              string    `json:"id"`
+	MediaID         string    `json:"mediaId"`
+	Stage           string    `json:"stage"`
+	WorkOrderItemID string    `json:"workOrderItemId,omitempty"`
+	UnitNo          int       `json:"unitNo,omitempty"`
+	ItemName        string    `json:"itemName,omitempty"`
+	URL             string    `json:"url"`
+	CreatedAt       time.Time `json:"createdAt"`
 }
 type CustomerOrderDetail struct {
 	ID                   string              `json:"id"`
@@ -1102,7 +1278,7 @@ func (s *Service) CustomerOrders(ctx context.Context, p auth.Principal, status s
 	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM customer_order WHERE org_id=$1 AND customer_id=$2 AND ($3='' OR status=$3)`, p.OrgID, p.SubjectID, status).Scan(&out.Total); err != nil {
 		return out, err
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT o.id,o.order_no,o.status,COALESCE(o.cancel_reason,''),o.total_amount,o.item_count,o.created_at,COUNT(w.id),COUNT(w.id) FILTER (WHERE w.status='FINISHED'),COUNT(w.id) FILTER (WHERE COALESCE(w.customer_acceptance_status,'') IN ('MANUAL_ACCEPTED','AUTO_ACCEPTED')) FROM customer_order o LEFT JOIN work_order w ON w.org_id=o.org_id AND w.order_id=o.id WHERE o.org_id=$1 AND o.customer_id=$2 AND ($3='' OR o.status=$3) GROUP BY o.id ORDER BY o.created_at DESC LIMIT $4 OFFSET $5`, p.OrgID, p.SubjectID, status, size, (page-1)*size)
+	rows, err := s.db.QueryContext(ctx, `SELECT o.id,o.order_no,o.status,COALESCE(o.cancel_reason,''),o.total_amount,o.item_count,o.created_at,COALESCE(MAX(w.customer_acceptance_at),o.updated_at),COUNT(w.id),COUNT(w.id) FILTER (WHERE w.status='FINISHED'),COUNT(w.id) FILTER (WHERE COALESCE(w.customer_acceptance_status,'') IN ('MANUAL_ACCEPTED','AUTO_ACCEPTED')) FROM customer_order o LEFT JOIN work_order w ON w.org_id=o.org_id AND w.order_id=o.id WHERE o.org_id=$1 AND o.customer_id=$2 AND ($3='' OR o.status=$3) GROUP BY o.id ORDER BY o.created_at DESC LIMIT $4 OFFSET $5`, p.OrgID, p.SubjectID, status, size, (page-1)*size)
 	if err != nil {
 		return out, err
 	}
@@ -1111,7 +1287,7 @@ func (s *Service) CustomerOrders(ctx context.Context, p auth.Principal, status s
 		var id int64
 		var acceptedWorkOrderTotal int
 		var x CustomerOrderSummary
-		if err = rows.Scan(&id, &x.OrderNo, &x.Status, &x.CancelReason, &x.TotalAmount, &x.ItemCount, &x.CreatedAt, &x.WorkOrderTotal, &x.WorkOrderFinished, &acceptedWorkOrderTotal); err != nil {
+		if err = rows.Scan(&id, &x.OrderNo, &x.Status, &x.CancelReason, &x.TotalAmount, &x.ItemCount, &x.CreatedAt, &x.StatusUpdatedAt, &x.WorkOrderTotal, &x.WorkOrderFinished, &acceptedWorkOrderTotal); err != nil {
 			return out, err
 		}
 		x.ID = fmt.Sprint(id)
@@ -1120,6 +1296,7 @@ func (s *Service) CustomerOrders(ctx context.Context, p auth.Principal, status s
 			x.StatusText = "商家已打回"
 		}
 		if x.WorkOrderTotal > 0 && acceptedWorkOrderTotal == x.WorkOrderTotal {
+			x.Status = OrderCompleted
 			x.StatusText = statusText(OrderCompleted)
 			x.WorkOrderFinished = x.WorkOrderTotal
 		}
@@ -1150,7 +1327,7 @@ func (s *Service) CustomerOrder(ctx context.Context, p auth.Principal, id int64)
 	}
 	out.AppointmentSlotLabel = appointmentSlotText(out.AppointmentSlot)
 	out.WorkOrders = []CustomerWorkOrder{}
-	rows, err := s.db.QueryContext(ctx, `SELECT w.id,w.work_order_no,w.status,COALESCE(w.customer_acceptance_status,''),COALESCE(e.display_name,''),w.appointment_at,COALESCE(w.appointment_slot,''),COALESCE(w.completion_summary,''),w.version FROM work_order w LEFT JOIN employee_account e ON e.org_id=w.org_id AND e.id=w.assignee_id WHERE w.org_id=$1 AND w.order_id=$2 ORDER BY w.id`, p.OrgID, id)
+	rows, err := s.db.QueryContext(ctx, `SELECT w.id,w.work_order_no,w.status,COALESCE(w.customer_acceptance_status,''),COALESCE(e.display_name,''),COALESCE(w.appointment_at,o.appointment_at),CASE WHEN w.appointment_at IS NULL THEN COALESCE(o.appointment_slot,'') ELSE COALESCE(w.appointment_slot,'') END,COALESCE(w.completion_summary,''),w.version FROM work_order w JOIN customer_order o ON o.org_id=w.org_id AND o.id=w.order_id LEFT JOIN employee_account e ON e.org_id=w.org_id AND e.id=w.assignee_id WHERE w.org_id=$1 AND w.order_id=$2 ORDER BY w.id`, p.OrgID, id)
 	if err != nil {
 		return out, err
 	}
@@ -1165,19 +1342,22 @@ func (s *Service) CustomerOrder(ctx context.Context, p auth.Principal, id int64)
 		x.AppointmentSlotLabel = appointmentSlotText(x.AppointmentSlot)
 		x.StatusText = statusText(x.Status)
 		x.Evidence = []CustomerEvidence{}
-		ers, ee := s.db.QueryContext(ctx, `SELECT e.id,e.media_id,e.stage,e.created_at FROM work_order_evidence e WHERE e.org_id=$1 AND e.work_order_id=$2 AND e.customer_visible=true ORDER BY e.created_at`, p.OrgID, wid)
+		ers, ee := s.db.QueryContext(ctx, `SELECT e.id,e.media_id,e.stage,COALESCE(e.work_order_item_id,0),COALESCE(e.unit_no,0),COALESCE(oi.sku_name_snapshot,''),e.created_at FROM work_order_evidence e LEFT JOIN work_order_item wi ON wi.org_id=e.org_id AND wi.id=e.work_order_item_id LEFT JOIN order_item oi ON oi.org_id=wi.org_id AND oi.id=wi.order_item_id WHERE e.org_id=$1 AND e.work_order_id=$2 AND e.customer_visible=true ORDER BY e.work_order_item_id NULLS LAST,e.unit_no,e.stage,e.created_at,e.id`, p.OrgID, wid)
 		if ee != nil {
 			return out, ee
 		}
 		for ers.Next() {
-			var eid, mid int64
+			var eid, mid, itemID int64
 			var ev CustomerEvidence
-			if ee = ers.Scan(&eid, &mid, &ev.Stage, &ev.CreatedAt); ee != nil {
+			if ee = ers.Scan(&eid, &mid, &ev.Stage, &itemID, &ev.UnitNo, &ev.ItemName, &ev.CreatedAt); ee != nil {
 				ers.Close()
 				return out, ee
 			}
 			ev.ID = fmt.Sprint(eid)
 			ev.MediaID = fmt.Sprint(mid)
+			if itemID > 0 {
+				ev.WorkOrderItemID = fmt.Sprint(itemID)
+			}
 			ev.URL = "/api/v1/mini/media/" + ev.MediaID + "/content"
 			x.Evidence = append(x.Evidence, ev)
 		}
@@ -1193,6 +1373,7 @@ func (s *Service) CustomerOrder(ctx context.Context, p auth.Principal, id int64)
 			}
 		}
 		if allAccepted {
+			out.Status = OrderCompleted
 			out.StatusText = statusText(OrderCompleted)
 		}
 	}
@@ -1275,32 +1456,8 @@ func (s *Service) CustomerAcceptance(ctx context.Context, p auth.Principal, id i
 	if _, err = tx.ExecContext(ctx, `INSERT INTO work_order_status_history(org_id,work_order_id,from_status,to_status,event_code,operator_type,operator_id,operator_name,reason) VALUES($1,$2,$3,$4,$5,'CUSTOMER',$6,$7,NULLIF($8,''))`, p.OrgID, id, status, to, event, p.SubjectID, p.Name, strings.TrimSpace(req.Reason)); err != nil {
 		return err
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT status FROM work_order WHERE org_id=$1 AND order_id=$2`, p.OrgID, orderID)
-	if err != nil {
+	if err = s.syncCustomerOrderStatus(ctx, tx, p.OrgID, orderID); err != nil {
 		return err
-	}
-	statuses := []string{}
-	for rows.Next() {
-		var v string
-		if err = rows.Scan(&v); err != nil {
-			rows.Close()
-			return err
-		}
-		statuses = append(statuses, v)
-	}
-	rows.Close()
-	next := rollupOrder(statuses)
-	var previousOrderStatus string
-	if err = tx.QueryRowContext(ctx, `SELECT status FROM customer_order WHERE org_id=$1 AND id=$2 FOR UPDATE`, p.OrgID, orderID).Scan(&previousOrderStatus); err != nil {
-		return err
-	}
-	if _, err = tx.ExecContext(ctx, `UPDATE customer_order SET status=$1,version=version+1,completed_at=CASE WHEN $4::boolean THEN CURRENT_TIMESTAMP(3) ELSE completed_at END WHERE org_id=$2 AND id=$3`, next, p.OrgID, orderID, next == OrderCompleted); err != nil {
-		return err
-	}
-	if previousOrderStatus != next {
-		if _, err = tx.ExecContext(ctx, `INSERT INTO order_status_history(org_id,order_id,from_status,to_status,event_code,operator_type,operator_id,operator_name) VALUES($1,$2,$3,$4,'ORDER_ROLLED_UP','SYSTEM',0,'system')`, p.OrgID, orderID, previousOrderStatus, next); err != nil {
-			return err
-		}
 	}
 	if err = tx.Commit(); err != nil {
 		return err
@@ -1334,11 +1491,15 @@ func (s *Service) BindEvidence(ctx context.Context, p auth.Principal, id int64, 
 	if p.Role != "WORKER" {
 		return httpx.E("FORBIDDEN", "无权绑定工单证据", 403)
 	}
-	if req.Stage != "BEFORE" && req.Stage != "DURING" && req.Stage != "AFTER" {
+	if req.Stage != "BEFORE" && req.Stage != "AFTER" {
 		return httpx.E("VALIDATION_ERROR", "证据节点不合法", 400)
 	}
+	if req.WorkOrderItemID <= 0 || req.UnitNo <= 0 {
+		return httpx.E("EVIDENCE_SLOT_REQUIRED", "请选择对应的服务项目和服务数量", 400)
+	}
 	var status string
-	if err := s.db.QueryRowContext(ctx, `SELECT status FROM work_order WHERE org_id=$1 AND id=$2 AND assignee_id=$3`, p.OrgID, id, p.SubjectID).Scan(&status); err == sql.ErrNoRows {
+	var quantity int
+	if err := s.db.QueryRowContext(ctx, `SELECT w.status,wi.quantity FROM work_order w JOIN work_order_item wi ON wi.org_id=w.org_id AND wi.work_order_id=w.id WHERE w.org_id=$1 AND w.id=$2 AND w.assignee_id=$3 AND wi.id=$4`, p.OrgID, id, p.SubjectID, req.WorkOrderItemID).Scan(&status, &quantity); err == sql.ErrNoRows {
 		return httpx.E("WORK_ORDER_NOT_ASSIGNED_TO_YOU", "工单不属于当前师傅", 403)
 	} else if err != nil {
 		return err
@@ -1346,13 +1507,26 @@ func (s *Service) BindEvidence(ctx context.Context, p auth.Principal, id int64, 
 	if status != WorkOrderPendingArrival && status != WorkOrderArrived && status != WorkOrderInService {
 		return httpx.E("WORK_ORDER_STATUS_CONFLICT", "当前状态不能绑定证据", 409)
 	}
+	if req.UnitNo > quantity {
+		return httpx.E("EVIDENCE_SLOT_INVALID", "服务数量编号超出客户购买数量", 400)
+	}
+	var bound int
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM work_order_evidence WHERE org_id=$1 AND work_order_id=$2 AND work_order_item_id=$3 AND unit_no=$4 AND stage=$5`, p.OrgID, id, req.WorkOrderItemID, req.UnitNo, req.Stage).Scan(&bound); err != nil {
+		return err
+	}
+	if bound > 0 {
+		return httpx.E("EVIDENCE_SLOT_FILLED", "该服务单位的施工前后凭证已上传，请勿重复上传", 409)
+	}
 	visible := true
 	if req.CustomerVisible != nil {
 		visible = *req.CustomerVisible
 	}
-	_, err := s.db.ExecContext(ctx, `INSERT INTO work_order_evidence(org_id,work_order_id,media_id,stage,customer_visible,uploaded_by) SELECT $1,$2,m.id,$3,$4,$5 FROM media_asset m WHERE m.org_id=$1 AND m.id=$6 AND m.owner_type='WORK_ORDER' AND m.owner_id=$2 AND m.purpose='WORK_ORDER_EVIDENCE' AND m.status='READY' ON CONFLICT (org_id,work_order_id,media_id) DO NOTHING`, p.OrgID, id, req.Stage, visible, p.SubjectID, req.MediaID)
+	result, err := s.db.ExecContext(ctx, `INSERT INTO work_order_evidence(org_id,work_order_id,media_id,stage,work_order_item_id,unit_no,customer_visible,uploaded_by) SELECT $1,$2,m.id,$3,$4,$5,$6,$7 FROM media_asset m WHERE m.org_id=$1 AND m.id=$8 AND m.owner_type='WORK_ORDER' AND m.owner_id=$2 AND m.purpose='WORK_ORDER_EVIDENCE' AND m.status='READY' ON CONFLICT DO NOTHING`, p.OrgID, id, req.Stage, req.WorkOrderItemID, req.UnitNo, visible, p.SubjectID, req.MediaID)
 	if err != nil {
 		return err
+	}
+	if affected, _ := result.RowsAffected(); affected == 0 {
+		return httpx.E("EVIDENCE_SLOT_FILLED", "该服务单位的施工前后凭证已上传，或图片已被绑定", 409)
 	}
 	var exists int
 	if err = s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM work_order_evidence WHERE org_id=$1 AND work_order_id=$2 AND media_id=$3`, p.OrgID, id, req.MediaID).Scan(&exists); err != nil {
@@ -1417,12 +1591,12 @@ func (s *Service) SubmitCompletion(ctx context.Context, p auth.Principal, id int
 	if status != WorkOrderInService {
 		return httpx.E("WORK_ORDER_STATUS_CONFLICT", "当前状态不能提交完工", 409)
 	}
-	var before, after int
-	if err = tx.QueryRowContext(ctx, `SELECT COUNT(*) FILTER (WHERE stage='BEFORE'),COUNT(*) FILTER (WHERE stage='AFTER') FROM work_order_evidence WHERE org_id=$1 AND work_order_id=$2`, p.OrgID, id).Scan(&before, &after); err != nil {
+	var missingPairs int
+	if err = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM work_order_item wi CROSS JOIN LATERAL generate_series(1,wi.quantity) AS unit(unit_no) WHERE wi.org_id=$1 AND wi.work_order_id=$2 AND (NOT EXISTS (SELECT 1 FROM work_order_evidence e WHERE e.org_id=wi.org_id AND e.work_order_id=wi.work_order_id AND e.work_order_item_id=wi.id AND e.unit_no=unit.unit_no AND e.stage='BEFORE') OR NOT EXISTS (SELECT 1 FROM work_order_evidence e WHERE e.org_id=wi.org_id AND e.work_order_id=wi.work_order_id AND e.work_order_item_id=wi.id AND e.unit_no=unit.unit_no AND e.stage='AFTER'))`, p.OrgID, id).Scan(&missingPairs); err != nil {
 		return err
 	}
-	if before < 1 || after < 1 {
-		return httpx.E("COMPLETION_EVIDENCE_INCOMPLETE", "缺少施工前或施工后图片", 409)
+	if missingPairs > 0 {
+		return httpx.E("COMPLETION_EVIDENCE_INCOMPLETE", fmt.Sprintf("施工前后凭证未按客户购买数量配齐，还缺 %d 组", missingPairs), 409)
 	}
 	if _, err = tx.ExecContext(ctx, `UPDATE work_order SET status=$1,visit_status='COMPLETION_SUBMITTED',customer_acceptance_status='PENDING',internal_review_status='PENDING_QA',closure_status='OPEN',completion_summary=$2,completion_submitted_at=CURRENT_TIMESTAMP(3),completion_submission_at=CURRENT_TIMESTAMP(3),auto_accept_due_at=CURRENT_TIMESTAMP(3)+INTERVAL '7 days',version=version+1 WHERE org_id=$3 AND id=$4 AND version=$5`, WorkOrderWaitingQAAudit, summary, p.OrgID, id, req.Version); err != nil {
 		return err

@@ -4,5 +4,7 @@
 .title { font-size: 30rpx; font-weight: 600; }
 .status { color: #1677ff; font-size: 24rpx; }
 .muted { margin-top: 8rpx; color: #667085; font-size: 24rpx; }
+.deadline { margin-top: 12rpx; padding: 12rpx 16rpx; color: #b54708; background: #fffaeb; border-radius: 10rpx; font-size: 23rpx; line-height: 1.5; }
+.deadline-expired { color: #b42318; background: #fef3f2; }
 .state { padding: 120rpx 24rpx; color: #667085; text-align: center; }
 .error { color: #d92d20; }

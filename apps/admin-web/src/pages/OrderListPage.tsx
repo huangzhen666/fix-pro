@@ -22,17 +22,36 @@ export default function OrderListPage() {
   const query = useQuery({ queryKey: ['orders', keyword, contact, status, from, to, page], queryFn: () => listOrders(keyword, status, contact, from, to, page) })
   const confirm = useMutation({ mutationFn: (row: any) => confirmAndCreateWorkOrders(row.id, row.version), onSuccess: () => { message.success('已确认订单并生成工单'); client.invalidateQueries({ queryKey: ['orders'] }) }, onError: (e: Error) => message.error(e.message) })
   const reject = useMutation({ mutationFn: (input: { row: any; reason: string }) => rejectOrder(input.row.id, input.row.version, input.reason), onSuccess: () => { message.success('订单已打回客户'); setRejecting(undefined); setRejectReason(''); client.invalidateQueries({ queryKey: ['orders'] }) }, onError: (e: Error) => message.error(e.message) })
-  function quick(days: number) { const end = dayjs(); setRange([end.subtract(days - 1, 'day'), end]); setPage(1) }
+  function quickRange(days: number): [Dayjs, Dayjs] {
+    const end = dayjs().startOf('day')
+    return [end.subtract(days - 1, 'day'), end]
+  }
+  function isQuickActive(days: number) {
+    const [start, end] = quickRange(days)
+    return Boolean(range[0]?.isSame(start, 'day') && range[1]?.isSame(end, 'day'))
+  }
+  function quick(days: number) {
+    setRange(isQuickActive(days) ? [null, null] : quickRange(days))
+    setPage(1)
+  }
   function openReject(row: any) { setRejecting(row); setRejectReason('') }
   function submitReject() { const reason = rejectReason.trim(); if (!reason) { message.warning('请填写打回原因'); return }; reject.mutate({ row: rejecting, reason }) }
   return <Card className="order-list-page" styles={{ body: { padding: '16px 18px' } }}><Space className="order-page-content" direction="vertical" size={14} style={{ width: '100%' }}>
     <Typography.Title level={3} style={{ margin: 0, fontSize: 26 }}>订单中心</Typography.Title>
-    <Space className="order-filters" wrap size={[8, 8]}>
-      <Input.Search allowClear placeholder="订单号、联系人、手机号" style={{ width: 280 }} onSearch={v => { setPage(1); setKeyword(v) }} />
-      <Input.Search allowClear placeholder="联系人/手机号" style={{ width: 170 }} onSearch={v => { setPage(1); setContact(v) }} />
-      <Select value={status} onChange={v => { setPage(1); setStatus(v) }} style={{ width: 150 }} options={[{ value: '', label: '全部订单状态' }, ...['PENDING_CONFIRMATION', 'FULFILLING', 'WAITING_ACCEPTANCE', 'COMPLETED', 'CANCELLED'].map(v => ({ value: v, label: orderStatusLabel(v) }))]} />
-      <RangePicker value={range} onChange={v => { setPage(1); setRange(v as [Dayjs | null, Dayjs | null]) }} />
-      <Button onClick={() => quick(1)}>今天</Button><Button onClick={() => quick(7)}>近一周</Button><Button onClick={() => quick(30)}>近一个月</Button>
+    <Space className="order-filters" direction="vertical" size={8} style={{ width: '100%' }}>
+      <Space className="order-primary-filters" size={8}>
+        <Input.Search allowClear placeholder="订单号、联系人、手机号" style={{ width: 280 }} onSearch={v => { setPage(1); setKeyword(v) }} />
+        <Input.Search allowClear placeholder="联系人/手机号" style={{ width: 170 }} onSearch={v => { setPage(1); setContact(v) }} />
+        <Select value={status} onChange={v => { setPage(1); setStatus(v) }} style={{ width: 150 }} options={[{ value: '', label: '全部订单状态' }, ...['PENDING_CONFIRMATION', 'FULFILLING', 'WAITING_ACCEPTANCE', 'COMPLETED', 'CANCELLED'].map(v => ({ value: v, label: orderStatusLabel(v) }))]} />
+      </Space>
+      <Space className="order-date-filters" size={8}>
+        <RangePicker value={range} onChange={v => { setPage(1); setRange(v as [Dayjs | null, Dayjs | null]) }} />
+        <Space className="order-quick-filters" size={8}>
+          <Button type={isQuickActive(1) ? 'primary' : 'default'} onClick={() => quick(1)}>今天</Button>
+          <Button type={isQuickActive(7) ? 'primary' : 'default'} onClick={() => quick(7)}>近一周</Button>
+          <Button type={isQuickActive(30) ? 'primary' : 'default'} onClick={() => quick(30)}>近一个月</Button>
+        </Space>
+      </Space>
     </Space>
     <Table className="order-table" size="small" tableLayout="fixed" rowKey="id" loading={query.isLoading} dataSource={query.data?.items} pagination={{ current: page, pageSize: 20, total: query.data?.total, showSizeChanger: false, onChange: p => setPage(p) }} onRow={r => ({ onClick: () => setDrawerOrderId(r.id), style: { cursor: 'pointer' } })} columns={[{ title: '订单号', dataIndex: 'orderNo', width: 180, ellipsis: true }, { title: '状态', dataIndex: 'status', width: 78, render: (v, row) => <Tag color="gold">{v === 'CANCELLED' && row.cancelReason ? '商家已打回' : orderStatusLabel(v)}</Tag> }, { title: '联系人', dataIndex: 'contactName', width: 62, ellipsis: true }, { title: '手机号', dataIndex: 'contactMobile', width: 105 }, { title: '项目数', dataIndex: 'itemCount', width: 60 }, { title: '总金额', dataIndex: 'totalAmount', width: 72, render: v => `¥${(v / 100).toFixed(2)}` }, { title: '创建时间', dataIndex: 'createdAt', width: 120, render: v => <span className="order-date">{formatDateTime(v)}</span> }, { title: '操作', width: 230, render: (_: unknown, row: any) => row.status === 'PENDING_CONFIRMATION' ? <Space className="order-action-space" size={0}><Button type="link" loading={confirm.isPending} onClick={e => { e.stopPropagation(); confirm.mutate(row) }}>确认并生成工单</Button><Button type="link" danger loading={reject.isPending && rejecting?.id === row.id} onClick={e => { e.stopPropagation(); openReject(row) }}>打回</Button><Button type="link" onClick={e => { e.stopPropagation(); setDrawerOrderId(row.id) }}>查看详情</Button></Space> : <Button type="link" onClick={e => { e.stopPropagation(); setDrawerOrderId(row.id) }}>查看详情</Button> }]} />
     <Modal open={Boolean(rejecting)} title="打回订单" okText="确认打回" cancelText="取消" okButtonProps={{ danger: true }} confirmLoading={reject.isPending} onCancel={() => { setRejecting(undefined); setRejectReason('') }} onOk={submitReject} destroyOnHidden>
