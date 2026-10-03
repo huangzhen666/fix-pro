@@ -49,7 +49,7 @@ func rollupOrderStates(states []workOrderRollupState) string {
 	allCancelled := true
 	waitingAcceptance := false
 	for _, state := range states {
-		if state.status != WorkOrderFinished && state.status != WorkOrderFinishedReviewException && !acceptedByCustomer(state.customerAcceptanceStatus) {
+		if state.status != WorkOrderFinished && state.status != WorkOrderFinishedReviewException {
 			allCompleted = false
 		}
 		if state.status != WorkOrderCancelled {

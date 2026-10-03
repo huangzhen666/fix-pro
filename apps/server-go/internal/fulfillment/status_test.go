@@ -27,3 +27,14 @@ func TestRollupOrderInProgressHasPriority(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
+
+func TestRollupDoesNotCompleteBeforeInternalReviewFinishes(t *testing.T) {
+	for _, status := range []string{WorkOrderWaitingQAAudit, WorkOrderWaitingDirectorAudit} {
+		t.Run(status, func(t *testing.T) {
+			got := rollupOrderStates([]workOrderRollupState{{status: status, customerAcceptanceStatus: "MANUAL_ACCEPTED"}})
+			if got != OrderFulfilling {
+				t.Fatalf("rollupOrderStates() = %q, want %q while internal review is pending", got, OrderFulfilling)
+			}
+		})
+	}
+}

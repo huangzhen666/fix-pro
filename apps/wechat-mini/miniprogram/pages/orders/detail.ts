@@ -91,16 +91,15 @@ function lastEvent(events: CustomerTimelineEvent[], codes: Set<string>) {
   return [...events].reverse().find(event => codes.has(event.code))
 }
 
-function currentStageIndex(work: CustomerWorkOrder, events: CustomerTimelineEvent[]) {
-  let index = stageIndexByStatus[work.status] ?? 0
-  if (events.some(event => dispatchCodes.has(event.code))) index = Math.max(index, 1)
-  if (events.some(event => prepareCodes.has(event.code))) index = Math.max(index, 2)
-  if (events.some(event => completedCodes.has(event.code))) index = 3
-  return Math.min(index, stageMeta.length - 1)
+function currentStageIndex(work: CustomerWorkOrder) {
+  // The current work-order status is authoritative. Historical events describe
+  // what happened before a worker return or system recall and must not advance
+  // the flow after the order has been sent back to dispatch.
+  return Math.min(stageIndexByStatus[work.status] ?? 0, stageMeta.length - 1)
 }
 
 function buildFlow(work: CustomerWorkOrder, orderCreatedAt: string, events: CustomerTimelineEvent[]) {
-  const current = currentStageIndex(work, events)
+  const current = currentStageIndex(work)
   const placed = firstEvent(events, new Set(['WORK_ORDER_CREATED']))
   const dispatched = lastEvent(events, dispatchCodes)
   const preparing = firstEvent(events, prepareCodes)

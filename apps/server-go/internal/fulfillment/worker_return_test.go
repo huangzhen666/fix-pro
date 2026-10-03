@@ -564,7 +564,7 @@ func TestExpiredInServiceWorkOrderCannotBeRecalledAndCanComplete(t *testing.T) {
 	}
 }
 
-func TestCustomerAcceptanceRollsUpOrderAndCustomerSummaryStatus(t *testing.T) {
+func TestCustomerAcceptanceDoesNotCompleteOrderBeforeInternalReview(t *testing.T) {
 	db := workerReturnDB(t)
 	ctx := context.Background()
 	suffix := time.Now().UnixNano()
@@ -596,8 +596,8 @@ func TestCustomerAcceptanceRollsUpOrderAndCustomerSummaryStatus(t *testing.T) {
 	if err := db.QueryRowContext(ctx, `SELECT status FROM customer_order WHERE id=$1`, orderID).Scan(&orderStatus); err != nil {
 		t.Fatal(err)
 	}
-	if orderStatus != OrderCompleted {
-		t.Fatalf("stored order status = %q, want %q", orderStatus, OrderCompleted)
+	if orderStatus != OrderFulfilling {
+		t.Fatalf("stored order status = %q, want %q while internal review is pending", orderStatus, OrderFulfilling)
 	}
 	page, err := service.CustomerOrders(ctx, customer, "", 1, 20)
 	if err != nil {
@@ -605,11 +605,67 @@ func TestCustomerAcceptanceRollsUpOrderAndCustomerSummaryStatus(t *testing.T) {
 	}
 	for _, item := range page.Items {
 		if item.ID == fmt.Sprint(orderID) {
-			if item.Status != OrderCompleted {
-				t.Fatalf("summary status = %q, want %q", item.Status, OrderCompleted)
+			if item.Status != OrderFulfilling || item.WorkOrderFinished != 0 {
+				t.Fatalf("summary status=%q finished=%d, want %q and 0 finished", item.Status, item.WorkOrderFinished, OrderFulfilling)
+			}
+			detail, err := service.CustomerOrder(ctx, customer, orderID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if detail.Status != OrderFulfilling {
+				t.Fatalf("detail status = %q, want %q while internal review is pending", detail.Status, OrderFulfilling)
 			}
 			return
 		}
 	}
 	t.Fatalf("customer order %d missing from summary", orderID)
+}
+
+func TestAutoAcceptStaleCandidateDoesNotWriteAcceptanceOrEvent(t *testing.T) {
+	db := workerReturnDB(t)
+	ctx := context.Background()
+	suffix := time.Now().UnixNano()
+	var orderID, workOrderID, submissionID int64
+	t.Cleanup(func() {
+		db.ExecContext(ctx, `DELETE FROM work_order_event WHERE work_order_id=$1`, workOrderID)
+		db.ExecContext(ctx, `DELETE FROM customer_acceptance WHERE work_order_id=$1`, workOrderID)
+		db.ExecContext(ctx, `DELETE FROM completion_submission WHERE id=$1`, submissionID)
+		db.ExecContext(ctx, `DELETE FROM work_order WHERE id=$1`, workOrderID)
+		db.ExecContext(ctx, `DELETE FROM customer_order WHERE id=$1`, orderID)
+	})
+	if err := db.QueryRowContext(ctx, `INSERT INTO customer_order(org_id,order_no,customer_id,contact_name,contact_mobile,service_address,order_type,status,total_amount,paid_amount,item_count) VALUES(1,$1,1,'自动验收竞态测试','13800138000','测试地址','REPAIR','FULFILLING',100,0,1) RETURNING id`, fmt.Sprintf("AAO-%d", suffix)).Scan(&orderID); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRowContext(ctx, `INSERT INTO work_order(org_id,work_order_no,order_id,status,priority,visit_status,customer_acceptance_status,internal_review_status,closure_status,auto_accept_due_at) VALUES(1,$1,$2,'WAITING_QA_AUDIT','NORMAL','COMPLETION_SUBMITTED','PENDING','PENDING_QA','OPEN',CURRENT_TIMESTAMP(3)-INTERVAL '1 hour') RETURNING id`, fmt.Sprintf("AAW-%d", suffix), orderID).Scan(&workOrderID); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRowContext(ctx, `INSERT INTO completion_submission(org_id,work_order_id,attempt_no,worker_id,summary) VALUES(1,$1,1,1,'竞态回归测试') RETURNING id`, workOrderID).Scan(&submissionID); err != nil {
+		t.Fatal(err)
+	}
+	var stale autoAcceptCandidate
+	stale.id, stale.orgID, stale.customerID, stale.orderID = workOrderID, 1, 1, orderID
+	if err := db.QueryRowContext(ctx, `SELECT status,internal_review_status,closure_status,visit_status,COALESCE(completion_outcome,''),version FROM work_order WHERE id=$1`, workOrderID).Scan(&stale.status, &stale.reviewStatus, &stale.closureStatus, &stale.visitStatus, &stale.completionOutcome, &stale.version); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, `UPDATE work_order SET version=version+1 WHERE id=$1`, workOrderID); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := New(db, nil).autoAcceptDueCandidate(ctx, stale); err != nil {
+		t.Fatal(err)
+	}
+	var acceptanceStatus string
+	var acceptanceCount, eventCount int
+	if err := db.QueryRowContext(ctx, `SELECT customer_acceptance_status FROM work_order WHERE id=$1`, workOrderID).Scan(&acceptanceStatus); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM customer_acceptance WHERE work_order_id=$1`, workOrderID).Scan(&acceptanceCount); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM work_order_event WHERE work_order_id=$1 AND event_code='CUSTOMER_AUTO_ACCEPTED'`, workOrderID).Scan(&eventCount); err != nil {
+		t.Fatal(err)
+	}
+	if acceptanceStatus != "PENDING" || acceptanceCount != 0 || eventCount != 0 {
+		t.Fatalf("status=%q acceptance rows=%d auto-accepted events=%d, want PENDING/0/0 after stale update", acceptanceStatus, acceptanceCount, eventCount)
+	}
 }

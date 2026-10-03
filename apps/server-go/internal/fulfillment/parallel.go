@@ -223,8 +223,17 @@ func (s *Service) WorkOrderTimeline(ctx context.Context, p auth.Principal, id in
 	return out, rows.Err()
 }
 
+// autoAcceptCandidate is the due-work-order snapshot read before its transaction begins.
+type autoAcceptCandidate struct {
+	id, orgID, customerID, orderID int64
+	version                        int
+	status, reviewStatus           string
+	closureStatus, visitStatus     string
+	completionOutcome              string
+}
+
 // AutoAcceptDue marks untouched customer acceptances as system accepted.
-// It is safe to run repeatedly because customer_acceptance has a unique submission constraint.
+// A version-guarded update ensures only one concurrent worker records the transition.
 func (s *Service) AutoAcceptDue(ctx context.Context) error {
 	rows, err := s.db.QueryContext(ctx, `SELECT w.id,w.org_id,o.customer_id,w.order_id,w.status,w.internal_review_status,w.closure_status,w.visit_status,COALESCE(w.completion_outcome,''),w.version FROM work_order w JOIN completion_submission cs ON cs.org_id=w.org_id AND cs.work_order_id=w.id JOIN customer_order o ON o.org_id=w.org_id AND o.id=w.order_id WHERE w.customer_acceptance_status='PENDING' AND w.auto_accept_due_at IS NOT NULL AND w.auto_accept_due_at<=CURRENT_TIMESTAMP(3) AND w.closure_status='OPEN'`)
 	if err != nil {
@@ -232,47 +241,56 @@ func (s *Service) AutoAcceptDue(ctx context.Context) error {
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var id, orgID, customerID, orderID int64
-		var version int
-		var status, reviewStatus, closureStatus, visitStatus, completionOutcome string
-		if err := rows.Scan(&id, &orgID, &customerID, &orderID, &status, &reviewStatus, &closureStatus, &visitStatus, &completionOutcome, &version); err != nil {
+		var candidate autoAcceptCandidate
+		if err := rows.Scan(&candidate.id, &candidate.orgID, &candidate.customerID, &candidate.orderID, &candidate.status, &candidate.reviewStatus, &candidate.closureStatus, &candidate.visitStatus, &candidate.completionOutcome, &candidate.version); err != nil {
 			return err
 		}
-		tx, err := s.db.BeginTx(ctx, nil)
-		if err != nil {
-			return err
-		}
-		var submissionID int64
-		if err = tx.QueryRowContext(ctx, `SELECT id FROM completion_submission WHERE org_id=$1 AND work_order_id=$2 ORDER BY attempt_no DESC LIMIT 1`, orgID, id).Scan(&submissionID); err != nil {
-			tx.Rollback()
-			continue
-		}
-		nextStatus, nextClosure, nextVisit, nextOutcome := status, closureStatus, visitStatus, completionOutcome
-		finished := false
-		if reviewStatus == "APPROVED" {
-			nextStatus, nextClosure, nextVisit, nextOutcome, finished = WorkOrderFinished, "FINISHED", "FINISHED", "NORMAL", true
-		}
-		if _, err = tx.ExecContext(ctx, `UPDATE work_order SET status=$1,customer_acceptance_status='AUTO_ACCEPTED',customer_acceptance_source='AUTO',customer_acceptance_at=CURRENT_TIMESTAMP(3),closure_status=$2,visit_status=$3,completion_outcome=NULLIF($4,''),closed_at=CASE WHEN $5::boolean THEN CURRENT_TIMESTAMP(3) ELSE closed_at END,finished_at=CASE WHEN $5::boolean THEN CURRENT_TIMESTAMP(3) ELSE finished_at END,version=version+1 WHERE org_id=$6 AND id=$7 AND version=$8 AND customer_acceptance_status='PENDING'`, nextStatus, nextClosure, nextVisit, nextOutcome, finished, orgID, id, version); err != nil {
-			tx.Rollback()
-			return err
-		}
-		if _, err = tx.ExecContext(ctx, `INSERT INTO customer_acceptance(org_id,work_order_id,submission_id,customer_id,decision,source) VALUES($1,$2,$3,$4,'ACCEPT','AUTO') ON CONFLICT (org_id,submission_id) DO NOTHING`, orgID, id, submissionID, customerID); err != nil {
-			tx.Rollback()
-			return err
-		}
-		if _, err = tx.ExecContext(ctx, `INSERT INTO work_order_event(org_id,work_order_id,event_code,operator_type,operator_id,note) VALUES($1,$2,'CUSTOMER_AUTO_ACCEPTED','SYSTEM',0,'7-day timeout')`, orgID, id); err != nil {
-			tx.Rollback()
-			return err
-		}
-		if err = s.syncCustomerOrderStatus(ctx, tx, orgID, orderID); err != nil {
-			tx.Rollback()
-			return err
-		}
-		if err = tx.Commit(); err != nil {
+		if err = s.autoAcceptDueCandidate(ctx, candidate); err != nil {
 			return err
 		}
 	}
 	return rows.Err()
+}
+
+func (s *Service) autoAcceptDueCandidate(ctx context.Context, candidate autoAcceptCandidate) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	var submissionID int64
+	if err = tx.QueryRowContext(ctx, `SELECT id FROM completion_submission WHERE org_id=$1 AND work_order_id=$2 ORDER BY attempt_no DESC LIMIT 1`, candidate.orgID, candidate.id).Scan(&submissionID); err != nil {
+		return err
+	}
+	nextStatus, nextClosure, nextVisit, nextOutcome := candidate.status, candidate.closureStatus, candidate.visitStatus, candidate.completionOutcome
+	finished := false
+	if candidate.reviewStatus == "APPROVED" {
+		nextStatus, nextClosure, nextVisit, nextOutcome, finished = WorkOrderFinished, "FINISHED", "FINISHED", "NORMAL", true
+	}
+	result, err := tx.ExecContext(ctx, `UPDATE work_order SET status=$1,customer_acceptance_status='AUTO_ACCEPTED',customer_acceptance_source='AUTO',customer_acceptance_at=CURRENT_TIMESTAMP(3),closure_status=$2,visit_status=$3,completion_outcome=NULLIF($4,''),closed_at=CASE WHEN $5::boolean THEN CURRENT_TIMESTAMP(3) ELSE closed_at END,finished_at=CASE WHEN $5::boolean THEN CURRENT_TIMESTAMP(3) ELSE finished_at END,version=version+1 WHERE org_id=$6 AND id=$7 AND version=$8 AND customer_acceptance_status='PENDING'`, nextStatus, nextClosure, nextVisit, nextOutcome, finished, candidate.orgID, candidate.id, candidate.version)
+	if err != nil {
+		return err
+	}
+	updated, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if updated == 0 {
+		// Another actor changed the work order after the due list was read. Do not
+		// write an acceptance record or a timeline event for a transition we lost.
+		return nil
+	}
+	if _, err = tx.ExecContext(ctx, `INSERT INTO customer_acceptance(org_id,work_order_id,submission_id,customer_id,decision,source) VALUES($1,$2,$3,$4,'ACCEPT','AUTO') ON CONFLICT (org_id,submission_id) DO NOTHING`, candidate.orgID, candidate.id, submissionID, candidate.customerID); err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, `INSERT INTO work_order_event(org_id,work_order_id,event_code,operator_type,operator_id,note) VALUES($1,$2,'CUSTOMER_AUTO_ACCEPTED','SYSTEM',0,'7-day timeout')`, candidate.orgID, candidate.id); err != nil {
+		return err
+	}
+	if err = s.syncCustomerOrderStatus(ctx, tx, candidate.orgID, candidate.orderID); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // AutoRecallUnstartedDue returns an expired appointment to dispatch when the

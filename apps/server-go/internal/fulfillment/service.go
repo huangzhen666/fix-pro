@@ -24,6 +24,11 @@ type Service struct {
 func New(db *sql.DB, ms *media.Service) *Service { return &Service{db: db, media: ms} }
 
 func (s *Service) syncCustomerOrderStatus(ctx context.Context, tx *sql.Tx, orgID, orderID int64) error {
+	var previous string
+	if err := tx.QueryRowContext(ctx, `SELECT status FROM customer_order WHERE org_id=$1 AND id=$2 FOR UPDATE`, orgID, orderID).Scan(&previous); err != nil {
+		return err
+	}
+
 	rows, err := tx.QueryContext(ctx, `SELECT status,COALESCE(customer_acceptance_status,'') FROM work_order WHERE org_id=$1 AND order_id=$2`, orgID, orderID)
 	if err != nil {
 		return err
@@ -43,10 +48,6 @@ func (s *Service) syncCustomerOrderStatus(ctx context.Context, tx *sql.Tx, orgID
 	}
 	rows.Close()
 	next := rollupOrderStates(states)
-	var previous string
-	if err = tx.QueryRowContext(ctx, `SELECT status FROM customer_order WHERE org_id=$1 AND id=$2 FOR UPDATE`, orgID, orderID).Scan(&previous); err != nil {
-		return err
-	}
 	if previous == next {
 		return nil
 	}
@@ -1278,27 +1279,21 @@ func (s *Service) CustomerOrders(ctx context.Context, p auth.Principal, status s
 	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM customer_order WHERE org_id=$1 AND customer_id=$2 AND ($3='' OR status=$3)`, p.OrgID, p.SubjectID, status).Scan(&out.Total); err != nil {
 		return out, err
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT o.id,o.order_no,o.status,COALESCE(o.cancel_reason,''),o.total_amount,o.item_count,o.created_at,COALESCE(MAX(w.customer_acceptance_at),o.updated_at),COUNT(w.id),COUNT(w.id) FILTER (WHERE w.status='FINISHED'),COUNT(w.id) FILTER (WHERE COALESCE(w.customer_acceptance_status,'') IN ('MANUAL_ACCEPTED','AUTO_ACCEPTED')) FROM customer_order o LEFT JOIN work_order w ON w.org_id=o.org_id AND w.order_id=o.id WHERE o.org_id=$1 AND o.customer_id=$2 AND ($3='' OR o.status=$3) GROUP BY o.id ORDER BY o.created_at DESC LIMIT $4 OFFSET $5`, p.OrgID, p.SubjectID, status, size, (page-1)*size)
+	rows, err := s.db.QueryContext(ctx, `SELECT o.id,o.order_no,o.status,COALESCE(o.cancel_reason,''),o.total_amount,o.item_count,o.created_at,COALESCE(MAX(w.customer_acceptance_at),o.updated_at),COUNT(w.id),COUNT(w.id) FILTER (WHERE w.status IN ('FINISHED','FINISHED_WITH_REVIEW_EXCEPTION')) FROM customer_order o LEFT JOIN work_order w ON w.org_id=o.org_id AND w.order_id=o.id WHERE o.org_id=$1 AND o.customer_id=$2 AND ($3='' OR o.status=$3) GROUP BY o.id ORDER BY o.created_at DESC LIMIT $4 OFFSET $5`, p.OrgID, p.SubjectID, status, size, (page-1)*size)
 	if err != nil {
 		return out, err
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var id int64
-		var acceptedWorkOrderTotal int
 		var x CustomerOrderSummary
-		if err = rows.Scan(&id, &x.OrderNo, &x.Status, &x.CancelReason, &x.TotalAmount, &x.ItemCount, &x.CreatedAt, &x.StatusUpdatedAt, &x.WorkOrderTotal, &x.WorkOrderFinished, &acceptedWorkOrderTotal); err != nil {
+		if err = rows.Scan(&id, &x.OrderNo, &x.Status, &x.CancelReason, &x.TotalAmount, &x.ItemCount, &x.CreatedAt, &x.StatusUpdatedAt, &x.WorkOrderTotal, &x.WorkOrderFinished); err != nil {
 			return out, err
 		}
 		x.ID = fmt.Sprint(id)
 		x.StatusText = statusText(x.Status)
 		if x.Status == OrderCancelled && x.CancelReason != "" {
 			x.StatusText = "商家已打回"
-		}
-		if x.WorkOrderTotal > 0 && acceptedWorkOrderTotal == x.WorkOrderTotal {
-			x.Status = OrderCompleted
-			x.StatusText = statusText(OrderCompleted)
-			x.WorkOrderFinished = x.WorkOrderTotal
 		}
 		out.Items = append(out.Items, x)
 	}
@@ -1364,19 +1359,6 @@ func (s *Service) CustomerOrder(ctx context.Context, p auth.Principal, id int64)
 		ers.Close()
 		out.WorkOrders = append(out.WorkOrders, x)
 	}
-	if len(out.WorkOrders) > 0 {
-		allAccepted := true
-		for _, work := range out.WorkOrders {
-			if work.CustomerAcceptanceStatus != "MANUAL_ACCEPTED" && work.CustomerAcceptanceStatus != "AUTO_ACCEPTED" {
-				allAccepted = false
-				break
-			}
-		}
-		if allAccepted {
-			out.Status = OrderCompleted
-			out.StatusText = statusText(OrderCompleted)
-		}
-	}
 	return out, rows.Err()
 }
 
@@ -1426,7 +1408,7 @@ func (s *Service) CustomerAcceptance(ctx context.Context, p auth.Principal, id i
 	var status, internalReviewStatus, closureStatus, visitStatus, completionOutcome string
 	var version int
 	var orderID int64
-	if err = tx.QueryRowContext(ctx, `SELECT w.status,w.internal_review_status,w.closure_status,w.visit_status,COALESCE(w.completion_outcome,''),w.version,w.order_id FROM work_order w JOIN customer_order o ON o.org_id=w.org_id AND o.id=w.order_id WHERE w.org_id=$1 AND w.id=$2 AND o.customer_id=$3 FOR UPDATE`, p.OrgID, id, p.SubjectID).Scan(&status, &internalReviewStatus, &closureStatus, &visitStatus, &completionOutcome, &version, &orderID); err == sql.ErrNoRows {
+	if err = tx.QueryRowContext(ctx, `SELECT w.status,w.internal_review_status,w.closure_status,w.visit_status,COALESCE(w.completion_outcome,''),w.version,w.order_id FROM work_order w JOIN customer_order o ON o.org_id=w.org_id AND o.id=w.order_id WHERE w.org_id=$1 AND w.id=$2 AND o.customer_id=$3 FOR UPDATE OF w`, p.OrgID, id, p.SubjectID).Scan(&status, &internalReviewStatus, &closureStatus, &visitStatus, &completionOutcome, &version, &orderID); err == sql.ErrNoRows {
 		return httpx.E("WORK_ORDER_NOT_FOUND", "工单不存在", 404)
 	} else if err != nil {
 		return err
