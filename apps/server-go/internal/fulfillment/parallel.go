@@ -239,17 +239,28 @@ func (s *Service) AutoAcceptDue(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
+	candidates := []autoAcceptCandidate{}
 	for rows.Next() {
 		var candidate autoAcceptCandidate
 		if err := rows.Scan(&candidate.id, &candidate.orgID, &candidate.customerID, &candidate.orderID, &candidate.status, &candidate.reviewStatus, &candidate.closureStatus, &candidate.visitStatus, &candidate.completionOutcome, &candidate.version); err != nil {
+			rows.Close()
 			return err
 		}
+		candidates = append(candidates, candidate)
+	}
+	if err = rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	if err = rows.Close(); err != nil {
+		return err
+	}
+	for _, candidate := range candidates {
 		if err = s.autoAcceptDueCandidate(ctx, candidate); err != nil {
 			return err
 		}
 	}
-	return rows.Err()
+	return nil
 }
 
 func (s *Service) autoAcceptDueCandidate(ctx context.Context, candidate autoAcceptCandidate) error {
@@ -302,18 +313,29 @@ func (s *Service) AutoRecallUnstartedDue(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
-
+	type candidate struct{ id, orgID int64 }
+	candidates := []candidate{}
 	for rows.Next() {
-		var id, orgID int64
-		if err := rows.Scan(&id, &orgID); err != nil {
+		var item candidate
+		if err := rows.Scan(&item.id, &item.orgID); err != nil {
+			rows.Close()
 			return err
 		}
-		if err := s.autoRecallUnstartedWorkOrder(ctx, orgID, id); err != nil {
+		candidates = append(candidates, item)
+	}
+	if err = rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	if err = rows.Close(); err != nil {
+		return err
+	}
+	for _, item := range candidates {
+		if err := s.autoRecallUnstartedWorkOrder(ctx, item.orgID, item.id); err != nil {
 			return err
 		}
 	}
-	return rows.Err()
+	return nil
 }
 
 func (s *Service) autoRecallUnstartedWorkOrder(ctx context.Context, orgID, id int64) error {

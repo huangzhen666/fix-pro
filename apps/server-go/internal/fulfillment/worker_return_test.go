@@ -621,6 +621,53 @@ func TestCustomerAcceptanceDoesNotCompleteOrderBeforeInternalReview(t *testing.T
 	t.Fatalf("customer order %d missing from summary", orderID)
 }
 
+func TestFulfillmentDetailsWorkWithSingleConnectionPool(t *testing.T) {
+	db := workerReturnDB(t)
+	db.SetMaxOpenConns(1)
+	ctx := context.Background()
+	suffix := time.Now().UnixNano()
+	var orderID, workOrderID, orderItemID, workOrderItemID, workerID int64
+	t.Cleanup(func() {
+		db.ExecContext(context.Background(), `DELETE FROM work_order_evidence WHERE work_order_id=$1`, workOrderID)
+		db.ExecContext(context.Background(), `DELETE FROM work_order_item WHERE id=$1`, workOrderItemID)
+		db.ExecContext(context.Background(), `DELETE FROM work_order WHERE id=$1`, workOrderID)
+		db.ExecContext(context.Background(), `DELETE FROM order_item WHERE id=$1`, orderItemID)
+		db.ExecContext(context.Background(), `DELETE FROM customer_order WHERE id=$1`, orderID)
+		db.ExecContext(context.Background(), `DELETE FROM employee_account WHERE id=$1`, workerID)
+	})
+	if err := db.QueryRowContext(ctx, `INSERT INTO customer_order(org_id,order_no,customer_id,contact_name,contact_mobile,service_address,order_type,status,total_amount,paid_amount,item_count) VALUES(1,$1,1,'连接池测试','13800138000','测试地址','REPAIR','FULFILLING',100,0,1) RETURNING id`, fmt.Sprintf("SPO-%d", suffix)).Scan(&orderID); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRowContext(ctx, `INSERT INTO employee_account(org_id,username,display_name,password_hash,status,role,mobile,must_change_password,password_version) VALUES(1,$1,'连接池测试师傅','test','ACTIVE','WORKER',$1,FALSE,1) RETURNING id`, fmt.Sprintf("135%08d", suffix%100000000)).Scan(&workerID); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRowContext(ctx, `INSERT INTO order_item(org_id,order_id,sku_id,sku_version,sku_code_snapshot,sku_name_snapshot,unit_snapshot,service_scope_snapshot,exclusions_snapshot,warranty_snapshot,fault_description,unit_price,quantity,subtotal_amount) VALUES(1,$1,1,1,'POOL','连接池服务','次','测试范围','无','无','',100,1,100) RETURNING id`, orderID).Scan(&orderItemID); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRowContext(ctx, `INSERT INTO work_order(org_id,work_order_no,order_id,assignee_id,status,priority) VALUES(1,$1,$2,$3,'ARRIVED','NORMAL') RETURNING id`, fmt.Sprintf("SPW-%d", suffix), orderID, workerID).Scan(&workOrderID); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRowContext(ctx, `INSERT INTO work_order_item(org_id,work_order_id,order_item_id,quantity) VALUES(1,$1,$2,1) RETURNING id`, workOrderID, orderItemID).Scan(&workOrderItemID); err != nil {
+		t.Fatal(err)
+	}
+
+	customer := auth.Principal{OrgID: 1, SubjectID: 1, Role: "CUSTOMER", Name: "连接池测试客户"}
+	worker := auth.Principal{OrgID: 1, SubjectID: workerID, Role: "WORKER", Name: "连接池测试师傅"}
+	service := New(db, nil)
+	queryCtx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
+	defer cancel()
+	if _, err := service.CustomerOrder(queryCtx, customer, orderID); err != nil {
+		t.Fatalf("CustomerOrder() with one available DB connection: %v", err)
+	}
+	workerDetail, err := service.WorkerWorkOrder(queryCtx, worker, workOrderID)
+	if err != nil {
+		t.Fatalf("WorkerWorkOrder() with one available DB connection: %v", err)
+	}
+	if len(workerDetail.Items) != 1 {
+		t.Fatalf("worker work-order item count=%d, want 1", len(workerDetail.Items))
+	}
+}
+
 func TestAutoAcceptStaleCandidateDoesNotWriteAcceptanceOrEvent(t *testing.T) {
 	db := workerReturnDB(t)
 	ctx := context.Background()

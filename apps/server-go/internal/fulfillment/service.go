@@ -304,22 +304,37 @@ func (s *Service) WorkerWorkOrder(ctx context.Context, p auth.Principal, id int6
 	if err != nil {
 		return out, err
 	}
+	type workerItemData struct {
+		workOrderItemID int64
+		orderItemID     int64
+		item            WorkerOrderItem
+	}
+	items := []workerItemData{}
 	for itemRows.Next() {
-		var workOrderItemID, orderItemID int64
-		var item WorkerOrderItem
-		if err = itemRows.Scan(&workOrderItemID, &orderItemID, &item.Name, &item.Unit, &item.Quantity, &item.CustomerNote); err != nil {
+		var item workerItemData
+		if err = itemRows.Scan(&item.workOrderItemID, &item.orderItemID, &item.item.Name, &item.item.Unit, &item.item.Quantity, &item.item.CustomerNote); err != nil {
 			itemRows.Close()
 			return out, err
 		}
-		item.ID = fmt.Sprint(workOrderItemID)
-		item.CustomerMedia = []WorkerOrderMedia{}
-		item.EvidencePairs = make([]WorkerEvidencePair, item.Quantity)
-		for index := range item.EvidencePairs {
-			item.EvidencePairs[index].UnitNo = index + 1
+		item.item.ID = fmt.Sprint(item.workOrderItemID)
+		item.item.CustomerMedia = []WorkerOrderMedia{}
+		item.item.EvidencePairs = make([]WorkerEvidencePair, item.item.Quantity)
+		for index := range item.item.EvidencePairs {
+			item.item.EvidencePairs[index].UnitNo = index + 1
 		}
-		mediaRows, mediaErr := s.db.QueryContext(ctx, `SELECT m.id,m.media_type FROM order_item_media om JOIN media_asset m ON m.org_id=om.org_id AND m.id=om.media_id AND m.status='READY' WHERE om.org_id=$1 AND om.order_item_id=$2 ORDER BY om.sort_order,om.id`, p.OrgID, orderItemID)
+		items = append(items, item)
+	}
+	if err = itemRows.Err(); err != nil {
+		itemRows.Close()
+		return out, err
+	}
+	if err = itemRows.Close(); err != nil {
+		return out, err
+	}
+	for _, itemData := range items {
+		item := itemData.item
+		mediaRows, mediaErr := s.db.QueryContext(ctx, `SELECT m.id,m.media_type FROM order_item_media om JOIN media_asset m ON m.org_id=om.org_id AND m.id=om.media_id AND m.status='READY' WHERE om.org_id=$1 AND om.order_item_id=$2 ORDER BY om.sort_order,om.id`, p.OrgID, itemData.orderItemID)
 		if mediaErr != nil {
-			itemRows.Close()
 			return out, mediaErr
 		}
 		for mediaRows.Next() {
@@ -327,7 +342,6 @@ func (s *Service) WorkerWorkOrder(ctx context.Context, p auth.Principal, id int6
 			var mediaItem WorkerOrderMedia
 			if err = mediaRows.Scan(&mediaID, &mediaItem.MediaType); err != nil {
 				mediaRows.Close()
-				itemRows.Close()
 				return out, err
 			}
 			mediaItem.ID = fmt.Sprint(mediaID)
@@ -336,13 +350,11 @@ func (s *Service) WorkerWorkOrder(ctx context.Context, p auth.Principal, id int6
 		}
 		if err = mediaRows.Err(); err != nil {
 			mediaRows.Close()
-			itemRows.Close()
 			return out, err
 		}
 		mediaRows.Close()
-		evidenceRows, evidenceErr := s.db.QueryContext(ctx, `SELECT id,media_id,stage,unit_no FROM work_order_evidence WHERE org_id=$1 AND work_order_id=$2 AND work_order_item_id=$3 AND unit_no IS NOT NULL ORDER BY unit_no,stage,created_at,id`, p.OrgID, id, workOrderItemID)
+		evidenceRows, evidenceErr := s.db.QueryContext(ctx, `SELECT id,media_id,stage,unit_no FROM work_order_evidence WHERE org_id=$1 AND work_order_id=$2 AND work_order_item_id=$3 AND unit_no IS NOT NULL ORDER BY unit_no,stage,created_at,id`, p.OrgID, id, itemData.workOrderItemID)
 		if evidenceErr != nil {
-			itemRows.Close()
 			return out, evidenceErr
 		}
 		for evidenceRows.Next() {
@@ -351,7 +363,6 @@ func (s *Service) WorkerWorkOrder(ctx context.Context, p auth.Principal, id int6
 			var unitNo int
 			if err = evidenceRows.Scan(&evidenceID, &mediaID, &stage, &unitNo); err != nil {
 				evidenceRows.Close()
-				itemRows.Close()
 				return out, err
 			}
 			if unitNo < 1 || unitNo > len(item.EvidencePairs) {
@@ -366,17 +377,11 @@ func (s *Service) WorkerWorkOrder(ctx context.Context, p auth.Principal, id int6
 		}
 		if err = evidenceRows.Err(); err != nil {
 			evidenceRows.Close()
-			itemRows.Close()
 			return out, err
 		}
 		evidenceRows.Close()
 		out.Items = append(out.Items, item)
 	}
-	if err = itemRows.Err(); err != nil {
-		itemRows.Close()
-		return out, err
-	}
-	itemRows.Close()
 	out.Evidence = []CustomerEvidence{}
 	rows, err := s.db.QueryContext(ctx, `SELECT e.id,e.media_id,e.stage,e.created_at FROM work_order_evidence e WHERE e.org_id=$1 AND e.work_order_id=$2 ORDER BY e.created_at`, p.OrgID, id)
 	if err != nil {
@@ -1326,18 +1331,30 @@ func (s *Service) CustomerOrder(ctx context.Context, p auth.Principal, id int64)
 	if err != nil {
 		return out, err
 	}
-	defer rows.Close()
 	for rows.Next() {
 		var wid int64
 		var x CustomerWorkOrder
 		if err = rows.Scan(&wid, &x.WorkOrderNo, &x.Status, &x.CustomerAcceptanceStatus, &x.AssigneeName, &x.AppointmentAt, &x.AppointmentSlot, &x.CompletionSummary, &x.Version); err != nil {
+			rows.Close()
 			return out, err
 		}
 		x.ID = fmt.Sprint(wid)
 		x.AppointmentSlotLabel = appointmentSlotText(x.AppointmentSlot)
 		x.StatusText = statusText(x.Status)
 		x.Evidence = []CustomerEvidence{}
-		ers, ee := s.db.QueryContext(ctx, `SELECT e.id,e.media_id,e.stage,COALESCE(e.work_order_item_id,0),COALESCE(e.unit_no,0),COALESCE(oi.sku_name_snapshot,''),e.created_at FROM work_order_evidence e LEFT JOIN work_order_item wi ON wi.org_id=e.org_id AND wi.id=e.work_order_item_id LEFT JOIN order_item oi ON oi.org_id=wi.org_id AND oi.id=wi.order_item_id WHERE e.org_id=$1 AND e.work_order_id=$2 AND e.customer_visible=true ORDER BY e.work_order_item_id NULLS LAST,e.unit_no,e.stage,e.created_at,e.id`, p.OrgID, wid)
+		out.WorkOrders = append(out.WorkOrders, x)
+	}
+	if err = rows.Err(); err != nil {
+		rows.Close()
+		return out, err
+	}
+	if err = rows.Close(); err != nil {
+		return out, err
+	}
+	for workIndex := range out.WorkOrders {
+		work := &out.WorkOrders[workIndex]
+		workOrderID := parseID(work.ID)
+		ers, ee := s.db.QueryContext(ctx, `SELECT e.id,e.media_id,e.stage,COALESCE(e.work_order_item_id,0),COALESCE(e.unit_no,0),COALESCE(oi.sku_name_snapshot,''),e.created_at FROM work_order_evidence e LEFT JOIN work_order_item wi ON wi.org_id=e.org_id AND wi.id=e.work_order_item_id LEFT JOIN order_item oi ON oi.org_id=wi.org_id AND oi.id=wi.order_item_id WHERE e.org_id=$1 AND e.work_order_id=$2 AND e.customer_visible=true ORDER BY e.work_order_item_id NULLS LAST,e.unit_no,e.stage,e.created_at,e.id`, p.OrgID, workOrderID)
 		if ee != nil {
 			return out, ee
 		}
@@ -1354,12 +1371,15 @@ func (s *Service) CustomerOrder(ctx context.Context, p auth.Principal, id int64)
 				ev.WorkOrderItemID = fmt.Sprint(itemID)
 			}
 			ev.URL = "/api/v1/mini/media/" + ev.MediaID + "/content"
-			x.Evidence = append(x.Evidence, ev)
+			work.Evidence = append(work.Evidence, ev)
+		}
+		if ee = ers.Err(); ee != nil {
+			ers.Close()
+			return out, ee
 		}
 		ers.Close()
-		out.WorkOrders = append(out.WorkOrders, x)
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
 func (s *Service) CustomerWorkOrder(ctx context.Context, p auth.Principal, id int64) (CustomerWorkOrder, error) {
