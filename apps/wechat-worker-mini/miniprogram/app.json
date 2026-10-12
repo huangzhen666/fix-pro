@@ -8,7 +8,7 @@
     "pages/profile/index"
   ],
   "window": {
-    "navigationBarTitleText": "FixPro 师傅作业",
+    "navigationBarTitleText": "懂修匠 师傅作业",
     "navigationBarBackgroundColor": "#ffffff",
     "navigationBarTextStyle": "black",
     "backgroundColor": "#f5f7fa"

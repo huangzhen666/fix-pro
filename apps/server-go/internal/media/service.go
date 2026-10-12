@@ -8,6 +8,9 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/fixpro/server/internal/platform/database"
+	"github.com/fixpro/server/internal/platform/logging"
+	"go.uber.org/zap"
 	"io"
 	"mime/multipart"
 	"os"
@@ -118,6 +121,8 @@ func (s *Service) upload(ctx context.Context, fh *multipart.FileHeader, purpose 
 		_ = os.Remove(target)
 		return Uploaded{}, err
 	}
+	logging.Bind(ctx, zap.String("mediaId", fmt.Sprint(id)))
+	logging.Event(ctx, "media", "media.uploaded", zap.Int64("size", written), zap.String("contentType", ct))
 	return Uploaded{ID: fmt.Sprint(id), MediaType: kind, ContentType: ct, Size: written}, nil
 }
 
@@ -125,9 +130,6 @@ func (s *Service) Read(ctx context.Context, id int64, p *auth.Principal, public 
 	a, err := s.get(ctx, id)
 	if err != nil {
 		return asset{}, nil, err
-	}
-	if a.Status != "READY" {
-		return asset{}, nil, httpx.E("MEDIA_NOT_READY", "媒体不可用", 409)
 	}
 	if public {
 		var n int
@@ -138,6 +140,8 @@ func (s *Service) Read(ctx context.Context, id int64, p *auth.Principal, public 
 		if n == 0 {
 			return asset{}, nil, httpx.E("MEDIA_ACCESS_DENIED", "媒体未公开", 403)
 		}
+	} else if p == nil || a.OrgID != p.OrgID {
+		return asset{}, nil, httpx.E("MEDIA_NOT_FOUND", "媒体不存在", 404)
 	} else if p != nil && p.Role == "CUSTOMER" {
 		allowed := a.OrgID == p.OrgID && a.OwnerType == "CUSTOMER" && a.OwnerID == p.SubjectID
 		if !allowed && a.OrgID == p.OrgID && a.OwnerType == "WORK_ORDER" && a.Purpose == "WORK_ORDER_EVIDENCE" {
@@ -148,7 +152,7 @@ func (s *Service) Read(ctx context.Context, id int64, p *auth.Principal, public 
 			allowed = count > 0
 		}
 		if !allowed {
-			return asset{}, nil, httpx.E("MEDIA_ACCESS_DENIED", "无权访问该媒体", 403)
+			return asset{}, nil, httpx.E("MEDIA_NOT_FOUND", "媒体不存在", 404)
 		}
 	} else if p != nil && p.Role == "WORKER" {
 		allowed := a.OrgID == p.OrgID && ((a.OwnerType == "WORK_ORDER" && a.Purpose == "WORK_ORDER_EVIDENCE") || (a.OwnerType == "CUSTOMER" && a.Purpose == "FAULT_EVIDENCE"))
@@ -160,8 +164,11 @@ func (s *Service) Read(ctx context.Context, id int64, p *auth.Principal, public 
 			allowed = count > 0
 		}
 		if !allowed {
-			return asset{}, nil, httpx.E("MEDIA_ACCESS_DENIED", "无权访问该媒体", 403)
+			return asset{}, nil, httpx.E("MEDIA_NOT_FOUND", "媒体不存在", 404)
 		}
+	}
+	if a.Status != "READY" {
+		return asset{}, nil, httpx.E("MEDIA_NOT_READY", "媒体不可用", 409)
 	}
 	path := filepath.Clean(filepath.Join(s.root, filepath.FromSlash(a.Key)))
 	if !strings.HasPrefix(path, s.root+string(os.PathSeparator)) {
@@ -171,28 +178,53 @@ func (s *Service) Read(ctx context.Context, id int64, p *auth.Principal, public 
 	if os.IsNotExist(err) {
 		return asset{}, nil, httpx.E("MEDIA_NOT_FOUND", "媒体文件不存在", 404)
 	}
+	if err == nil {
+		logging.Bind(ctx, zap.String("mediaId", fmt.Sprint(a.ID)))
+		logging.Event(ctx, "media", "media.download_opened")
+	}
 	return a, f, err
 }
 func (s *Service) Delete(ctx context.Context, id int64, p auth.Principal) error {
-	a, err := s.get(ctx, id)
-	if err != nil {
-		return err
+	tx, e := database.BeginTx(ctx, s.db)
+	if e != nil {
+		return e
 	}
-	if p.Role == "CUSTOMER" && (a.OwnerType != "CUSTOMER" || a.OwnerID != p.SubjectID) {
-		return httpx.E("MEDIA_ACCESS_DENIED", "无权删除该媒体", 403)
+	defer tx.Rollback()
+	var org, owner int64
+	var ownerType, key, status string
+	e = tx.QueryRowContext(ctx, `SELECT org_id,owner_id,owner_type,object_key,status FROM media_asset WHERE id=$1 FOR UPDATE`, id).Scan(&org, &owner, &ownerType, &key, &status)
+	if e == sql.ErrNoRows {
+		return httpx.E("MEDIA_NOT_FOUND", "媒体不存在", 404)
+	}
+	if e != nil {
+		return e
+	}
+	if org != p.OrgID || (p.Role == "CUSTOMER" && (ownerType != "CUSTOMER" || owner != p.SubjectID)) || (p.Role != "CUSTOMER" && p.Role != "ADMIN") {
+		return httpx.E("MEDIA_NOT_FOUND", "媒体不存在", 404)
 	}
 	var refs int
-	if err = s.db.QueryRowContext(ctx, `SELECT (SELECT COUNT(*) FROM service_sku_media WHERE media_id=$1) + (SELECT COUNT(*) FROM shopping_cart_item_media WHERE media_id=$2) + (SELECT COUNT(*) FROM order_item_media WHERE media_id=$3) + (SELECT COUNT(*) FROM employee_account WHERE avatar_media_id=$4) + (SELECT COUNT(*) FROM worker_certificate_media WHERE media_id=$5)`, id, id, id, id, id).Scan(&refs); err != nil {
-		return err
+	e = tx.QueryRowContext(ctx, `SELECT (SELECT count(*) FROM service_sku WHERE cover_media_id=$1)+(SELECT count(*) FROM service_sku_media WHERE media_id=$1)+(SELECT count(*) FROM shopping_cart_item_media WHERE media_id=$1)+(SELECT count(*) FROM order_item_media WHERE media_id=$1)+(SELECT count(*) FROM employee_account WHERE avatar_media_id=$1)+(SELECT count(*) FROM worker_certificate_media WHERE media_id=$1)+(SELECT count(*) FROM work_order_evidence WHERE media_id=$1)+(SELECT count(*) FROM customer WHERE avatar_media_id=$1)`, id).Scan(&refs)
+	if e != nil {
+		return e
 	}
 	if refs > 0 {
 		return httpx.E("MEDIA_ACCESS_DENIED", "媒体已被业务引用", 403)
 	}
-	if _, err = s.db.ExecContext(ctx, "UPDATE media_asset SET status='VOID' WHERE id=$1", id); err != nil {
-		return err
+	if _, e = tx.ExecContext(ctx, `UPDATE media_asset SET status='VOID' WHERE id=$1`, id); e != nil {
+		return e
 	}
-	_ = os.Remove(filepath.Join(s.root, filepath.FromSlash(a.Key)))
-	return nil
+	if e = tx.Commit(); e != nil {
+		return e
+	}
+	path := filepath.Clean(filepath.Join(s.root, filepath.FromSlash(key)))
+	if !strings.HasPrefix(path, s.root+string(os.PathSeparator)) {
+		return httpx.E("MEDIA_ACCESS_DENIED", "非法媒体路径", 403)
+	}
+	e = os.Remove(path)
+	if os.IsNotExist(e) {
+		e = nil
+	}
+	return e
 }
 func (s *Service) get(ctx context.Context, id int64) (asset, error) {
 	var a asset

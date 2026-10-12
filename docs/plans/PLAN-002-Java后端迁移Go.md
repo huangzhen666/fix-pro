@@ -1,4 +1,4 @@
-# PLAN-002｜FixPro Java 后端迁移 Go 实施计划
+# PLAN-002｜懂修匠 Java 后端迁移 Go 实施计划
 
 **状态：** Implemented；真实 MySQL/Compose E2E 待在具备 Docker 的环境执行  
 **版本：** V1.0  

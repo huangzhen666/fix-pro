@@ -1,9 +1,10 @@
+import { protectedPage } from '../../services/guard'
 import { listCustomerOrders, type CustomerOrderSummary } from '../../services/orders'
 import { statusLabel } from '../../services/status'
 
 let currentStatusFilter = ''
 
-Page({
+protectedPage({
   data: { loading: true, statusFilter: '', items: [] as (CustomerOrderSummary & { amountText: string })[] },
 
   onLoad(options: Record<string, string>) {

@@ -1,3 +1,5 @@
+import { ensureReady, updateCustomer, onSessionReset, hasSession, scopedKey, openLogin, type CustomerProfile } from '../../services/session'
+import { request, download } from '../../services/request'
 import { getCart } from '../../services/cart'
 import { listAddresses, type CustomerAddress } from '../../services/addresses'
 import { listCustomerOrders, type CustomerOrderSummary } from '../../services/orders'
@@ -7,7 +9,7 @@ type TrackedOrderStatus = 'PENDING_PAYMENT' | 'PENDING_CONFIRMATION' | 'FULFILLI
 type ReadOrderState = { keys: string[]; viewedAt: Partial<Record<TrackedOrderStatus, number>> }
 
 const emptyOrderCounts: OrderCounts = { pendingPayment: 0, pendingService: 0, inService: 0, pendingRating: 0, returned: 0 }
-const readOrderStateKey = 'profile.read-order-shortcuts'
+const readOrderStateKey = () => scopedKey('org1.read-order-shortcuts')
 const countKeyByStatus: Record<TrackedOrderStatus, keyof OrderCounts> = {
   PENDING_PAYMENT: 'pendingPayment',
   PENDING_CONFIRMATION: 'pendingService',
@@ -16,9 +18,10 @@ const countKeyByStatus: Record<TrackedOrderStatus, keyof OrderCounts> = {
   CANCELLED: 'returned',
 }
 let currentOrders: CustomerOrderSummary[] = []
+onSessionReset(() => { currentOrders = [] })
 
 function getReadOrderState(): ReadOrderState {
-  const stored = wx.getStorageSync(readOrderStateKey)
+  const stored = wx.getStorageSync(readOrderStateKey())
   if (!stored || typeof stored !== 'object') return { keys: [], viewedAt: {} }
   const value = stored as { keys?: unknown; viewedAt?: unknown }
   return {
@@ -52,18 +55,27 @@ function markOrderStatusAsRead(status: TrackedOrderStatus) {
   currentOrders.filter(item => item.status === status).forEach(item => keys.add(`${status}:${item.id}`))
   state.keys = Array.from(keys).slice(-1000)
   state.viewedAt[status] = Date.now()
-  wx.setStorageSync(readOrderStateKey, state)
+  wx.setStorageSync(readOrderStateKey(), state)
 }
 
 Page({
-  data: { cartCount: 0, defaultAddress: null as CustomerAddress | null, orderCounts: emptyOrderCounts },
-  onShow() {
+  data: { displayName: '点击登录', mobileMasked: '', avatarPath: '', cartCount: 0, defaultAddress: null as CustomerAddress | null, orderCounts: emptyOrderCounts },
+  async onShow() {
+    currentOrders = []
+    this.setData({ displayName: '点击登录', mobileMasked: '', avatarPath: '', cartCount: 0, defaultAddress: null, orderCounts: emptyOrderCounts })
+    if (!hasSession()) return
+    try { await ensureReady() } catch { return }
+    let customer: CustomerProfile
+    try { customer = await request<CustomerProfile>({ url: '/api/v1/mini/profile' }); updateCustomer(customer) } catch { return }
+    this.setData({ displayName: customer.displayName, mobileMasked: customer.mobileMasked })
+    if (customer.avatarUrl) download(customer.avatarUrl).then(avatarPath => this.setData({ avatarPath })).catch(() => {})
     Promise.all([getCart(), listAddresses()]).then(([cart, addresses]) => this.setData({ cartCount: cart.itemCount, defaultAddress: addresses.find(item => item.isDefault) || addresses[0] || null })).catch(() => {})
     listCustomerOrders().then(result => {
       currentOrders = result.items
       this.setData({ orderCounts: countOrders(result.items) })
     }).catch(() => {})
   },
+  editProfile() { if (!hasSession()) { openLogin('/pages/profile/edit'); return }; wx.navigateTo({ url: '/pages/profile/edit' }) },
   openCart() { wx.navigateTo({ url: '/pages/cart/index' }) },
   openOrders(e?: any) {
     const status = e?.currentTarget?.dataset?.status as string | undefined

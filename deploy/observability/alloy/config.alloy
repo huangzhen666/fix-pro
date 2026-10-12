@@ -1,0 +1,62 @@
+logging {
+  level = "info"
+  format = "json"
+}
+discovery.docker "fixpro" {
+  host = "http://docker-log-proxy:2375"
+  refresh_interval = "5s"
+  filter {
+    name = "label"
+    values = ["fixpro.logs=true"]
+  }
+  // Include stopped one-shot maintenance containers until explicit cleanup.
+  filter {
+    name = "status"
+    values = ["running", "exited"]
+  }
+}
+discovery.relabel "fixpro" {
+  targets = discovery.docker.fixpro.targets
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label = "service"
+    replacement = "fix-pro-$1"
+  }
+  rule {
+    target_label = "env"
+    replacement = sys.env("APP_ENV")
+  }
+}
+loki.source.docker "fixpro" {
+  host = "http://docker-log-proxy:2375"
+  targets = discovery.relabel.fixpro.output
+  forward_to = [loki.process.fixpro.receiver]
+  refresh_interval = "5s"
+}
+loki.process "fixpro" {
+  stage.json {
+    expressions = { timestamp = "timestamp", service = "service", env = "env", module = "module", level = "level" }
+  }
+  stage.timestamp {
+    source = "timestamp"
+    format = "RFC3339Nano"
+    action_on_failure = "skip"
+  }
+  stage.labels {
+    values = { service = "service", env = "env", module = "module", level = "level" }
+  }
+  stage.label_keep {
+    values = ["service", "env", "module", "level"]
+  }
+  forward_to = [loki.write.local.receiver]
+}
+loki.write "local" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+    batch_wait = "1s"
+    batch_size = "1MiB"
+    min_backoff_period = "500ms"
+    max_backoff_period = "30s"
+    max_backoff_retries = 20
+  }
+}

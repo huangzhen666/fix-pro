@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/fixpro/server/internal/catalog"
 	"github.com/fixpro/server/internal/platform/auth"
+	"github.com/fixpro/server/internal/platform/database"
 	"github.com/fixpro/server/internal/platform/httpx"
 	"net/http"
 	"strings"
@@ -59,8 +60,8 @@ func (s *Service) find(ctx context.Context, p auth.Principal) (int64, error) {
 	e := s.db.QueryRowContext(ctx, `SELECT id FROM shopping_cart WHERE org_id=$1 AND customer_id=$2`, p.OrgID, p.SubjectID).Scan(&n)
 	return n, e
 }
-func (s *Service) media(ctx context.Context, item int64) ([]FaultMedia, error) {
-	rows, e := s.db.QueryContext(ctx, `SELECT m.id,m.media_type,m.original_name FROM shopping_cart_item_media cm JOIN media_asset m ON m.id=cm.media_id AND m.org_id=cm.org_id WHERE cm.org_id=1 AND cm.cart_item_id=$1 ORDER BY cm.sort_order`, item)
+func (s *Service) media(ctx context.Context, org, item int64) ([]FaultMedia, error) {
+	rows, e := s.db.QueryContext(ctx, `SELECT m.id,m.media_type,m.original_name FROM shopping_cart_item_media cm JOIN media_asset m ON m.id=cm.media_id AND m.org_id=cm.org_id WHERE cm.org_id=$2 AND cm.cart_item_id=$1 ORDER BY cm.sort_order`, item, org)
 	if e != nil {
 		return nil, e
 	}
@@ -110,7 +111,7 @@ func (s *Service) Get(ctx context.Context, p auth.Principal) (View, error) {
 		if fault.Valid {
 			x.FaultDescription = &fault.String
 		}
-		x.FaultMedia, e = s.media(ctx, item)
+		x.FaultMedia, e = s.media(ctx, p.OrgID, item)
 		if e != nil {
 			return out, e
 		}
@@ -121,10 +122,10 @@ func (s *Service) Get(ctx context.Context, p auth.Principal) (View, error) {
 	}
 	return out, rows.Err()
 }
-func (s *Service) current(ctx context.Context, n int64) (catalog.PublishedSKU, error) {
+func (s *Service) current(ctx context.Context, org, n int64) (catalog.PublishedSKU, error) {
 	var raw []byte
 	var x catalog.PublishedSKU
-	e := s.db.QueryRowContext(ctx, `SELECT v.snapshot_json FROM service_sku s JOIN service_sku_version v ON v.org_id=s.org_id AND v.sku_id=s.id AND v.version_no=s.current_published_version WHERE s.org_id=1 AND s.id=$1 AND s.status='PUBLISHED'`, n).Scan(&raw)
+	e := s.db.QueryRowContext(ctx, `SELECT v.snapshot_json FROM service_sku s JOIN service_sku_version v ON v.org_id=s.org_id AND v.sku_id=s.id AND v.version_no=s.current_published_version WHERE s.org_id=$2 AND s.id=$1 AND s.status='PUBLISHED'`, n, org).Scan(&raw)
 	if e == sql.ErrNoRows {
 		return x, httpx.E("SKU_NOT_AVAILABLE", "服务不可购买", 404)
 	}
@@ -153,7 +154,7 @@ func (s *Service) Add(ctx context.Context, p auth.Principal, sku int64, q int) (
 	if q < 1 || q > 99 {
 		return View{}, httpx.E("VALIDATION_ERROR", "数量必须为 1-99", 400)
 	}
-	x, e := s.current(ctx, sku)
+	x, e := s.current(ctx, p.OrgID, sku)
 	if e != nil {
 		return View{}, e
 	}
@@ -237,7 +238,7 @@ func (s *Service) Fault(ctx context.Context, p auth.Principal, item int64, w Fau
 	if images > 6 || videos > 2 {
 		return View{}, httpx.E("MEDIA_COUNT_EXCEEDED", "最多 6 张图片和 2 个视频", 400)
 	}
-	tx, e := s.db.BeginTx(ctx, nil)
+	tx, e := database.BeginTx(ctx, s.db)
 	if e != nil {
 		return View{}, e
 	}
@@ -262,7 +263,7 @@ func (s *Service) Delete(ctx context.Context, p auth.Principal, item int64) (Vie
 	if e := s.assert(ctx, p, item); e != nil {
 		return View{}, e
 	}
-	tx, e := s.db.BeginTx(ctx, nil)
+	tx, e := database.BeginTx(ctx, s.db)
 	if e != nil {
 		return View{}, e
 	}

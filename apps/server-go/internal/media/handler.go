@@ -35,6 +35,7 @@ func (h *Handler) upload(w http.ResponseWriter, r *http.Request, purpose string,
 		httpx.Failure(w, r, httpx.E("MEDIA_SIZE_EXCEEDED", "上传文件过大或格式错误", 413))
 		return
 	}
+	defer r.MultipartForm.RemoveAll()
 	f, fh, err := r.FormFile("file")
 	if err != nil {
 		httpx.Failure(w, r, httpx.E("MEDIA_NOT_FOUND", "请选择文件", 400))

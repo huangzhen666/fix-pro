@@ -98,6 +98,15 @@ $env:GOMODCACHE = Join-Path $env:GOPATH 'pkg\mod'
 New-Item -ItemType Directory -Force -Path $env:GOPATH, $env:GOMODCACHE | Out-Null
 $env:DB_DSN = 'postgres://fixpro:fixpro-local@localhost:5433/fix_pro?sslmode=disable&timezone=UTC'
 $env:APP_ENV = 'local'
+$CustomerConfig = Join-Path $TmpDir 'customer-auth.env'
+if (Test-Path $CustomerConfig) {
+  Get-Content $CustomerConfig | ForEach-Object {
+    if ($_ -match '^(WECHAT_MINI_APP_ID|WECHAT_MINI_APP_SECRET|CUSTOMER_MOBILE_ENCRYPTION_KEY|CUSTOMER_MOBILE_HASH_KEY|CUSTOMER_DEFAULT_ORG_ID|CUSTOMER_SESSION_TTL)=(.*)$') {
+      [Environment]::SetEnvironmentVariable($Matches[1], $Matches[2], 'Process')
+    }
+  }
+}
+
 $env:HTTP_ADDR = ':8080'
 $env:MEDIA_DRIVER = 'local'
 $env:MEDIA_LOCAL_ROOT = $MediaRoot
@@ -161,5 +170,5 @@ Wait-HttpOk -Url 'http://127.0.0.1:8080/api/v1/public/ping' -TimeoutSeconds 30
 Wait-HttpOk -Url 'http://127.0.0.1:5173/' -TimeoutSeconds 30
 Wait-HttpOk -Url 'http://127.0.0.1:5173/api/v1/public/ping' -TimeoutSeconds 30
 
-Write-Host 'FixPro local startup complete.'
+Write-Host '懂修匠 local startup complete.'
 Write-Host 'Use -Migrate only after migration files or database changes; do not run npm install or go mod download for daily startup.'

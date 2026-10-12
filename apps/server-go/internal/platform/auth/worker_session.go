@@ -194,6 +194,6 @@ func WorkerSession(store *WorkerSessionStore, next http.Handler) http.Handler {
 			httpx.Failure(w, r, httpx.E("WORKER_SESSION_INVALID", "需要师傅登录", http.StatusUnauthorized))
 			return
 		}
-		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), principalKey, p)))
+		next.ServeHTTP(w, r.WithContext(WithPrincipal(r.Context(), p)))
 	})
 }

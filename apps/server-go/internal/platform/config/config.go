@@ -2,6 +2,7 @@ package config
 
 import (
 	"errors"
+	"github.com/fixpro/server/internal/platform/logging"
 	"os"
 	"strconv"
 	"strings"
@@ -9,6 +10,13 @@ import (
 )
 
 type Config struct {
+	Logging               logging.Config
+	WechatAppID           string
+	WechatSecret          string
+	CustomerOrgID         int64
+	CustomerTTL           time.Duration
+	MobileEncryptionKey   string
+	MobileHashKey         string
 	Env                   string
 	HTTPAddr              string
 	DBDSN                 string
@@ -27,6 +35,7 @@ type Config struct {
 
 func Load() (Config, error) {
 	c := Config{
+		WechatAppID: os.Getenv("WECHAT_MINI_APP_ID"), WechatSecret: os.Getenv("WECHAT_MINI_APP_SECRET"), CustomerOrgID: int64(envInt("CUSTOMER_DEFAULT_ORG_ID", 1)), CustomerTTL: 168 * time.Hour, MobileEncryptionKey: os.Getenv("CUSTOMER_MOBILE_ENCRYPTION_KEY"), MobileHashKey: os.Getenv("CUSTOMER_MOBILE_HASH_KEY"),
 		Env: env("APP_ENV", "local"), HTTPAddr: env("HTTP_ADDR", ":8080"),
 		DBDSN:     env("DB_DSN", "postgres://fixpro:fixpro-local@localhost:5433/fix_pro?sslmode=disable&timezone=UTC"),
 		DBMaxOpen: envInt("DB_MAX_OPEN_CONNS", 20), DBMaxIdle: envInt("DB_MAX_IDLE_CONNS", 5),
@@ -36,10 +45,25 @@ func Load() (Config, error) {
 		WorkerDevTokenEnabled: envBool("WORKER_DEV_TOKEN_ENABLED", false),
 		CORSAllowedOrigins:    split(env("CORS_ALLOWED_ORIGINS", "http://localhost:5173")), ShutdownTimeout: 15 * time.Second,
 	}
+	var logErr error
+	c.Logging, logErr = logging.Load(c.Env)
+	if logErr != nil {
+		return Config{}, logErr
+	}
+	if v := os.Getenv("CUSTOMER_SESSION_TTL"); v != "" {
+		d, e := time.ParseDuration(v)
+		if e != nil || d <= 0 {
+			return Config{}, errors.New("invalid CUSTOMER_SESSION_TTL")
+		}
+		c.CustomerTTL = d
+	}
 	if c.DBDSN == "" {
 		return Config{}, errors.New("DB_DSN is required")
 	}
 	if c.Env == "production" {
+		if c.WechatAppID == "" || c.WechatSecret == "" || c.MobileEncryptionKey == "" || c.MobileHashKey == "" {
+			return Config{}, errors.New("production customer login configuration required")
+		}
 		if c.AdminPassword == "change-me-in-production" {
 			return Config{}, errors.New("production default admin password is forbidden")
 		}

@@ -12,10 +12,12 @@
     "pages/orders/index",
     "pages/orders/detail",
     "pages/profile/index",
-    "pages/workbench/index"
+    "pages/workbench/index",
+    "pages/login/index",
+    "pages/profile/edit"
   ],
   "window": {
-    "navigationBarTitleText": "FixPro 家居运维",
+    "navigationBarTitleText": "懂修匠 家居运维",
     "navigationBarBackgroundColor": "#ffffff",
     "navigationBarTextStyle": "black",
     "backgroundColor": "#f5f7fa"
@@ -25,12 +27,28 @@
     "selectedColor": "#1677ff",
     "backgroundColor": "#ffffff",
     "list": [
-      { "pagePath": "pages/home/index", "text": "首页" },
-      { "pagePath": "pages/services/index", "text": "全部服务" },
-      { "pagePath": "pages/profile/index", "text": "我的" }
+      {
+        "pagePath": "pages/home/index",
+        "text": "首页"
+      },
+      {
+        "pagePath": "pages/services/index",
+        "text": "全部服务"
+      },
+      {
+        "pagePath": "pages/profile/index",
+        "text": "我的"
+      }
     ]
   },
   "sitemapLocation": "sitemap.json",
-  "requiredPrivateInfos": ["chooseAddress"],
-  "lazyCodeLoading": "requiredComponents"
+  "requiredPrivateInfos": [
+    "chooseLocation"
+  ],
+  "lazyCodeLoading": "requiredComponents",
+  "permission": {
+    "scope.userLocation": {
+      "desc": "用于选择汉川市上门服务地址"
+    }
+  }
 }

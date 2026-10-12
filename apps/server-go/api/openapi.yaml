@@ -1,24 +1,33 @@
 openapi: 3.1.0
 info:
-  title: FixPro API
+  title: 懂修匠 API
   version: 1.0.0-go
 servers:
   - url: http://localhost:8080
 components:
   parameters:
+    RequestId:
+      name: X-Request-Id
+      in: header
+      required: false
+      description: Single diagnostic ID; invalid values are replaced by server-generated IDs.
+      schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$'}
     Id:
       name: id
       in: path
       required: true
       schema: {type: string, pattern: '^[1-9][0-9]*$'}
   securitySchemes:
+    miniBearer: {type: http, scheme: bearer}
     adminSession: {type: apiKey, in: cookie, name: fixpro_admin_session}
     adminBasic: {type: http, scheme: basic, description: Deprecated local compatibility only}
   headers:
+    RequestId:
+      description: Diagnostic request ID; returned on JSON, media and error responses and exposed by CORS.
+      schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$'}
     CSRFToken:
       description: Required on state-changing admin requests when using cookie sessions.
       schema: {type: string}
-    miniBearer: {type: http, scheme: bearer}
   schemas:
     ApiResponse:
       type: object
@@ -160,3 +169,88 @@ paths:
     post: {security: [{miniBearer: []}], parameters: [{$ref: '#/components/parameters/Id'}], responses: {'200': {description: Uploaded media bound to evidence stage}}}
   /api/v1/worker/work-orders/{id}/submit-completion:
     post: {security: [{miniBearer: []}], parameters: [{$ref: '#/components/parameters/Id'}], responses: {'200': {description: Completion submitted}}}
+
+  /api/v1/mini/auth/phone/login:
+    post:
+      summary: Phone authorization login or signup; independent wx.login Code required.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [phoneCode, loginCode]
+              properties:
+                phoneCode: {type: string}
+                loginCode: {type: string}
+      responses: {'200': {description: 'accessToken, expiresAt, isNewCustomer, customer'}, '401': {description: Authorization expired}, '403': {description: Account unavailable}, '429': {description: Rate limited}, '503': {description: WeChat or customer initialization unavailable}}
+  /api/v1/mini/auth/me:
+    get: {security: [{miniBearer: []}], responses: {'200': {description: 'customer, expiresAt; phone is masked'}, '401': {description: Invalid customer session}}}
+  /api/v1/mini/auth/session/verify:
+    post:
+      security: [{miniBearer: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, additionalProperties: false, required: [loginCode], properties: {loginCode: {type: string}}}
+      responses: {'200': {description: Current WeChat context verified without renewing session}, '401': {description: Invalid session or changed WeChat context}}
+  /api/v1/mini/profile:
+    get: {security: [{miniBearer: []}], responses: {'200': {description: Current profile with version and protected avatar URL}}}
+    put:
+      security: [{miniBearer: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [displayName, avatarMediaId, version]
+              properties:
+                displayName: {type: string, minLength: 1, maxLength: 32}
+                avatarMediaId: {type: [string, 'null']}
+                version: {type: integer, minimum: 0}
+      responses: {'200': {description: Atomically updated current profile}, '409': {description: Profile version conflict}, '404': {description: Avatar unavailable}, '503': {description: Content check unavailable}}
+  /api/v1/mini/media/avatar:
+    post:
+      security: [{miniBearer: []}]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: {type: object, required: [file], properties: {file: {type: string, format: binary, description: 'Decodable JPEG/PNG/WebP; maximum 5 MB'}}}
+      responses: {'200': {description: Private CUSTOMER_AVATAR mediaId}, '413': {description: Avatar too large}, '400': {description: Invalid image}}
+  /api/v1/mini/checkout/contact:
+    get: {security: [{miniBearer: []}], responses: {'200': {description: Current customer contactMobile for checkout default only}}}
+  /api/v1/admin/customers/overview:
+    get: {security: [{adminSession: []}], description: 'customer.view; org-scoped totals; Asia/Shanghai day windows; registered includes deleted, activity excludes deleted', responses: {'200': {description: 'registered, newToday, new7Days, activeToday, active7Days, active30Days, asOf, timezone'}, '403': {description: Permission denied}}}
+  /api/v1/admin/customers:
+    get:
+      security: [{adminSession: []}]
+      description: 'customer.view; masked phone; exact mobile lookup via HMAC; no query-string logging'
+      parameters:
+        - {name: page, in: query, schema: {type: integer, minimum: 1}}
+        - {name: pageSize, in: query, schema: {type: integer, minimum: 1, maximum: 100}}
+        - {name: customerId, in: query, schema: {type: string}}
+        - {name: name, in: query, schema: {type: string}}
+        - {name: mobile, in: query, schema: {type: string}}
+        - {name: status, in: query, schema: {type: string, enum: [ACTIVE, DISABLED, DELETED]}}
+        - {name: registeredFrom, in: query, schema: {type: string, format: date}}
+        - {name: registeredTo, in: query, schema: {type: string, format: date}}
+        - {name: hasOrders, in: query, schema: {type: boolean}}
+        - {name: sort, in: query, schema: {type: string, enum: [registered, active, orders]}}
+      responses: {'200': {description: Paginated customer usage aggregates}, '403': {description: Permission denied}}
+  /api/v1/admin/customers/{id}:
+    get: {security: [{adminSession: []}], parameters: [{$ref: '#/components/parameters/Id'}], description: customer.view, responses: {'200': {description: 'customer, addressCount, cartItemCount'}, '404': {description: Customer outside current organization or missing}}}
+  /api/v1/admin/customers/{id}/orders:
+    get: {security: [{adminSession: []}], parameters: [{$ref: '#/components/parameters/Id'}], description: 'customer.view AND order.view; separate pagination', responses: {'200': {description: Paginated order facts}, '403': {description: Permission denied}, '404': {description: Customer missing}}}
+  /api/v1/admin/customers/{id}/avatar/content:
+    get: {security: [{adminSession: []}], parameters: [{$ref: '#/components/parameters/Id'}], description: 'customer.view; current customer avatar reference only; no-store', responses: {'200': {description: Private avatar bytes}, '404': {description: Avatar missing or outside current organization}}}
+
+# Diagnostic contract (SPEC-012): Every server response includes X-Request-Id,
+# including OPTIONS, 404, 405, auth errors and media responses. CORS exposes it.
+# Accept a single request ID matching [A-Za-z0-9][A-Za-z0-9._-]{0,63}; otherwise
+# generate a new 128-bit ID. JSON requestId remains the existing response field.
+# Network/proxy failures may only have a client reference, not a server ID.

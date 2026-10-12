@@ -1,7 +1,9 @@
+import { showApiError } from '../../services/request'
+import { protectedPage } from '../../services/guard'
 import { getCart, type Cart } from '../../services/cart'
 import { createOrder } from '../../services/orders'
 import { formatAddress, listAddresses, type CustomerAddress } from '../../services/addresses'
-import { ApiError } from '../../services/request'
+import { request, ApiError } from '../../services/request'
 
 const checkoutItemsStorageKey = 'fixpro.checkoutCartItemIds'
 type AppointmentDateOption = { value: string; label: string; selected: boolean }
@@ -52,7 +54,7 @@ function buildAppointmentSlots(selected = ''): AppointmentSlotOption[] {
   return slotDefinitions.map((slot, index) => ({ ...slot, showPeriod: index === 0 || slot.period !== slotDefinitions[index - 1].period, selected: slot.value === selected }))
 }
 
-Page({
+protectedPage({
   data: {
     cart: { items: [], itemCount: 0, totalAmount: 0 } as Cart,
     totalText: '0.00',
@@ -76,7 +78,7 @@ Page({
     const storedItemIDs = wx.getStorageSync<unknown>(checkoutItemsStorageKey)
     wx.removeStorageSync(checkoutItemsStorageKey)
     const itemIDs = Array.isArray(storedItemIDs) ? storedItemIDs.filter((id): id is string => typeof id === 'string') : null
-    const [cartResult, addresses] = await Promise.all([getCart(), listAddresses()])
+    const [cartResult, addresses, contact] = await Promise.all([getCart(), listAddresses(), request<{ contactMobile: string }>({ url: "/api/v1/mini/checkout/contact" })])
     const cart = selectedCart(cartResult, itemIDs)
     if (!cart.items.length) {
       wx.showToast({ title: itemIDs ? '所选服务已不在购物车中' : '购物车为空', icon: 'none' })
@@ -85,7 +87,7 @@ Page({
     }
     const appointmentDates = buildAppointmentDates()
     const selectedAddress = addresses.find(item => item.isDefault) || addresses[0] || null
-    this.setData({ cart, totalText: (cart.totalAmount / 100).toFixed(2), appointmentDates, selectedAddress, contactName: selectedAddress?.contactName || '', contactMobile: selectedAddress?.contactMobile || '', serviceAddress: selectedAddress ? formatAddress(selectedAddress) : '' })
+    this.setData({ cart, totalText: (cart.totalAmount / 100).toFixed(2), appointmentDates, selectedAddress, contactName: selectedAddress?.contactName || '', contactMobile: selectedAddress?.contactMobile || contact.contactMobile, serviceAddress: selectedAddress ? formatAddress(selectedAddress) : '' })
   },
   onShow() {
     const selected = wx.getStorageSync<CustomerAddress | null>('fixpro.selectedAddress')
@@ -145,7 +147,7 @@ Page({
           success: () => wx.navigateBack(),
         })
       } else {
-        wx.showToast({ title: e instanceof Error ? e.message : '下单失败', icon: 'none' })
+        showApiError(e)
       }
     } finally {
       this.setData({ submitting: false })

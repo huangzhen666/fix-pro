@@ -1,1 +1,29 @@
-.page{min-height:100vh;background:#f5f7fa;padding:0 24rpx 60rpx;box-sizing:border-box}.privacy-tip{margin:0 -24rpx 24rpx;padding:22rpx 30rpx;background:#fff3df;color:#ad7a2a;font-size:26rpx}.form-card{background:#fff;border-radius:24rpx;padding:18rpx 28rpx 24rpx}.import-actions{display:flex;gap:18rpx;padding:4rpx 0 18rpx;border-bottom:1rpx solid #f0f2f5}.import-actions button{flex:1;margin:0;color:#1677ff;background:#edf5ff;border-radius:30rpx;font-size:24rpx}.form-row{display:flex;align-items:center;min-height:96rpx;border-bottom:1rpx solid #f0f2f5}.form-row:last-of-type{border-bottom:0}.label{width:190rpx;flex:none;color:#101828;font-size:29rpx;font-weight:600}.field{flex:1;color:#344054;font-size:29rpx;text-align:right}.notice{margin-top:12rpx;padding:10rpx 18rpx;background:#edf5ff;border-radius:20rpx;color:#5b9bea;font-size:23rpx}.default-row{display:flex;align-items:center;margin:26rpx 10rpx;color:#667085;font-size:27rpx}.default-row checkbox{transform:scale(.78);margin-right:8rpx}.save-button{height:88rpx;line-height:88rpx;border-radius:44rpx;background:#1677ff;color:#fff;font-size:31rpx;margin:20rpx 0 0}
+.page{min-height:100vh;background:#f5f5f7;padding:0 24rpx 60rpx;box-sizing:border-box}
+.privacy-tip{margin:0 -24rpx 24rpx;padding:24rpx;background:#fff3e3;color:#ad823d;font-size:25rpx;line-height:1.5}
+.form-card{background:#fff;border-radius:24rpx;padding:16rpx 24rpx 22rpx}
+.form-row{display:flex;align-items:center;min-height:92rpx;gap:12rpx}
+.label{width:148rpx;flex:none;color:#262626;font-size:28rpx;font-weight:600;white-space:nowrap}
+.field{flex:1;min-width:0;color:#262626;font-size:28rpx;text-align:left;height:60rpx;line-height:60rpx}
+.city-arrow{flex:none;color:#667085;font-size:32rpx;padding:0 4rpx}
+.placeholder{color:#bfbfbf;font-size:26rpx}
+.location-button{display:flex;align-items:center;justify-content:center;gap:8rpx;flex:none;padding:12rpx 0 12rpx 8rpx;margin:0;background:transparent;color:#333;font-size:26rpx;line-height:1.5;border-radius:0}
+.location-button::after,.clear-button::after,.save-button::after{border:0}
+.location-button[disabled]{background:transparent;color:#999}
+.location-pin{position:relative;width:18rpx;height:18rpx;border:3rpx solid currentColor;border-radius:50% 50% 50% 0;transform:rotate(-45deg);margin-right:2rpx}
+.location-pin::after{content:'';position:absolute;width:5rpx;height:5rpx;border:2rpx solid currentColor;border-radius:50%;top:4rpx;left:4rpx}
+.clear-button{flex:none;width:32rpx;height:32rpx;padding:0;margin:0;background:#d9d9d9;color:#fff;font-size:30rpx;line-height:29rpx;border-radius:50%}
+.notice{margin-top:4rpx;padding:8rpx 20rpx;background:#f0f5ff;border-radius:18rpx;color:#4d9bdf;font-size:24rpx;line-height:1.5}
+.default-row{display:flex;align-items:center;justify-content:space-between;margin:20rpx 8rpx;color:#667085;font-size:25rpx}
+.default-row switch{transform:scale(.8);transform-origin:right center}
+.save-button{height:80rpx;line-height:80rpx;border-radius:44rpx;background:#1677ff;color:#fff;font-size:30rpx;font-weight:600;margin:20rpx 0 0}
+.save-button[disabled]{background:#91caff;color:#fff}
+.loading{padding:40rpx;text-align:center;color:#888}
+.privacy-mask{position:fixed;inset:0;z-index:1000;background:rgba(16,24,40,.5);display:flex;align-items:center;justify-content:center;padding:48rpx}
+.privacy-dialog{width:100%;box-sizing:border-box;background:#fff;border-radius:28rpx;padding:36rpx}
+.privacy-title{font-size:34rpx;font-weight:700;text-align:center;margin-bottom:24rpx}
+.privacy-content{font-size:28rpx;line-height:1.8;color:#475467}
+.privacy-link{color:#1677ff}
+.privacy-actions{display:flex;gap:16rpx;margin-top:32rpx}
+.privacy-actions button{flex:1;min-width:0;font-size:26rpx;padding:0 8rpx;margin:0;border-radius:12rpx}
+.privacy-cancel{color:#667085;background:#f2f4f7}
+.privacy-confirm{background:#1677ff!important}

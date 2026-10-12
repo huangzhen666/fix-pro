@@ -5,6 +5,9 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/fixpro/server/internal/platform/database"
+	"github.com/fixpro/server/internal/platform/logging"
+	"go.uber.org/zap"
 	"strings"
 	"time"
 
@@ -128,10 +131,10 @@ func ids(v []int64) map[int64]bool {
 	}
 	return out
 }
-func (s *Service) history(tx *sql.Tx, p auth.Principal, id int64, event string, before, after any, reason string) error {
+func (s *Service) history(ctx context.Context, tx *sql.Tx, p auth.Principal, id int64, event string, before, after any, reason string) error {
 	b, _ := json.Marshal(before)
 	a, _ := json.Marshal(after)
-	_, e := tx.Exec(`INSERT INTO worker_profile_history(org_id,worker_id,event_code,operator_type,operator_id,operator_name,before_json,after_json,reason) VALUES($1,$2,$3,'ADMIN',$4,$5,$6,$7,NULLIF($8,''))`, p.OrgID, id, event, p.SubjectID, p.Name, b, a, reason)
+	_, e := tx.ExecContext(ctx, `INSERT INTO worker_profile_history(org_id,worker_id,event_code,operator_type,operator_id,operator_name,before_json,after_json,reason) VALUES($1,$2,$3,'ADMIN',$4,$5,$6,$7,NULLIF($8,''))`, p.OrgID, id, event, p.SubjectID, p.Name, b, a, reason)
 	return e
 }
 
@@ -529,7 +532,7 @@ func (s *Service) SaveWorker(ctx context.Context, p auth.Principal, id int64, w 
 	if len([]rune(w.DisplayName)) < 2 || !validWorkerMobile(w.Mobile) {
 		return Worker{}, httpx.E("VALIDATION_ERROR", "姓名或手机号不合法", 400)
 	}
-	tx, e := s.db.BeginTx(ctx, nil)
+	tx, e := database.BeginTx(ctx, s.db)
 	if e != nil {
 		return Worker{}, e
 	}
@@ -575,7 +578,7 @@ func (s *Service) SaveWorker(ctx context.Context, p auth.Principal, id int64, w 
 				return Worker{}, e
 			}
 		}
-		if e = s.history(tx, p, workerID, "CREATED", nil, w, ""); e != nil {
+		if e = s.history(ctx, tx, p, workerID, "CREATED", nil, w, ""); e != nil {
 			return Worker{}, e
 		}
 	} else {
@@ -624,7 +627,7 @@ func (s *Service) SaveWorker(ctx context.Context, p auth.Principal, id int64, w 
 				return Worker{}, e
 			}
 		}
-		if e = s.history(tx, p, id, "PROFILE_UPDATED", nil, w, ""); e != nil {
+		if e = s.history(ctx, tx, p, id, "PROFILE_UPDATED", nil, w, ""); e != nil {
 			return Worker{}, e
 		}
 	}
@@ -646,7 +649,7 @@ func (s *Service) ResetPassword(ctx context.Context, p auth.Principal, id int64,
 	if sessions == nil {
 		return nil, httpx.E("WORKER_AUTH_UNAVAILABLE", "师傅认证服务未初始化", 500)
 	}
-	tx, e := s.db.BeginTx(ctx, nil)
+	tx, e := database.BeginTx(ctx, s.db)
 	if e != nil {
 		return nil, e
 	}
@@ -668,15 +671,20 @@ func (s *Service) ResetPassword(ctx context.Context, p auth.Principal, id int64,
 	if _, e = tx.ExecContext(ctx, `UPDATE employee_account SET password_hash=$1,must_change_password=TRUE,password_version=password_version+1,last_password_changed_at=CURRENT_TIMESTAMP(3),version=version+1 WHERE org_id=$2 AND id=$3`, hash, p.OrgID, id); e != nil {
 		return nil, e
 	}
-	if e = s.history(tx, p, id, "PASSWORD_RESET", nil, map[string]any{"mustChangePassword": true}, "后台重置师傅密码"); e != nil {
+	if e = s.history(ctx, tx, p, id, "PASSWORD_RESET", nil, map[string]any{"mustChangePassword": true}, "后台重置师傅密码"); e != nil {
+		return nil, e
+	}
+	if _, e = tx.ExecContext(ctx, `INSERT INTO audit_log(org_id,principal_id,action_code,resource_type,resource_id,request_id) VALUES($1,$2,'worker.reset_password','worker',$3,NULLIF($4,''))`, p.OrgID, p.AdminUserID, fmt.Sprint(id), httpx.RequestID(ctx)); e != nil {
+		return nil, e
+	}
+	if _, e = tx.ExecContext(ctx, `UPDATE worker_session SET revoked_at=CURRENT_TIMESTAMP(3) WHERE org_id=$1 AND worker_id=$2 AND revoked_at IS NULL`, p.OrgID, id); e != nil {
 		return nil, e
 	}
 	if e = tx.Commit(); e != nil {
 		return nil, e
 	}
-	if e = sessions.RevokeWorkerSessions(ctx, p.OrgID, id); e != nil {
-		return nil, e
-	}
+
+	logging.Event(ctx, "auth", "worker.password_reset", zap.String("principalId", fmt.Sprint(id)))
 	return map[string]any{"workerId": id, "temporaryPassword": temporaryPassword, "mustChangePassword": true}, nil
 }
 func (s *Service) replaceAssignments(tx *sql.Tx, p auth.Principal, id int64, trades, skills []int64) error {
@@ -729,7 +737,7 @@ func (s *Service) SetStatus(ctx context.Context, p auth.Principal, id int64, sta
 		return e
 	}
 	if status == "ACTIVE" {
-		tx, e := s.db.BeginTx(ctx, nil)
+		tx, e := database.BeginTx(ctx, s.db)
 		if e != nil {
 			return e
 		}
@@ -745,7 +753,7 @@ func (s *Service) SetStatus(ctx context.Context, p auth.Principal, id int64, sta
 		if n == 0 {
 			return httpx.E("RESOURCE_VERSION_CONFLICT", "师傅已被修改", 409)
 		}
-		if e = s.history(tx, p, id, "ACTIVATED", nil, map[string]string{"status": "ACTIVE"}, ""); e != nil {
+		if e = s.history(ctx, tx, p, id, "ACTIVATED", nil, map[string]string{"status": "ACTIVE"}, ""); e != nil {
 			return e
 		}
 		return tx.Commit()
@@ -759,7 +767,7 @@ func (s *Service) SetStatus(ctx context.Context, p auth.Principal, id int64, sta
 	if req.WorkOrderPolicy != "KEEP_ASSIGNMENTS" && req.WorkOrderPolicy != "RETURN_NOT_STARTED" {
 		return httpx.E("VALIDATION_ERROR", "停用策略不合法", 400)
 	}
-	tx, e := s.db.BeginTx(ctx, nil)
+	tx, e := database.BeginTx(ctx, s.db)
 	if e != nil {
 		return e
 	}
@@ -814,7 +822,7 @@ func (s *Service) SetStatus(ctx context.Context, p auth.Principal, id int64, sta
 		}
 		pendingRows.Close()
 	}
-	if e = s.history(tx, p, id, "DISABLED", map[string]string{"status": "ACTIVE"}, map[string]string{"status": "DISABLED"}, req.Reason); e != nil {
+	if e = s.history(ctx, tx, p, id, "DISABLED", map[string]string{"status": "ACTIVE"}, map[string]string{"status": "DISABLED"}, req.Reason); e != nil {
 		return e
 	}
 	return tx.Commit()

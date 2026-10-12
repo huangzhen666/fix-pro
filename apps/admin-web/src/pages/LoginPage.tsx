@@ -41,7 +41,7 @@ export function LoginPage() {
       <Card className="login-card" bordered={false}>
         <Space direction="vertical" size={4} style={{ marginBottom: 24 }}>
           <Typography.Title level={2} style={{ margin: 0 }}>
-            FixPro 运维中心
+            懂修匠 运维中心
           </Typography.Title>
           <Typography.Text type="secondary">
             使用后台账号登录，权限由角色统一控制。

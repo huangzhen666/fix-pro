@@ -1,5 +1,5 @@
 <view class="page login-page">
-  <view class="brand-mark">FixPro</view>
+  <view class="brand-mark">懂修匠</view>
   <view class="subtitle">师傅作业中心</view>
   <view class="card login-card">
     <view class="heading">欢迎登录</view>

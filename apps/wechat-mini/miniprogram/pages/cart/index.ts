@@ -1,3 +1,4 @@
+import { protectedPage } from '../../services/guard'
 import { getApiBaseUrl } from '../../config/env'
 import { getCart, removeItem, saveFault, updateQuantity, uploadFault, type Cart, type CartItem } from '../../services/cart'
 
@@ -10,7 +11,7 @@ function selectedSummary(items: DisplayCartItem[]) {
   return items.filter(item => item.selected).reduce((summary, item) => ({ itemCount: summary.itemCount + item.quantity, totalAmount: summary.totalAmount + item.subtotal }), { itemCount: 0, totalAmount: 0 })
 }
 
-Page({
+protectedPage({
   data:{loading:true,cart:{items:[],itemCount:0,totalAmount:0} as DisplayCart,totalText:'0.00',selectedCount:0,savingId:'',checkoutLoading:false},
   onShow(){this.load()},onPullDownRefresh(){this.load().finally(()=>wx.stopPullDownRefresh())},
   onUnload(){selectedByItemID={}},

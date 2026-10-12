@@ -1,0 +1,363 @@
+{
+  "uid": "fixpro-diagnostics",
+  "title": "懂修匠 线上诊断",
+  "schemaVersion": 39,
+  "version": 1,
+  "timezone": "browser",
+  "refresh": "30s",
+  "time": {
+    "from": "now-30m",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "env",
+        "type": "custom",
+        "query": "local,test,staging,production",
+        "current": {
+          "text": "local",
+          "value": "local"
+        }
+      },
+      {
+        "name": "requestId",
+        "type": "textbox",
+        "current": {
+          "text": ".*",
+          "value": ".*"
+        }
+      },
+      {
+        "name": "orgId",
+        "type": "textbox",
+        "current": {
+          "text": ".*",
+          "value": ".*"
+        }
+      },
+      {
+        "name": "orderId",
+        "type": "textbox",
+        "current": {
+          "text": ".*",
+          "value": ".*"
+        }
+      },
+      {
+        "name": "workOrderId",
+        "type": "textbox",
+        "current": {
+          "text": ".*",
+          "value": ".*"
+        }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "请求定位",
+      "type": "logs",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 12,
+        "h": 9
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "fixpro-loki"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{service=\"fix-pro-api\",env=\"$env\"} | json | __error__=\"\" | requestId=~${requestId:doublequote}",
+          "datasource": {
+            "type": "loki",
+            "uid": "fixpro-loki"
+          }
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending"
+      }
+    },
+    {
+      "id": 2,
+      "title": "订单与工单时间线",
+      "type": "logs",
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 9
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "fixpro-loki"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{service=\"fix-pro-api\",env=\"$env\"} | json | __error__=\"\" | orgId=~${orgId:doublequote} | orderId=~${orderId:doublequote} | workOrderId=~${workOrderId:doublequote}",
+          "datasource": {
+            "type": "loki",
+            "uid": "fixpro-loki"
+          }
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending"
+      }
+    },
+    {
+      "id": 3,
+      "title": "安全错误根因",
+      "type": "logs",
+      "gridPos": {
+        "x": 0,
+        "y": 9,
+        "w": 12,
+        "h": 9
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "fixpro-loki"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{service=\"fix-pro-api\",env=\"$env\"} | json | __error__=\"\" | event=\"http.request.failed\"",
+          "datasource": {
+            "type": "loki",
+            "uid": "fixpro-loki"
+          }
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending"
+      }
+    },
+    {
+      "id": 4,
+      "title": "请求量",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 12,
+        "y": 9,
+        "w": 12,
+        "h": 9
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "fixpro-loki"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate({service=\"fix-pro-api\",env=\"$env\"} | json | __error__=\"\" | event=\"http.request.completed\" | route!=\"GET /actuator/health\" | route!=\"GET /api/v1/public/ping\" | method!=\"OPTIONS\" [5m]))",
+          "datasource": {
+            "type": "loki",
+            "uid": "fixpro-loki"
+          }
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending"
+      }
+    },
+    {
+      "id": 5,
+      "title": "HTTP 5xx",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 0,
+        "y": 18,
+        "w": 12,
+        "h": 9
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "fixpro-loki"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(count_over_time({service=\"fix-pro-api\",env=\"$env\"} | json | __error__=\"\" | event=\"http.request.completed\" | route!=\"GET /actuator/health\" | route!=\"GET /api/v1/public/ping\" | method!=\"OPTIONS\" | status >= 500 [5m]))",
+          "datasource": {
+            "type": "loki",
+            "uid": "fixpro-loki"
+          }
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending"
+      }
+    },
+    {
+      "id": 6,
+      "title": "普通路由 P95（ms）",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 12,
+        "y": 18,
+        "w": 12,
+        "h": 9
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "fixpro-loki"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "quantile_over_time(0.95, {service=\"fix-pro-api\",env=\"$env\"} | json | __error__=\"\" | event=\"http.request.completed\" | route!=\"GET /actuator/health\" | route!=\"GET /api/v1/public/ping\" | method!=\"OPTIONS\" | route!~\".*(media|avatar).*\" | unwrap durationMs | __error__=\"\" [5m]) by (route)",
+          "datasource": {
+            "type": "loki",
+            "uid": "fixpro-loki"
+          }
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending"
+      }
+    },
+    {
+      "id": 7,
+      "title": "微信依赖结果",
+      "type": "logs",
+      "gridPos": {
+        "x": 0,
+        "y": 27,
+        "w": 12,
+        "h": 9
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "fixpro-loki"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{service=\"fix-pro-api\",env=\"$env\"} | json | __error__=\"\" | event=\"dependency.attempt.completed\"",
+          "datasource": {
+            "type": "loki",
+            "uid": "fixpro-loki"
+          }
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending"
+      }
+    },
+    {
+      "id": 8,
+      "title": "数据库与慢操作",
+      "type": "logs",
+      "gridPos": {
+        "x": 12,
+        "y": 27,
+        "w": 12,
+        "h": 9
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "fixpro-loki"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{service=\"fix-pro-api\",env=\"$env\"} | json | __error__=\"\" | event=~\"db.pool.snapshot|db.query.slow\"",
+          "datasource": {
+            "type": "loki",
+            "uid": "fixpro-loki"
+          }
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending"
+      }
+    },
+    {
+      "id": 9,
+      "title": "任务运行",
+      "type": "logs",
+      "gridPos": {
+        "x": 0,
+        "y": 36,
+        "w": 12,
+        "h": 9
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "fixpro-loki"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{service=\"fix-pro-api\",env=\"$env\"} | json | __error__=\"\" | event=~\"job.*\"",
+          "datasource": {
+            "type": "loki",
+            "uid": "fixpro-loki"
+          }
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending"
+      }
+    },
+    {
+      "id": 10,
+      "title": "部署版本",
+      "type": "logs",
+      "gridPos": {
+        "x": 12,
+        "y": 36,
+        "w": 12,
+        "h": 9
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "fixpro-loki"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{service=\"fix-pro-api\",env=\"$env\"} | json | __error__=\"\" | event=~\"server.*\"",
+          "datasource": {
+            "type": "loki",
+            "uid": "fixpro-loki"
+          }
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending"
+      }
+    }
+  ],
+  "tags": [
+    "fixpro",
+    "logging"
+  ]
+}

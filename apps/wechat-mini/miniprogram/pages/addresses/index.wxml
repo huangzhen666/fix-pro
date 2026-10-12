@@ -1,4 +1,4 @@
-<view class="page">
+<block wx:if="{{sessionReady}}"><view class="page">
   <view class="page-title">{{selectMode ? '选择服务地址' : '地址管理'}}</view>
   <view wx:if="{{!items.length && !loading}}" class="empty">还没有保存地址，先新增一个吧</view>
   <view wx:for="{{items}}" wx:key="id" class="address-card" data-id="{{item.id}}" bindtap="choose">
@@ -17,3 +17,4 @@
   <view class="bottom-space"></view>
   <view class="add-bar"><button bindtap="add">新增地址</button></view>
 </view>
+</block><view wx:else style="padding:40rpx;text-align:center;color:#888">正在校验登录状态，请保持网络连接</view>

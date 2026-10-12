@@ -5,7 +5,9 @@ import (
 	"github.com/fixpro/server/internal/app"
 	"github.com/fixpro/server/internal/platform/config"
 	"github.com/fixpro/server/internal/platform/database"
-	"log/slog"
+	"github.com/fixpro/server/internal/platform/logging"
+	"go.uber.org/zap"
+	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -13,36 +15,68 @@ import (
 	"time"
 )
 
-func main() {
-	log := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	c, e := config.Load()
-	if e != nil {
-		log.Error("config", "error", e)
-		os.Exit(1)
+func main() { os.Exit(run()) }
+func run() int {
+	bootstrap := logging.Bootstrap("fix-pro-api")
+	defer bootstrap.Sync()
+	c, err := config.Load()
+	if err != nil {
+		bootstrap.Error("invalid server configuration", logging.SafeError(err)...)
+		return 1
 	}
-	db, e := database.Open(context.Background(), c)
-	if e != nil {
-		log.Error("database", "error", e)
-		os.Exit(1)
+	logger, err := logging.New(c.Logging, nil)
+	if err != nil {
+		bootstrap.Error("invalid log configuration")
+		return 1
+	}
+	defer logger.Sync()
+	parent, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer cancel()
+	ctx := logging.Context(parent, logger, c.Logging, "")
+	db, err := database.Open(ctx, c)
+	if err != nil {
+		logger.Error("database startup failed", logging.SafeError(err)...)
+		return 1
 	}
 	defer db.Close()
-	h, e := app.New(c, db, log)
-	if e != nil {
-		log.Error("application", "error", e)
-		os.Exit(1)
+	h, err := app.NewWithContext(ctx, c, db, logger)
+	if err != nil {
+		logger.Error("application startup failed", logging.SafeError(err)...)
+		return 1
 	}
-	srv := &http.Server{Addr: c.HTTPAddr, Handler: h, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 60 * time.Second, WriteTimeout: 60 * time.Second, IdleTimeout: 120 * time.Second}
-	done := make(chan os.Signal, 1)
-	signal.Notify(done, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		log.Info("server started", "addr", c.HTTPAddr)
-		if e := srv.ListenAndServe(); e != nil && e != http.ErrServerClosed {
-			log.Error("server", "error", e)
-			os.Exit(1)
+	srv := &http.Server{Addr: c.HTTPAddr, Handler: h, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 60 * time.Second, WriteTimeout: 60 * time.Second, IdleTimeout: 120 * time.Second, ErrorLog: log.New(serverLog{logger}, "", 0)}
+	done := make(chan error, 1)
+	go func() { done <- srv.ListenAndServe() }()
+	logger.Info("server started", zap.String("module", "server"), zap.String("event", "server.started"))
+	select {
+	case err = <-done:
+		if err != http.ErrServerClosed {
+			logger.Error("server failed", logging.SafeError(err)...)
+			return 1
 		}
-	}()
-	<-done
-	ctx, cancel := context.WithTimeout(context.Background(), c.ShutdownTimeout)
-	defer cancel()
-	_ = srv.Shutdown(ctx)
+	case <-parent.Done():
+	}
+	cancel()
+	shutdown, stop := context.WithTimeout(context.Background(), c.ShutdownTimeout)
+	defer stop()
+	if err = srv.Shutdown(shutdown); err != nil {
+		logger.Error("shutdown failed", logging.SafeError(err)...)
+		return 1
+	}
+	if lifecycle, ok := h.(interface{ Wait(context.Context) error }); ok {
+		if err = lifecycle.Wait(shutdown); err != nil {
+			logger.Error("jobs shutdown timed out", logging.SafeError(err)...)
+			return 1
+		}
+	}
+	logger.Info("server stopped", zap.String("module", "server"), zap.String("event", "server.stopped"))
+	return 0
+}
+
+// net/http error text may include a panic value or URL. Retain a safe category.
+type serverLog struct{ l *zap.Logger }
+
+func (w serverLog) Write(p []byte) (int, error) {
+	w.l.Error("HTTP server transport error", zap.String("module", "server"), zap.String("event", "server.transport.failed"))
+	return len(p), nil
 }

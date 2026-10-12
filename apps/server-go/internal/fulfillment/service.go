@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/fixpro/server/internal/platform/database"
 	"strings"
 	"time"
 
@@ -581,7 +582,7 @@ func (s *Service) assign(ctx context.Context, p auth.Principal, id, workerID int
 	if reassign && strings.TrimSpace(reason) == "" {
 		return httpx.E("REASON_REQUIRED", "改派原因必填", 400)
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := database.BeginTx(ctx, s.db)
 	if err != nil {
 		return err
 	}
@@ -656,7 +657,7 @@ func (s *Service) assign(ctx context.Context, p auth.Principal, id, workerID int
 	if _, err = tx.ExecContext(ctx, `INSERT INTO work_order_status_history(org_id,work_order_id,from_status,to_status,event_code,operator_type,operator_id,operator_name,reason) VALUES($1,$2,$3,$4,$5,'ADMIN',$6,$7,NULLIF($8,''))`, p.OrgID, id, status, newStatus, code, p.SubjectID, p.Name, reason); err != nil {
 		return err
 	}
-	return tx.Commit()
+	return committed(ctx, tx, "work_order.assigned", p.OrgID, id, 0, status, newStatus)
 }
 func (s *Service) Assign(ctx context.Context, p auth.Principal, id int64, req AssignRequest) error {
 	var at sql.NullTime
@@ -683,7 +684,7 @@ func (s *Service) Recall(ctx context.Context, p auth.Principal, id int64, req Re
 	if reason == "" {
 		return httpx.E("REASON_REQUIRED", "收回原因必填", 400)
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := database.BeginTx(ctx, s.db)
 	if err != nil {
 		return err
 	}
@@ -720,7 +721,7 @@ func (s *Service) Recall(ctx context.Context, p auth.Principal, id int64, req Re
 	if _, err = tx.ExecContext(ctx, `INSERT INTO work_order_status_history(org_id,work_order_id,from_status,to_status,event_code,operator_type,operator_id,operator_name,reason) VALUES($1,$2,$3,$4,'ADMIN_RECALLED','ADMIN',$5,$6,$7)`, p.OrgID, id, status, WorkOrderPendingDispatch, p.SubjectID, p.Name, reason); err != nil {
 		return err
 	}
-	return tx.Commit()
+	return committed(ctx, tx, "work_order.recalled", p.OrgID, id, 0, status, WorkOrderPendingDispatch)
 }
 
 func (s *Service) Reschedule(ctx context.Context, p auth.Principal, id int64, req RescheduleRequest) error {
@@ -733,7 +734,7 @@ func (s *Service) Reschedule(ctx context.Context, p auth.Principal, id int64, re
 	if acceptanceExpired(req.AppointmentAt, req.AppointmentSlot, time.Now()) {
 		return httpx.E("APPOINTMENT_EXPIRED", "预约时间段已结束，请选择新的预约时间", 400)
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := database.BeginTx(ctx, s.db)
 	if err != nil {
 		return err
 	}
@@ -776,7 +777,7 @@ func (s *Service) Reschedule(ctx context.Context, p auth.Principal, id int64, re
 	if _, err = tx.ExecContext(ctx, `INSERT INTO work_order_assignment_history(org_id,work_order_id,from_assignee_id,to_assignee_id,from_appointment_at,to_appointment_at,event_code,operator_type,operator_id,operator_name) VALUES($1,$2,$3,$3,$4,$5,'RESCHEDULED','ADMIN',$6,$7)`, p.OrgID, id, wid, prev, req.AppointmentAt, p.SubjectID, p.Name); err != nil {
 		return err
 	}
-	return tx.Commit()
+	return committed(ctx, tx, "work_order.reschedule", p.OrgID, id, 0, status, status)
 }
 
 type WorkerRescheduleRequest struct {
@@ -796,7 +797,7 @@ func (s *Service) WorkerReschedule(ctx context.Context, p auth.Principal, id int
 	if !validAppointmentSlot(req.AppointmentSlot) || acceptanceExpired(req.AppointmentAt, req.AppointmentSlot, time.Now()) {
 		return httpx.E("APPOINTMENT_SLOT_INVALID", "预约时间段不合法", 400)
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := database.BeginTx(ctx, s.db)
 	if err != nil {
 		return err
 	}
@@ -827,7 +828,7 @@ func (s *Service) WorkerReschedule(ctx context.Context, p auth.Principal, id int
 	if _, err = tx.ExecContext(ctx, `INSERT INTO work_order_assignment_history(org_id,work_order_id,from_assignee_id,to_assignee_id,from_appointment_at,to_appointment_at,event_code,operator_type,operator_id,operator_name,reason) VALUES($1,$2,$3,$3,$4,$5,'WORKER_RESCHEDULE_REQUESTED','WORKER',$6,$7,'已与客户沟通')`, p.OrgID, id, p.SubjectID, oldTime, req.AppointmentAt, p.SubjectID, p.Name); err != nil {
 		return err
 	}
-	return tx.Commit()
+	return committed(ctx, tx, "work_order.worker_reschedule", p.OrgID, id, 0, status, status)
 }
 func (s *Service) WorkerReturn(ctx context.Context, p auth.Principal, id int64, version int, reason string) error {
 	if p.Role != "WORKER" {
@@ -836,7 +837,7 @@ func (s *Service) WorkerReturn(ctx context.Context, p auth.Principal, id int64, 
 	if strings.TrimSpace(reason) == "" {
 		return httpx.E("REASON_REQUIRED", "退回原因必填", 400)
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := database.BeginTx(ctx, s.db)
 	if err != nil {
 		return err
 	}
@@ -861,7 +862,7 @@ func (s *Service) WorkerReturn(ctx context.Context, p auth.Principal, id int64, 
 	if err != nil {
 		return err
 	}
-	return tx.Commit()
+	return committed(ctx, tx, "work_order.worker_return", p.OrgID, id, 0, status, WorkOrderPendingDispatch)
 }
 
 type RejectRequest struct {
@@ -876,7 +877,7 @@ func (s *Service) WorkerCommand(ctx context.Context, p auth.Principal, id int64,
 	if strings.TrimSpace(key) == "" || len(key) > 128 {
 		return httpx.E("VALIDATION_ERROR", "缺少有效 Idempotency-Key", 400)
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := database.BeginTx(ctx, s.db)
 	if err != nil {
 		return err
 	}
@@ -976,7 +977,7 @@ func (s *Service) WorkerCommand(ctx context.Context, p auth.Principal, id int64,
 	if _, err = tx.ExecContext(ctx, `UPDATE idempotency_record SET response_code='OK',response_body=$1 WHERE id=$2`, []byte(`{"updated":true}`), idemID); err != nil {
 		return err
 	}
-	return tx.Commit()
+	return committed(ctx, tx, "work_order.commanded", p.OrgID, id, 0, status, to)
 }
 
 func (s *Service) ConfirmOrder(ctx context.Context, p auth.Principal, key string, orderID int64, req ConfirmRequest) (ConfirmResult, error) {
@@ -1098,7 +1099,7 @@ func (s *Service) ConfirmOrder(ctx context.Context, p auth.Principal, key string
 	if _, err = tx.ExecContext(ctx, `UPDATE idempotency_record SET response_code='OK',response_body=$1 WHERE id=$2`, raw, idemID); err != nil {
 		return ConfirmResult{}, err
 	}
-	if err = tx.Commit(); err != nil {
+	if err = committed(ctx, tx, "order.confirmed", p.OrgID, 0, orderID, status, OrderFulfilling); err != nil {
 		return ConfirmResult{}, err
 	}
 	return out, nil
@@ -1172,7 +1173,7 @@ func (s *Service) RejectOrder(ctx context.Context, p auth.Principal, key string,
 	if _, err = tx.ExecContext(ctx, `UPDATE idempotency_record SET response_code='OK',response_body=$1 WHERE id=$2`, raw, idemID); err != nil {
 		return RejectResult{}, err
 	}
-	if err = tx.Commit(); err != nil {
+	if err = committed(ctx, tx, "order.rejected", p.OrgID, 0, orderID, status, OrderCancelled); err != nil {
 		return RejectResult{}, err
 	}
 	return out, nil
@@ -1420,7 +1421,7 @@ func (s *Service) CustomerAcceptance(ctx context.Context, p auth.Principal, id i
 	if req.Decision == "REJECT" && strings.TrimSpace(req.Reason) == "" {
 		return httpx.E("REASON_REQUIRED", "拒绝验收原因必填", 400)
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := database.BeginTx(ctx, s.db)
 	if err != nil {
 		return err
 	}
@@ -1461,7 +1462,7 @@ func (s *Service) CustomerAcceptance(ctx context.Context, p auth.Principal, id i
 	if err = s.syncCustomerOrderStatus(ctx, tx, p.OrgID, orderID); err != nil {
 		return err
 	}
-	if err = tx.Commit(); err != nil {
+	if err = committed(ctx, tx, "work_order.customer_acceptance", p.OrgID, id, orderID, status, to); err != nil {
 		return err
 	}
 	return nil
@@ -1551,7 +1552,7 @@ func (s *Service) SubmitCompletion(ctx context.Context, p auth.Principal, id int
 	if len([]rune(summary)) < 5 || len([]rune(summary)) > 1000 {
 		return httpx.E("COMPLETION_SUMMARY_REQUIRED", "完工说明需为 5-1000 字", 400)
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := database.BeginTx(ctx, s.db)
 	if err != nil {
 		return err
 	}
@@ -1615,7 +1616,7 @@ func (s *Service) SubmitCompletion(ctx context.Context, p auth.Principal, id int
 	if _, err = tx.ExecContext(ctx, `UPDATE idempotency_record SET response_code='OK',response_body=$1 WHERE id=$2`, []byte(`{"updated":true}`), idemID); err != nil {
 		return err
 	}
-	return tx.Commit()
+	return committed(ctx, tx, "work_order.completion_submitted", p.OrgID, id, 0, status, WorkOrderWaitingQAAudit)
 }
 
 func (s *Service) ReviewCompletion(ctx context.Context, p auth.Principal, id int64, req ReviewRequest) error {
@@ -1628,7 +1629,7 @@ func (s *Service) ReviewCompletion(ctx context.Context, p auth.Principal, id int
 	if req.Decision == "REJECT" && strings.TrimSpace(req.Note) == "" {
 		return httpx.E("REASON_REQUIRED", "驳回原因必填", 400)
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := database.BeginTx(ctx, s.db)
 	if err != nil {
 		return err
 	}
@@ -1657,5 +1658,5 @@ func (s *Service) ReviewCompletion(ctx context.Context, p auth.Principal, id int
 	if _, err = tx.ExecContext(ctx, `INSERT INTO work_order_status_history(org_id,work_order_id,from_status,to_status,event_code,operator_type,operator_id,operator_name,reason) VALUES($1,$2,$3,$4,$5,'ADMIN',$6,$7,NULLIF($8,''))`, p.OrgID, id, status, to, event, p.SubjectID, p.Name, strings.TrimSpace(req.Note)); err != nil {
 		return err
 	}
-	return tx.Commit()
+	return committed(ctx, tx, "work_order.completion_reviewed", p.OrgID, id, 0, status, to)
 }

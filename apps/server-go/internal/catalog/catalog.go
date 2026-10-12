@@ -6,6 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/fixpro/server/internal/platform/database"
+	"github.com/fixpro/server/internal/platform/logging"
+	"go.uber.org/zap"
 	"net/http"
 	"reflect"
 	"regexp"
@@ -437,7 +440,7 @@ func (s *Service) Create(ctx context.Context, w SKUWrite, actor string) (SKUDeta
 	}
 	cat, _ := id(w.CategoryID)
 	cover, _ := id(w.CoverMediaID)
-	tx, e := s.db.BeginTx(ctx, nil)
+	tx, e := database.BeginTx(ctx, s.db)
 	if e != nil {
 		return SKUDetail{}, e
 	}
@@ -471,7 +474,7 @@ func (s *Service) Update(ctx context.Context, n int64, w SKUWrite, actor string)
 	}
 	cat, _ := id(w.CategoryID)
 	cover, _ := id(w.CoverMediaID)
-	tx, e := s.db.BeginTx(ctx, nil)
+	tx, e := database.BeginTx(ctx, s.db)
 	if e != nil {
 		return SKUDetail{}, e
 	}
@@ -535,7 +538,7 @@ func (s *Service) Publish(ctx context.Context, n int64, user string) (PublishRes
 	}
 	raw, _ := json.Marshal(snap)
 	now := time.Now().UTC()
-	tx, e := s.db.BeginTx(ctx, nil)
+	tx, e := database.BeginTx(ctx, s.db)
 	if e != nil {
 		return PublishResult{}, e
 	}
@@ -549,6 +552,8 @@ func (s *Service) Publish(ctx context.Context, n int64, user string) (PublishRes
 	if e = tx.Commit(); e != nil {
 		return PublishResult{}, e
 	}
+	logging.Bind(ctx, zap.String("skuId", fmt.Sprint(n)))
+	logging.Event(ctx, "catalog", "sku.published")
 	return PublishResult{x.ID, "PUBLISHED", next, now}, nil
 }
 func (s *Service) OffShelf(ctx context.Context, n int64) error {
@@ -560,6 +565,8 @@ func (s *Service) OffShelf(ctx context.Context, n int64) error {
 	if c == 0 {
 		return httpx.E("SKU_NOT_FOUND", "SKU 不存在", 404)
 	}
+	logging.Bind(ctx, zap.String("skuId", fmt.Sprint(n)))
+	logging.Event(ctx, "catalog", "sku.off_shelf")
 	return nil
 }
 func (s *Service) PublicList(ctx context.Context, key string) ([]PublishedSKU, error) {

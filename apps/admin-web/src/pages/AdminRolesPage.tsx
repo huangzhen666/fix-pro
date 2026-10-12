@@ -8,6 +8,7 @@ type Role = { id: number; name: string; code: string; description?: string; stat
 
 const resourceLabels: Record<string, string> = {
   dashboard: '经营概览',
+  customer: '用户管理',
   'catalog.sku': '维修 SKU',
   'catalog.category': '服务分类',
   order: '订单中心',

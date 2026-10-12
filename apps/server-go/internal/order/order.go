@@ -10,7 +10,10 @@ import (
 	"github.com/fixpro/server/internal/catalog"
 	"github.com/fixpro/server/internal/fulfillment"
 	"github.com/fixpro/server/internal/platform/auth"
+	"github.com/fixpro/server/internal/platform/database"
 	"github.com/fixpro/server/internal/platform/httpx"
+	"github.com/fixpro/server/internal/platform/logging"
+	"go.uber.org/zap"
 	"math"
 	"net/http"
 	"reflect"
@@ -183,7 +186,7 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, key string, w Wr
 	appointmentAt := time.Date(date.Year(), date.Month(), date.Day(), hour, 0, 0, 0, time.Local).UTC()
 	body, _ := json.Marshal(w)
 	hash := sha256.Sum256(body)
-	tx, e := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+	tx, e := database.BeginTx(ctx, s.db)
 	if e != nil {
 		return Result{}, e
 	}
@@ -207,6 +210,8 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, key string, w Wr
 		if e = json.Unmarshal([]byte(raw.String), &out); e != nil {
 			return out, e
 		}
+		logging.Bind(ctx, zap.String("orderId", out.ID))
+		logging.Event(ctx, "order", "order.idempotency_hit")
 		return out, nil
 	}
 	if e != nil {
@@ -332,6 +337,8 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, key string, w Wr
 	if e = tx.Commit(); e != nil {
 		return Result{}, e
 	}
+	logging.Bind(ctx, zap.String("orderId", fmt.Sprint(orderID)))
+	logging.Event(ctx, "order", "order.created", zap.String("toStatus", out.Status))
 	return out, nil
 }
 
@@ -348,7 +355,7 @@ func (s *Service) Repeat(ctx context.Context, p auth.Principal, orderID int64) (
 	if p.Role != "CUSTOMER" {
 		return RepeatResult{}, httpx.E("FORBIDDEN", "无权重新下单", 403)
 	}
-	tx, e := s.db.BeginTx(ctx, nil)
+	tx, e := database.BeginTx(ctx, s.db)
 	if e != nil {
 		return RepeatResult{}, e
 	}
@@ -428,7 +435,7 @@ func (s *Service) Repeat(ctx context.Context, p auth.Principal, orderID int64) (
 	return RepeatResult{ItemsCopied: len(items)}, nil
 }
 
-func (s *Service) List(ctx context.Context, key, status, contact, createdFrom, createdTo string, page, size int) (Page, error) {
+func (s *Service) List(ctx context.Context, org int64, key, status, contact, createdFrom, createdTo string, page, size int) (Page, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -440,12 +447,12 @@ func (s *Service) List(ctx context.Context, key, status, contact, createdFrom, c
 	}
 	q := "%" + strings.TrimSpace(key) + "%"
 	c := "%" + strings.TrimSpace(contact) + "%"
-	where := `org_id=1 AND ($1='' OR order_no ILIKE $1 OR contact_name ILIKE $1 OR contact_mobile ILIKE $1) AND ($2='' OR status=$2) AND ($3='' OR contact_name ILIKE $3 OR contact_mobile ILIKE $3) AND ($4='' OR created_at >= $4::date) AND ($5='' OR created_at < ($5::date + INTERVAL '1 day'))`
+	where := `org_id=$8 AND ($1='' OR order_no ILIKE $1 OR contact_name ILIKE $1 OR contact_mobile ILIKE $1) AND ($2='' OR status=$2) AND ($3='' OR contact_name ILIKE $3 OR contact_mobile ILIKE $3) AND ($4='' OR created_at >= $4::date) AND ($5='' OR created_at < ($5::date + INTERVAL '1 day'))`
 	out := Page{Items: []Summary{}, Page: page, PageSize: size}
-	if e := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM customer_order WHERE `+where, q, status, c, createdFrom, createdTo).Scan(&out.Total); e != nil {
+	if e := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM customer_order WHERE `+strings.ReplaceAll(where, "$8", "$6"), q, status, c, createdFrom, createdTo, org).Scan(&out.Total); e != nil {
 		return out, e
 	}
-	rows, e := s.db.QueryContext(ctx, `SELECT id,order_no,status,COALESCE(cancel_reason,''),contact_name,contact_mobile,total_amount,item_count,created_at,version FROM customer_order WHERE `+where+` ORDER BY created_at DESC LIMIT $6 OFFSET $7`, q, status, c, createdFrom, createdTo, size, (page-1)*size)
+	rows, e := s.db.QueryContext(ctx, `SELECT id,order_no,status,COALESCE(cancel_reason,''),contact_name,contact_mobile,total_amount,item_count,created_at,version FROM customer_order WHERE `+where+` ORDER BY created_at DESC LIMIT $6 OFFSET $7`, q, status, c, createdFrom, createdTo, size, (page-1)*size, org)
 	if e != nil {
 		return out, e
 	}
@@ -464,8 +471,8 @@ func (s *Service) List(ctx context.Context, key, status, contact, createdFrom, c
 	}
 	return out, rows.Err()
 }
-func (s *Service) media(ctx context.Context, item int64) ([]Media, error) {
-	rows, e := s.db.QueryContext(ctx, `SELECT m.id,m.media_type,m.original_name FROM order_item_media om JOIN media_asset m ON m.id=om.media_id AND m.org_id=om.org_id WHERE om.org_id=1 AND om.order_item_id=$1 ORDER BY om.sort_order`, item)
+func (s *Service) media(ctx context.Context, org, item int64) ([]Media, error) {
+	rows, e := s.db.QueryContext(ctx, `SELECT m.id,m.media_type,m.original_name FROM order_item_media om JOIN media_asset m ON m.id=om.media_id AND m.org_id=om.org_id WHERE om.org_id=$2 AND om.order_item_id=$1 ORDER BY om.sort_order`, item, org)
 	if e != nil {
 		return nil, e
 	}
@@ -483,10 +490,10 @@ func (s *Service) media(ctx context.Context, item int64) ([]Media, error) {
 	}
 	return out, rows.Err()
 }
-func (s *Service) Detail(ctx context.Context, n int64) (Detail, error) {
+func (s *Service) Detail(ctx context.Context, n, org int64) (Detail, error) {
 	var out Detail
 	var id, customer int64
-	e := s.db.QueryRowContext(ctx, `SELECT id,order_no,customer_id,status,COALESCE(cancel_reason,''),contact_name,contact_mobile,service_address,total_amount,item_count,version,created_at,appointment_at,COALESCE(appointment_slot,'') FROM customer_order WHERE org_id=1 AND id=$1`, n).Scan(&id, &out.Order.OrderNo, &customer, &out.Order.Status, &out.Order.CancelReason, &out.Order.ContactName, &out.Order.ContactMobile, &out.Order.ServiceAddress, &out.Order.TotalAmount, &out.Order.ItemCount, &out.Order.Version, &out.Order.CreatedAt, &out.Order.AppointmentAt, &out.Order.AppointmentSlot)
+	e := s.db.QueryRowContext(ctx, `SELECT id,order_no,customer_id,status,COALESCE(cancel_reason,''),contact_name,contact_mobile,service_address,total_amount,item_count,version,created_at,appointment_at,COALESCE(appointment_slot,'') FROM customer_order WHERE org_id=$2 AND id=$1`, n, org).Scan(&id, &out.Order.OrderNo, &customer, &out.Order.Status, &out.Order.CancelReason, &out.Order.ContactName, &out.Order.ContactMobile, &out.Order.ServiceAddress, &out.Order.TotalAmount, &out.Order.ItemCount, &out.Order.Version, &out.Order.CreatedAt, &out.Order.AppointmentAt, &out.Order.AppointmentSlot)
 	if e == sql.ErrNoRows {
 		return out, httpx.E("RESOURCE_NOT_FOUND", "订单不存在", 404)
 	}
@@ -494,7 +501,7 @@ func (s *Service) Detail(ctx context.Context, n int64) (Detail, error) {
 		return out, e
 	}
 	out.Order.ID, out.Order.CustomerID = fmt.Sprint(id), fmt.Sprint(customer)
-	rows, e := s.db.QueryContext(ctx, `SELECT id,sku_code_snapshot,sku_name_snapshot,sku_version,unit_snapshot,service_scope_snapshot,exclusions_snapshot,warranty_snapshot,sku_cover_media_id_snapshot,fault_description,unit_price,quantity,subtotal_amount FROM order_item WHERE org_id=1 AND order_id=$1 ORDER BY id`, n)
+	rows, e := s.db.QueryContext(ctx, `SELECT id,sku_code_snapshot,sku_name_snapshot,sku_version,unit_snapshot,service_scope_snapshot,exclusions_snapshot,warranty_snapshot,sku_cover_media_id_snapshot,fault_description,unit_price,quantity,subtotal_amount FROM order_item WHERE org_id=$2 AND order_id=$1 ORDER BY id`, n, org)
 	if e != nil {
 		return out, e
 	}
@@ -508,7 +515,7 @@ func (s *Service) Detail(ctx context.Context, n int64) (Detail, error) {
 		}
 		x.ID = fmt.Sprint(item)
 		x.CoverImageURL = "/api/v1/public/media/" + fmt.Sprint(cover)
-		x.FaultMedia, e = s.media(ctx, item)
+		x.FaultMedia, e = s.media(ctx, org, item)
 		if e != nil {
 			return out, e
 		}
@@ -549,7 +556,8 @@ func (h *Handler) Repeat(w http.ResponseWriter, r *http.Request) {
 	send(w, r, v, e)
 }
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
-	v, e := h.s.List(r.Context(), r.URL.Query().Get("keyword"), r.URL.Query().Get("status"), r.URL.Query().Get("contact"), r.URL.Query().Get("createdFrom"), r.URL.Query().Get("createdTo"), ints(r, "page", 1), ints(r, "pageSize", 20))
+	p, _ := auth.From(r.Context())
+	v, e := h.s.List(r.Context(), p.OrgID, r.URL.Query().Get("keyword"), r.URL.Query().Get("status"), r.URL.Query().Get("contact"), r.URL.Query().Get("createdFrom"), r.URL.Query().Get("createdTo"), ints(r, "page", 1), ints(r, "pageSize", 20))
 	send(w, r, v, e)
 }
 func (h *Handler) Detail(w http.ResponseWriter, r *http.Request) {
@@ -558,7 +566,8 @@ func (h *Handler) Detail(w http.ResponseWriter, r *http.Request) {
 		httpx.Failure(w, r, e)
 		return
 	}
-	v, e := h.s.Detail(r.Context(), n)
+	p, _ := auth.From(r.Context())
+	v, e := h.s.Detail(r.Context(), n, p.OrgID)
 	send(w, r, v, e)
 }
 func send(w http.ResponseWriter, r *http.Request, v any, e error) {

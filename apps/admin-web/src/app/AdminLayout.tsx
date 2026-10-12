@@ -14,7 +14,7 @@ const items = [
   { key: '/work-orders', label: '履约调度', permission: 'fulfillment.view' },
   { key: '/workers', label: '师傅管理', permission: 'worker.view' },
   { key: '/worker-skills', label: '工种与技能', permission: 'worker.skill.view' },
-  { key: '/customers', label: '客户资产', permission: 'order.view' },
+  { key: '/customers', label: '用户管理', permission: 'customer.view' },
   { key: '/inventory', label: '材料库存', permission: 'catalog.sku.view' },
   { key: '/after-sales', label: '售后质保', permission: 'fulfillment.view' },
   { key: '/enterprises', label: '企业合同', permission: 'order.view' },
@@ -35,7 +35,7 @@ export function AdminLayout() {
       <Sider width={220} theme="dark">
         <div className="brand-mark">
           <span className="brand-dot" />
-          FixPro 运维中心
+          懂修匠 运维中心
         </div>
         <Menu
           theme="dark"

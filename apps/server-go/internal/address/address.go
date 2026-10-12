@@ -41,8 +41,8 @@ type Address struct {
 var mobile = regexp.MustCompile(`^1\d{10}$`)
 
 func validate(w Write) error {
-	if n := len([]rune(strings.TrimSpace(w.City))); n < 2 || n > 64 {
-		return httpx.E("VALIDATION_ERROR", "所在城市需为 2-64 字", 400)
+	if strings.TrimSpace(w.City) != "汉川市" {
+		return httpx.E("VALIDATION_ERROR", "目前仅支持汉川市上门服务", 400)
 	}
 	if n := len([]rune(strings.TrimSpace(w.DetailAddress))); n < 2 || n > 255 {
 		return httpx.E("VALIDATION_ERROR", "具体地址需为 2-255 字", 400)

@@ -1,3 +1,4 @@
+import { protectedPage } from '../../services/guard'
 import { deleteAddress, listAddresses, setDefaultAddress, type CustomerAddress, formatAddress } from '../../services/addresses'
 
 type AddressView = CustomerAddress & { fullAddress: string; maskedMobile: string }
@@ -6,7 +7,7 @@ function toView(item: CustomerAddress): AddressView {
   return { ...item, fullAddress: formatAddress(item), maskedMobile: item.contactMobile.length >= 7 ? `${item.contactMobile.slice(0, 3)}****${item.contactMobile.slice(-4)}` : item.contactMobile }
 }
 
-Page({
+protectedPage({
   data: { items: [] as AddressView[], selectMode: false, loading: false },
   onLoad(options: Record<string, string>) {
     this.setData({ selectMode: options.select === '1' })

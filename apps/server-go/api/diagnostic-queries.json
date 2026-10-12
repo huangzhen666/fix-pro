@@ -1,0 +1,1266 @@
+{
+  "sql_00c48be5ead3": {
+    "file": "internal/fulfillment/service.go",
+    "line": 718
+  },
+  "sql_01346f4f5b45": {
+    "file": "internal/catalog/catalog.go",
+    "line": 549
+  },
+  "sql_0220e0efe56a": {
+    "file": "internal/address/address.go",
+    "line": 72
+  },
+  "sql_02ff93d46884": {
+    "file": "internal/fulfillment/service.go",
+    "line": 525
+  },
+  "sql_030b5b95a64f": {
+    "file": "internal/admin/handler.go",
+    "line": 101
+  },
+  "sql_0350600ddbad": {
+    "file": "internal/fulfillment/service.go",
+    "line": 808
+  },
+  "sql_04b6befe9799": {
+    "file": "internal/address/address.go",
+    "line": 104
+  },
+  "sql_050517fc4e63": {
+    "file": "internal/workforce/service.go",
+    "line": 709
+  },
+  "sql_0564d9396957": {
+    "file": "internal/customer/initialize.go",
+    "line": 91
+  },
+  "sql_05c082d5211a": {
+    "file": "internal/customer/admin.go",
+    "line": 240
+  },
+  "sql_06eae8617f6d": {
+    "file": "internal/workforce/service.go",
+    "line": 196
+  },
+  "sql_071bb8932e20": {
+    "file": "internal/fulfillment/service.go",
+    "line": 337
+  },
+  "sql_073b4afcc382": {
+    "file": "internal/admin/handler.go",
+    "line": 509
+  },
+  "sql_076234eee76a": {
+    "file": "internal/admin/handler.go",
+    "line": 361
+  },
+  "sql_078e89477def": {
+    "file": "internal/catalog/catalog.go",
+    "line": 165
+  },
+  "sql_07a5adbe40dc": {
+    "file": "internal/fulfillment/service.go",
+    "line": 1616
+  },
+  "sql_07cc62dd019e": {
+    "file": "internal/fulfillment/service.go",
+    "line": 1639
+  },
+  "sql_08572cf67d58": {
+    "file": "internal/fulfillment/service.go",
+    "line": 1285
+  },
+  "sql_0a1bfcfb5aa1": {
+    "file": "internal/customer/service.go",
+    "line": 116
+  },
+  "sql_0b4eb1580d29": {
+    "file": "internal/admin/handler.go",
+    "line": 519
+  },
+  "sql_0b98af63f5fa": {
+    "file": "internal/workforce/service.go",
+    "line": 356
+  },
+  "sql_0c411d4d0ef5": {
+    "file": "internal/order/order.go",
+    "line": 421
+  },
+  "sql_0c8815af32e3": {
+    "file": "internal/customer/initialize.go",
+    "line": 113
+  },
+  "sql_0c9c094e520b": {
+    "file": "internal/workforce/service.go",
+    "line": 416
+  },
+  "sql_0d394f31ea0d": {
+    "file": "internal/fulfillment/service.go",
+    "line": 621
+  },
+  "sql_0d8741eeb8e9": {
+    "file": "internal/catalog/catalog.go",
+    "line": 411
+  },
+  "sql_0e2dd6fa782f": {
+    "file": "internal/cart/cart.go",
+    "line": 90
+  },
+  "sql_0e7fdf11aaa6": {
+    "file": "internal/workforce/service.go",
+    "line": 701
+  },
+  "sql_0f54fd7fdf10": {
+    "file": "internal/fulfillment/parallel.go",
+    "line": 392
+  },
+  "sql_0fcbf246dc99": {
+    "file": "internal/workforce/service.go",
+    "line": 272
+  },
+  "sql_0ffdcee4cda8": {
+    "file": "internal/fulfillment/service.go",
+    "line": 522
+  },
+  "sql_1017ae1cc4f4": {
+    "file": "internal/workforce/service.go",
+    "line": 237
+  },
+  "sql_1094dc076a06": {
+    "file": "internal/fulfillment/service.go",
+    "line": 33
+  },
+  "sql_10f2ecfc5324": {
+    "file": "internal/workforce/service.go",
+    "line": 516
+  },
+  "sql_12acb6fbc82b": {
+    "file": "internal/customer/service.go",
+    "line": 134
+  },
+  "sql_14171e080b8a": {
+    "file": "internal/cart/cart.go",
+    "line": 60
+  },
+  "sql_14978f679ebd": {
+    "file": "internal/workforce/service.go",
+    "line": 727
+  },
+  "sql_15c3d35ce51d": {
+    "file": "internal/workforce/service.go",
+    "line": 292
+  },
+  "sql_15ff5b609d08": {
+    "file": "internal/admin/handler.go",
+    "line": 323
+  },
+  "sql_17f83b149c34": {
+    "file": "internal/order/order.go",
+    "line": 475
+  },
+  "sql_18e2477a0a95": {
+    "file": "internal/customer/initialize.go",
+    "line": 29
+  },
+  "sql_1a8beec55db1": {
+    "file": "internal/fulfillment/service.go",
+    "line": 191
+  },
+  "sql_1ae255ff0447": {
+    "file": "internal/workforce/service.go",
+    "line": 593
+  },
+  "sql_1b2457d8a828": {
+    "file": "internal/platform/auth/session.go",
+    "line": 127
+  },
+  "sql_1c94363573e5": {
+    "file": "internal/workforce/service.go",
+    "line": 260
+  },
+  "sql_1ce1f88debd8": {
+    "file": "internal/catalog/catalog.go",
+    "line": 424
+  },
+  "sql_1cf504db90ad": {
+    "file": "internal/catalog/catalog.go",
+    "line": 573
+  },
+  "sql_1e637a0b8d81": {
+    "file": "internal/fulfillment/service.go",
+    "line": 1566
+  },
+  "sql_1e8740cf0e25": {
+    "file": "internal/media/service.go",
+    "line": 136
+  },
+  "sql_1eae235a5b2f": {
+    "file": "internal/workforce/service.go",
+    "line": 814
+  },
+  "sql_1eecaad67f8f": {
+    "file": "internal/fulfillment/service.go",
+    "line": 965
+  },
+  "sql_207289fe404c": {
+    "file": "internal/admin/handler.go",
+    "line": 707
+  },
+  "sql_20bbd6c9d088": {
+    "file": "internal/customer/handler.go",
+    "line": 138
+  },
+  "sql_22920020a046": {
+    "file": "internal/platform/auth/worker_session.go",
+    "line": 115
+  },
+  "sql_23cbba674687": {
+    "file": "internal/workforce/service.go",
+    "line": 625
+  },
+  "sql_23ff628b240d": {
+    "file": "internal/workforce/service.go",
+    "line": 680
+  },
+  "sql_24c3bf81fee9": {
+    "file": "internal/platform/auth/worker_session.go",
+    "line": 69
+  },
+  "sql_2542af8f7a95": {
+    "file": "internal/order/order.go",
+    "line": 195
+  },
+  "sql_25730ad3774d": {
+    "file": "internal/authorization/service.go",
+    "line": 116
+  },
+  "sql_2582950fc5bd": {
+    "file": "internal/fulfillment/service.go",
+    "line": 1095
+  },
+  "sql_263a83d8fa34": {
+    "file": "internal/fulfillment/parallel.go",
+    "line": 261
+  },
+  "sql_2744178cdb9e": {
+    "file": "internal/fulfillment/service.go",
+    "line": 746
+  },
+  "sql_275181760287": {
+    "file": "internal/fulfillment/service.go",
+    "line": 611
+  },
+  "sql_27aafaa4931d": {
+    "file": "internal/customer/initialize.go",
+    "line": 67
+  },
+  "sql_281f5b492f7b": {
+    "file": "internal/workforce/service.go",
+    "line": 145
+  },
+  "sql_284587456f45": {
+    "file": "internal/order/order.go",
+    "line": 376
+  },
+  "sql_28d0973ea27b": {
+    "file": "internal/workforce/service.go",
+    "line": 362
+  },
+  "sql_29364e9a3254": {
+    "file": "internal/fulfillment/service.go",
+    "line": 357
+  },
+  "sql_29e6496c50aa": {
+    "file": "internal/fulfillment/parallel.go",
+    "line": 200
+  },
+  "sql_2a087eb3afe3": {
+    "file": "internal/fulfillment/service.go",
+    "line": 1358
+  },
+  "sql_2c7e6fd5e75c": {
+    "file": "internal/address/address.go",
+    "line": 228
+  },
+  "sql_2dbe34351703": {
+    "file": "internal/fulfillment/service.go",
+    "line": 1517
+  },
+  "sql_2e62b6373a81": {
+    "file": "internal/admin/handler.go",
+    "line": 116
+  },
+  "sql_30201a86068e": {
+    "file": "internal/workforce/service.go",
+    "line": 449
+  },
+  "sql_30cbdbd0f8a8": {
+    "file": "internal/cart/cart.go",
+    "line": 166
+  },
+  "sql_329348fd89ed": {
+    "file": "internal/catalog/catalog.go",
+    "line": 265
+  },
+  "sql_33e0ffba80de": {
+    "file": "internal/workforce/service.go",
+    "line": 789
+  },
+  "sql_3482b3c88986": {
+    "file": "internal/fulfillment/service.go",
+    "line": 1610
+  },
+  "sql_34b3b05346dc": {
+    "file": "internal/authorization/service.go",
+    "line": 134
+  },
+  "sql_383f48d6c737": {
+    "file": "internal/customer/service.go",
+    "line": 130
+  },
+  "sql_38863dfeea6b": {
+    "file": "internal/catalog/catalog.go",
+    "line": 482
+  },
+  "sql_388aff0414f4": {
+    "file": "internal/address/address.go",
+    "line": 215
+  },
+  "sql_3c56334446ab": {
+    "file": "internal/order/order.go",
+    "line": 270
+  },
+  "sql_3dc532c2011f": {
+    "file": "internal/media/service.go",
+    "line": 161
+  },
+  "sql_3f5f4ff52e1d": {
+    "file": "internal/workforce/service.go",
+    "line": 713
+  },
+  "sql_3fa275fe3236": {
+    "file": "internal/fulfillment/service.go",
+    "line": 820
+  },
+  "sql_4020f19cd625": {
+    "file": "internal/customer/service.go",
+    "line": 99
+  },
+  "sql_41d591ef7e9c": {
+    "file": "internal/fulfillment/service.go",
+    "line": 1038
+  },
+  "sql_424026f99e01": {
+    "file": "internal/fulfillment/service.go",
+    "line": 1086
+  },
+  "sql_4332e6b4e276": {
+    "file": "internal/fulfillment/service.go",
+    "line": 1535
+  },
+  "sql_433f7b22fbaf": {
+    "file": "internal/fulfillment/service.go",
+    "line": 1613
+  },
+  "sql_439d7f7b9ae1": {
+    "file": "internal/order/order.go",
+    "line": 452
+  },
+  "sql_461ea65cdf86": {
+    "file": "internal/workforce/service.go",
+    "line": 607
+  },
+  "sql_46557783a7c4": {
+    "file": "internal/platform/auth/worker_session.go",
+    "line": 103
+  },
+  "sql_4668d82dbfd2": {
+    "file": "internal/fulfillment/parallel.go",
+    "line": 321
+  },
+  "sql_4a987823b293": {
+    "file": "internal/fulfillment/service.go",
+    "line": 55
+  },
+  "sql_4b38f5a7df6c": {
+    "file": "internal/workforce/service.go",
+    "line": 671
+  },
+  "sql_4c61a7da045a": {
+    "file": "internal/fulfillment/service.go",
+    "line": 1024
+  },
+  "sql_4cfbabe09b48": {
+    "file": "internal/fulfillment/parallel.go",
+    "line": 305
+  },
+  "sql_4de105341398": {
+    "file": "internal/admin/handler.go",
+    "line": 307
+  },
+  "sql_4df5cbb5e20a": {
+    "file": "internal/catalog/catalog.go",
+    "line": 615
+  },
+  "sql_4e2d74072a27": {
+    "file": "internal/address/address.go",
+    "line": 191
+  },
+  "sql_4f2795bcc8d4": {
+    "file": "internal/admin/handler.go",
+    "line": 349
+  },
+  "sql_505072ae62b6": {
+    "file": "internal/fulfillment/parallel.go",
+    "line": 219
+  },
+  "sql_50894d7c09b8": {
+    "file": "internal/fulfillment/service.go",
+    "line": 1065
+  },
+  "sql_50e32b8c3ef3": {
+    "file": "internal/customer/service.go",
+    "line": 165
+  },
+  "sql_516593bee2ad": {
+    "file": "internal/platform/auth/session.go",
+    "line": 54
+  },
+  "sql_5251d3daf9a7": {
+    "file": "internal/fulfillment/service.go",
+    "line": 1080
+  },
+  "sql_529656375a1e": {
+    "file": "internal/admin/handler.go",
+    "line": 172
+  },
+  "sql_532e7a91dbec": {
+    "file": "internal/cart/cart.go",
+    "line": 64
+  },
+  "sql_536382cce94d": {
+    "file": "internal/fulfillment/service.go",
+    "line": 1168
+  },
+  "sql_53bd8de306e4": {
+    "file": "internal/cart/cart.go",
+    "line": 225
+  },
+  "sql_562c378ba01b": {
+    "file": "internal/fulfillment/parallel.go",
+    "line": 197
+  },
+  "sql_5864c924b838": {
+    "file": "internal/customer/service.go",
+    "line": 270
+  },
+  "sql_586ef29f9bf1": {
+    "file": "internal/order/order.go",
+    "line": 228
+  },
+  "sql_58bffc322154": {
+    "file": "internal/workforce/service.go",
+    "line": 167
+  },
+  "sql_5ad644065731": {
+    "file": "internal/fulfillment/service.go",
+    "line": 1457
+  },
+  "sql_5b16ad361734": {
+    "file": "internal/fulfillment/parallel.go",
+    "line": 318
+  },
+  "sql_5bad2a9c52e8": {
+    "file": "internal/workforce/service.go",
+    "line": 705
+  },
+  "sql_5bd181743f66": {
+    "file": "internal/catalog/catalog.go",
+    "line": 314
+  },
+  "sql_5d32e2a6f7ff": {
+    "file": "internal/fulfillment/service.go",
+    "line": 654
+  },
+  "sql_5e1bcb57ecd2": {
+    "file": "internal/admin/handler.go",
+    "line": 514
+  },
+  "sql_5e1c55333ecc": {
+    "file": "internal/fulfillment/parallel.go",
+    "line": 137
+  },
+  "sql_5e63c45d15a2": {
+    "file": "internal/workforce/service.go",
+    "line": 320
+  },
+  "sql_5f29733dc176": {
+    "file": "internal/fulfillment/parallel.go",
+    "line": 335
+  },
+  "sql_615f79a55907": {
+    "file": "internal/fulfillment/parallel.go",
+    "line": 297
+  },
+  "sql_61ed84440f8b": {
+    "file": "internal/admin/handler.go",
+    "line": 565
+  },
+  "sql_624a971d0419": {
+    "file": "internal/admin/handler.go",
+    "line": 341
+  },
+  "sql_625962e8e6ef": {
+    "file": "internal/fulfillment/parallel.go",
+    "line": 227
+  },
+  "sql_63afb17ac320": {
+    "file": "internal/fulfillment/parallel.go",
+    "line": 112
+  },
+  "sql_640fd9c101ef": {
+    "file": "internal/cart/cart.go",
+    "line": 271
+  },
+  "sql_641dc147a2b1": {
+    "file": "internal/fulfillment/service.go",
+    "line": 29
+  },
+  "sql_646c0728128c": {
+    "file": "internal/catalog/catalog.go",
+    "line": 363
+  },
+  "sql_654a8d0b7fd3": {
+    "file": "internal/fulfillment/service.go",
+    "line": 967
+  },
+  "sql_671b4bddcc38": {
+    "file": "internal/media/service.go",
+    "line": 213
+  },
+  "sql_6741196458f3": {
+    "file": "internal/order/order.go",
+    "line": 312
+  },
+  "sql_67569b41363b": {
+    "file": "internal/catalog/catalog.go",
+    "line": 560
+  },
+  "sql_677653ed4166": {
+    "file": "internal/fulfillment/service.go",
+    "line": 202
+  },
+  "sql_67ff17335400": {
+    "file": "internal/workforce/service.go",
+    "line": 467
+  },
+  "sql_689119a8a739": {
+    "file": "internal/platform/auth/worker_session.go",
+    "line": 158
+  },
+  "sql_6910a930899a": {
+    "file": "internal/order/order.go",
+    "line": 327
+  },
+  "sql_692c8704ac85": {
+    "file": "internal/order/order.go",
+    "line": 319
+  },
+  "sql_6a7a47b3f243": {
+    "file": "internal/customer/service.go",
+    "line": 123
+  },
+  "sql_6b114edbce19": {
+    "file": "internal/fulfillment/service.go",
+    "line": 825
+  },
+  "sql_6bbaa277778b": {
+    "file": "internal/fulfillment/diagnostics.go",
+    "line": 14
+  },
+  "sql_6c3619cfce85": {
+    "file": "internal/workforce/service.go",
+    "line": 300
+  },
+  "sql_6c3eca3498f7": {
+    "file": "internal/fulfillment/parallel.go",
+    "line": 386
+  },
+  "sql_6c4c69035229": {
+    "file": "internal/cart/cart.go",
+    "line": 274
+  },
+  "sql_6c667427fe12": {
+    "file": "internal/catalog/catalog.go",
+    "line": 243
+  },
+  "sql_6d651f5e3a7b": {
+    "file": "internal/order/order.go",
+    "line": 428
+  },
+  "sql_702e3b6ca2aa": {
+    "file": "internal/cart/cart.go",
+    "line": 193
+  },
+  "sql_755527867a7c": {
+    "file": "internal/fulfillment/service.go",
+    "line": 1130
+  },
+  "sql_7582da323e31": {
+    "file": "internal/catalog/catalog.go",
+    "line": 528
+  },
+  "sql_791ffb572d5a": {
+    "file": "internal/order/order.go",
+    "line": 496
+  },
+  "sql_79368dbbbaaa": {
+    "file": "internal/address/address.go",
+    "line": 210
+  },
+  "sql_7a45ab2b400a": {
+    "file": "internal/workforce/service.go",
+    "line": 488
+  },
+  "sql_7a50ff14eaef": {
+    "file": "internal/fulfillment/service.go",
+    "line": 296
+  },
+  "sql_7a9d37d8c73f": {
+    "file": "internal/workforce/service.go",
+    "line": 244
+  },
+  "sql_7b0b428df2ef": {
+    "file": "internal/order/order.go",
+    "line": 415
+  },
+  "sql_7b2e35e66176": {
+    "file": "internal/admin/handler.go",
+    "line": 346
+  },
+  "sql_7b93c2cfc39c": {
+    "file": "internal/order/order.go",
+    "line": 199
+  },
+  "sql_7c6fec363530": {
+    "file": "internal/workforce/service.go",
+    "line": 389
+  },
+  "sql_7d9e6f1ed7f2": {
+    "file": "internal/fulfillment/parallel.go",
+    "line": 375
+  },
+  "sql_7db8f3593851": {
+    "file": "internal/media/avatar.go",
+    "line": 105
+  },
+  "sql_7ec8c16c6c87": {
+    "file": "internal/fulfillment/service.go",
+    "line": 1316
+  },
+  "sql_83143db3fd86": {
+    "file": "internal/media/service.go",
+    "line": 206
+  },
+  "sql_84cd312772f5": {
+    "file": "internal/fulfillment/service.go",
+    "line": 387
+  },
+  "sql_855128249a1c": {
+    "file": "internal/catalog/catalog.go",
+    "line": 449
+  },
+  "sql_8551f7511ed4": {
+    "file": "internal/fulfillment/parallel.go",
+    "line": 233
+  },
+  "sql_8584206396db": {
+    "file": "internal/fulfillment/service.go",
+    "line": 1092
+  },
+  "sql_86634155f0e3": {
+    "file": "internal/workforce/service.go",
+    "line": 266
+  },
+  "sql_8888612ee77a": {
+    "file": "internal/workforce/service.go",
+    "line": 554
+  },
+  "sql_894df471e1b9": {
+    "file": "internal/fulfillment/service.go",
+    "line": 1607
+  },
+  "sql_89a6a694e051": {
+    "file": "internal/order/order.go",
+    "line": 316
+  },
+  "sql_8a58ee59a594": {
+    "file": "internal/catalog/catalog.go",
+    "line": 193
+  },
+  "sql_8b333d67539f": {
+    "file": "internal/media/service.go",
+    "line": 119
+  },
+  "sql_8b8760c18666": {
+    "file": "internal/order/order.go",
+    "line": 455
+  },
+  "sql_8c9b235d90ee": {
+    "file": "internal/fulfillment/service.go",
+    "line": 1569
+  },
+  "sql_8ca0aa6e169d": {
+    "file": "internal/fulfillment/service.go",
+    "line": 1459
+  },
+  "sql_8e669a318494": {
+    "file": "internal/workforce/service.go",
+    "line": 218
+  },
+  "sql_8ea07c6ebda0": {
+    "file": "internal/workforce/service.go",
+    "line": 806
+  },
+  "sql_8edd1b4f1331": {
+    "file": "internal/platform/auth/worker_session.go",
+    "line": 134
+  },
+  "sql_8ef3969e2b87": {
+    "file": "internal/fulfillment/service.go",
+    "line": 1505
+  },
+  "sql_8f0d1ae4ada7": {
+    "file": "internal/catalog/catalog.go",
+    "line": 327
+  },
+  "sql_8f8c0b820b8a": {
+    "file": "internal/catalog/catalog.go",
+    "line": 598
+  },
+  "sql_8ff8c7ca27ec": {
+    "file": "internal/fulfillment/service.go",
+    "line": 963
+  },
+  "sql_8ffaa3c01e2b": {
+    "file": "internal/workforce/service.go",
+    "line": 396
+  },
+  "sql_90f1aaa22e55": {
+    "file": "internal/platform/auth/worker_session.go",
+    "line": 126
+  },
+  "sql_9126c3c3d560": {
+    "file": "internal/admin/handler.go",
+    "line": 312
+  },
+  "sql_914f6bdd9657": {
+    "file": "internal/fulfillment/service.go",
+    "line": 1154
+  },
+  "sql_92acdd1fe1d3": {
+    "file": "internal/workforce/service.go",
+    "line": 404
+  },
+  "sql_92e0f8155e81": {
+    "file": "internal/fulfillment/parallel.go",
+    "line": 175
+  },
+  "sql_932fff9fb468": {
+    "file": "internal/fulfillment/service.go",
+    "line": 1432
+  },
+  "sql_942ee45d2518": {
+    "file": "internal/customer/admin.go",
+    "line": 245
+  },
+  "sql_943253027613": {
+    "file": "internal/workforce/service.go",
+    "line": 520
+  },
+  "sql_94c37ad5028d": {
+    "file": "internal/media/avatar.go",
+    "line": 86
+  },
+  "sql_954d61d75101": {
+    "file": "internal/fulfillment/service.go",
+    "line": 304
+  },
+  "sql_955f44c42395": {
+    "file": "internal/fulfillment/service.go",
+    "line": 468
+  },
+  "sql_9638b61223e8": {
+    "file": "internal/customer/service.go",
+    "line": 139
+  },
+  "sql_96759b4e08a5": {
+    "file": "internal/fulfillment/service.go",
+    "line": 861
+  },
+  "sql_9779e5d24c5e": {
+    "file": "internal/fulfillment/service.go",
+    "line": 1134
+  },
+  "sql_9938cac63f80": {
+    "file": "internal/platform/auth/session.go",
+    "line": 132
+  },
+  "sql_995f2d551205": {
+    "file": "internal/catalog/catalog.go",
+    "line": 393
+  },
+  "sql_9a80c5664416": {
+    "file": "internal/catalog/catalog.go",
+    "line": 228
+  },
+  "sql_9ae9b9238b68": {
+    "file": "internal/workforce/service.go",
+    "line": 137
+  },
+  "sql_9badba73bd42": {
+    "file": "internal/media/service.go",
+    "line": 231
+  },
+  "sql_9c65098e31bf": {
+    "file": "internal/workforce/service.go",
+    "line": 677
+  },
+  "sql_9e7e4ecd1d69": {
+    "file": "internal/workforce/service.go",
+    "line": 697
+  },
+  "sql_9f4cfd727013": {
+    "file": "internal/order/order.go",
+    "line": 365
+  },
+  "sql_9f87c41bd2b8": {
+    "file": "internal/fulfillment/service.go",
+    "line": 1165
+  },
+  "sql_a2980f008e5c": {
+    "file": "internal/cart/cart.go",
+    "line": 253
+  },
+  "sql_a344ff86cd9b": {
+    "file": "internal/order/order.go",
+    "line": 308
+  },
+  "sql_a5163bed56a6": {
+    "file": "internal/authorization/adapter.go",
+    "line": 65
+  },
+  "sql_a6abaa6f13bb": {
+    "file": "internal/fulfillment/service.go",
+    "line": 639
+  },
+  "sql_a7530ad3d383": {
+    "file": "internal/address/address.go",
+    "line": 164
+  },
+  "sql_a8eb425cf078": {
+    "file": "internal/customer/service.go",
+    "line": 284
+  },
+  "sql_a943e03a90a3": {
+    "file": "internal/fulfillment/service.go",
+    "line": 665
+  },
+  "sql_a9862d2dbcff": {
+    "file": "internal/platform/database/transaction.go",
+    "line": 21
+  },
+  "sql_a9fbfe27e453": {
+    "file": "internal/address/address.go",
+    "line": 149
+  },
+  "sql_aa1a82b75d77": {
+    "file": "internal/customer/service.go",
+    "line": 188
+  },
+  "sql_aa240d61b196": {
+    "file": "internal/order/order.go",
+    "line": 296
+  },
+  "sql_ab06ac120d49": {
+    "file": "internal/address/address.go",
+    "line": 194
+  },
+  "sql_ad91c37a268d": {
+    "file": "internal/workforce/service.go",
+    "line": 776
+  },
+  "sql_ae96022f0632": {
+    "file": "internal/cart/cart.go",
+    "line": 246
+  },
+  "sql_b0d0ba0148de": {
+    "file": "internal/order/order.go",
+    "line": 304
+  },
+  "sql_b25c088dc393": {
+    "file": "internal/fulfillment/service.go",
+    "line": 721
+  },
+  "sql_b30040a4a7c2": {
+    "file": "internal/fulfillment/service.go",
+    "line": 1068
+  },
+  "sql_b358aecad34f": {
+    "file": "internal/catalog/catalog.go",
+    "line": 285
+  },
+  "sql_b362acc55e90": {
+    "file": "internal/catalog/catalog.go",
+    "line": 340
+  },
+  "sql_b365bf1b787f": {
+    "file": "internal/platform/auth/session.go",
+    "line": 63
+  },
+  "sql_b3c4a49ec89a": {
+    "file": "internal/fulfillment/parallel.go",
+    "line": 389
+  },
+  "sql_b43626c626d0": {
+    "file": "internal/workforce/service.go",
+    "line": 337
+  },
+  "sql_b46b2109cfe6": {
+    "file": "internal/cart/cart.go",
+    "line": 147
+  },
+  "sql_b54f5d028d77": {
+    "file": "internal/order/order.go",
+    "line": 221
+  },
+  "sql_b59a4110491e": {
+    "file": "internal/customer/service.go",
+    "line": 240
+  },
+  "sql_b62115d2b7aa": {
+    "file": "internal/fulfillment/service.go",
+    "line": 1452
+  },
+  "sql_b6a3637893be": {
+    "file": "internal/customer/admin.go",
+    "line": 214
+  },
+  "sql_b7e5103406f7": {
+    "file": "internal/platform/auth/session.go",
+    "line": 76
+  },
+  "sql_b83791faa8dd": {
+    "file": "internal/media/avatar.go",
+    "line": 137
+  },
+  "sql_b86a09d652dc": {
+    "file": "internal/fulfillment/service.go",
+    "line": 974
+  },
+  "sql_b8a7c8771d2f": {
+    "file": "internal/customer/initialize.go",
+    "line": 101
+  },
+  "sql_b91f691db3d9": {
+    "file": "internal/address/address.go",
+    "line": 155
+  },
+  "sql_bb261b11e3c5": {
+    "file": "internal/fulfillment/service.go",
+    "line": 777
+  },
+  "sql_bfa9fe3a823b": {
+    "file": "internal/fulfillment/service.go",
+    "line": 495
+  },
+  "sql_c06ac7b7f431": {
+    "file": "internal/workforce/service.go",
+    "line": 429
+  },
+  "sql_c13eb3251de4": {
+    "file": "internal/workforce/service.go",
+    "line": 658
+  },
+  "sql_c2e4a838662d": {
+    "file": "internal/fulfillment/service.go",
+    "line": 711
+  },
+  "sql_c370379655aa": {
+    "file": "internal/admin/handler.go",
+    "line": 562
+  },
+  "sql_c511abc2cb04": {
+    "file": "internal/catalog/catalog.go",
+    "line": 546
+  },
+  "sql_c5d4d86cd68e": {
+    "file": "internal/workforce/service.go",
+    "line": 505
+  },
+  "sql_c5dca92183a1": {
+    "file": "internal/catalog/catalog.go",
+    "line": 390
+  },
+  "sql_c5e5658d6d8d": {
+    "file": "internal/customer/initialize.go",
+    "line": 32
+  },
+  "sql_c5fe67e1f166": {
+    "file": "internal/admin/handler.go",
+    "line": 462
+  },
+  "sql_c6786bffad93": {
+    "file": "internal/admin/handler.go",
+    "line": 276
+  },
+  "sql_c69c947436e5": {
+    "file": "internal/catalog/catalog.go",
+    "line": 383
+  },
+  "sql_c69de4f086e3": {
+    "file": "internal/platform/auth/session.go",
+    "line": 82
+  },
+  "sql_c6a8de7b8299": {
+    "file": "internal/workforce/service.go",
+    "line": 785
+  },
+  "sql_c6db59c9666e": {
+    "file": "internal/workforce/service.go",
+    "line": 562
+  },
+  "sql_c782b9ef4e7f": {
+    "file": "internal/catalog/catalog.go",
+    "line": 404
+  },
+  "sql_c7ecb254a84a": {
+    "file": "internal/catalog/catalog.go",
+    "line": 430
+  },
+  "sql_c88055a1143d": {
+    "file": "internal/admin/handler.go",
+    "line": 228
+  },
+  "sql_c9405e2862ac": {
+    "file": "internal/platform/auth/worker_session.go",
+    "line": 74
+  },
+  "sql_c9873d28370f": {
+    "file": "internal/customer/service.go",
+    "line": 113
+  },
+  "sql_ca52f39c656d": {
+    "file": "internal/workforce/service.go",
+    "line": 721
+  },
+  "sql_cb69e4cdbdca": {
+    "file": "internal/media/service.go",
+    "line": 149
+  },
+  "sql_cd6a9d47761f": {
+    "file": "internal/admin/handler.go",
+    "line": 578
+  },
+  "sql_cd9b4a269c33": {
+    "file": "internal/fulfillment/service.go",
+    "line": 1655
+  },
+  "sql_cf4f5206540a": {
+    "file": "internal/fulfillment/service.go",
+    "line": 1598
+  },
+  "sql_cf6fd5a9605f": {
+    "file": "internal/cart/cart.go",
+    "line": 128
+  },
+  "sql_d0f803866654": {
+    "file": "internal/order/order.go",
+    "line": 334
+  },
+  "sql_d17bffad7ee6": {
+    "file": "internal/admin/handler.go",
+    "line": 357
+  },
+  "sql_d18c1c207088": {
+    "file": "internal/fulfillment/service.go",
+    "line": 1288
+  },
+  "sql_d1c6c38fb3df": {
+    "file": "internal/fulfillment/service.go",
+    "line": 58
+  },
+  "sql_d2568e8841b8": {
+    "file": "internal/fulfillment/service.go",
+    "line": 1331
+  },
+  "sql_d45d165d26be": {
+    "file": "internal/fulfillment/parallel.go",
+    "line": 58
+  },
+  "sql_d551c204b767": {
+    "file": "internal/fulfillment/parallel.go",
+    "line": 203
+  },
+  "sql_d5a689a2cf81": {
+    "file": "internal/catalog/catalog.go",
+    "line": 258
+  },
+  "sql_d7d5c3bfe2e3": {
+    "file": "internal/media/service.go",
+    "line": 195
+  },
+  "sql_d8373aeff003": {
+    "file": "internal/fulfillment/parallel.go",
+    "line": 109
+  },
+  "sql_d8d7af674f6e": {
+    "file": "internal/address/address.go",
+    "line": 219
+  },
+  "sql_d9c67d212f82": {
+    "file": "internal/order/order.go",
+    "line": 504
+  },
+  "sql_dd7f0dcf2e9f": {
+    "file": "internal/workforce/service.go",
+    "line": 379
+  },
+  "sql_ddae276e5d60": {
+    "file": "internal/workforce/service.go",
+    "line": 748
+  },
+  "sql_deb538f6d913": {
+    "file": "internal/fulfillment/service.go",
+    "line": 434
+  },
+  "sql_df1a92c4681e": {
+    "file": "internal/address/address.go",
+    "line": 114
+  },
+  "sql_df5593ab7ef5": {
+    "file": "internal/customer/initialize.go",
+    "line": 36
+  },
+  "sql_dfab9b78ab6c": {
+    "file": "internal/platform/auth/worker_session.go",
+    "line": 55
+  },
+  "sql_e058fe053442": {
+    "file": "internal/fulfillment/service.go",
+    "line": 912
+  },
+  "sql_e30ca66b29d9": {
+    "file": "internal/fulfillment/service.go",
+    "line": 1391
+  },
+  "sql_e322d7939756": {
+    "file": "internal/fulfillment/service.go",
+    "line": 226
+  },
+  "sql_e3955098f105": {
+    "file": "internal/cart/cart.go",
+    "line": 177
+  },
+  "sql_e4cc856c18a7": {
+    "file": "internal/admin/handler.go",
+    "line": 625
+  },
+  "sql_e5e331565f4b": {
+    "file": "internal/admin/handler.go",
+    "line": 668
+  },
+  "sql_e732f0a4f8d0": {
+    "file": "internal/fulfillment/parallel.go",
+    "line": 147
+  },
+  "sql_e8752791a700": {
+    "file": "internal/authorization/adapter.go",
+    "line": 34
+  },
+  "sql_e9ecdf7f8bb5": {
+    "file": "internal/address/address.go",
+    "line": 185
+  },
+  "sql_ea8daf71eab4": {
+    "file": "internal/fulfillment/service.go",
+    "line": 828
+  },
+  "sql_eac8f5c5be4f": {
+    "file": "internal/admin/handler.go",
+    "line": 134
+  },
+  "sql_eb07b78c5609": {
+    "file": "internal/customer/admin.go",
+    "line": 42
+  },
+  "sql_ebd6b3b86a10": {
+    "file": "internal/admin/handler.go",
+    "line": 393
+  },
+  "sql_ebd722e8712c": {
+    "file": "internal/fulfillment/service.go",
+    "line": 1527
+  },
+  "sql_ec2c72fcd929": {
+    "file": "internal/admin/handler.go",
+    "line": 630
+  },
+  "sql_efa16fc696ee": {
+    "file": "internal/workforce/service.go",
+    "line": 353
+  },
+  "sql_f02ab6879635": {
+    "file": "internal/customer/admin.go",
+    "line": 230
+  },
+  "sql_f150e0d6ae44": {
+    "file": "internal/fulfillment/service.go",
+    "line": 1604
+  },
+  "sql_f3a7f9435131": {
+    "file": "internal/address/address.go",
+    "line": 144
+  },
+  "sql_f52ba439e2d9": {
+    "file": "internal/catalog/catalog.go",
+    "line": 288
+  },
+  "sql_f55d2dbeb67b": {
+    "file": "internal/workforce/service.go",
+    "line": 802
+  },
+  "sql_f636103631cd": {
+    "file": "internal/media/avatar.go",
+    "line": 128
+  },
+  "sql_f80cc6392e25": {
+    "file": "internal/fulfillment/service.go",
+    "line": 1476
+  },
+  "sql_f846b1ef9436": {
+    "file": "internal/fulfillment/service.go",
+    "line": 1585
+  },
+  "sql_f93f367578dc": {
+    "file": "internal/customer/service.go",
+    "line": 261
+  },
+  "sql_fa500fc77cc8": {
+    "file": "internal/fulfillment/parallel.go",
+    "line": 106
+  },
+  "sql_fa661241c85f": {
+    "file": "internal/fulfillment/service.go",
+    "line": 1083
+  },
+  "sql_fbad2f2ecac1": {
+    "file": "internal/platform/auth/session.go",
+    "line": 100
+  },
+  "sql_fd6859794f76": {
+    "file": "internal/platform/auth/worker_session.go",
+    "line": 168
+  }
+}

@@ -1,0 +1,119 @@
+# Merge with deploy/compose.yaml. All relative paths are relative to deploy/.
+services:
+  server:
+    build:
+      args:
+        APP_VERSION: ${APP_VERSION:-development}
+        GIT_COMMIT: ${GIT_COMMIT:-unknown}
+    environment:
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      LOG_FORMAT: json
+      LOG_SERVICE: fix-pro-api
+      APP_VERSION: ${APP_VERSION:-development}
+      GIT_COMMIT: ${GIT_COMMIT:-unknown}
+      LOG_INSTANCE_ID: ${LOG_INSTANCE_ID:-compose-server}
+    labels:
+      fixpro.logs: "true"
+    logging: &logging
+      driver: json-file
+      options:
+        max-size: ${DOCKER_LOG_MAX_SIZE:-20m}
+        max-file: ${DOCKER_LOG_MAX_FILE:-5}
+        mode: non-blocking
+        max-buffer-size: "4m"
+  migrate:
+    labels:
+      fixpro.logs: "true"
+    logging: *logging
+  docker-log-proxy:
+    mem_limit: 64m
+    image: haproxy:3.2.0-alpine
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./observability/alloy/docker-proxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    networks: [observability]
+    restart: unless-stopped
+    logging: *logging
+  alloy:
+    mem_limit: 512m
+    image: grafana/alloy:v1.11.0
+    command: ["run", "--server.http.listen-addr=0.0.0.0:12345", "--storage.path=/var/lib/alloy", "/etc/alloy/config.alloy"]
+    environment:
+      APP_ENV: ${APP_ENV:-local}
+    volumes:
+      - ./observability/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - alloy-data:/var/lib/alloy
+    networks: [observability]
+    depends_on: [docker-log-proxy, loki]
+    restart: unless-stopped
+    logging: *logging
+  loki:
+    mem_limit: 1g
+    image: grafana/loki:3.6.4
+    command: ["-config.file=/etc/loki/config.yaml", "-config.expand-env=true"]
+    environment:
+      LOKI_RETENTION: ${LOKI_RETENTION:-720h}
+    volumes:
+      - ./observability/loki/config.yaml:/etc/loki/config.yaml:ro
+      - loki-data:/loki
+    networks: [observability]
+    restart: unless-stopped
+    logging: *logging
+  grafana:
+    mem_limit: 512m
+    image: grafana/grafana:12.2.3
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD in your private environment}
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://localhost:3000}
+      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:?set a private webhook receiver}
+    ports: ["127.0.0.1:3000:3000"]
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    networks: [observability]
+    depends_on: [loki, prometheus]
+    restart: unless-stopped
+    logging: *logging
+  prometheus:
+    mem_limit: 1g
+    image: prom/prometheus:v3.7.0
+    command: ["--config.file=/etc/prometheus/prometheus.yaml", "--storage.tsdb.path=/prometheus", "--storage.tsdb.retention.time=7d"]
+    volumes:
+      - ./observability/prometheus/prometheus.yaml:/etc/prometheus/prometheus.yaml:ro
+      - prometheus-data:/prometheus
+    networks: [observability]
+    restart: unless-stopped
+    logging: *logging
+  node-exporter:
+    mem_limit: 128m
+    image: prom/node-exporter:v1.9.1
+    command: ["--path.rootfs=/host"]
+    volumes: ["/:/host:ro,rslave"]
+    networks: [observability]
+    restart: unless-stopped
+    logging: *logging
+  log-probe:
+    mem_limit: 64m
+    build:
+      context: ./observability/probe
+    environment:
+      API_URL: http://server:8080/api/v1/public/ping
+      LOKI_URL: http://loki:3100
+      LOG_ENV: ${APP_ENV:-local}
+      LOG_INSTANCE_ID: ${LOG_INSTANCE_ID:-compose-server}
+    networks: [default, observability]
+    restart: unless-stopped
+    logging: *logging
+networks:
+  observability:
+    # No published Loki/Alloy/Prometheus/proxy ports. Egress is needed for webhook.
+    driver: bridge
+volumes:
+  alloy-data:
+  loki-data:
+  grafana-data:
+  prometheus-data:

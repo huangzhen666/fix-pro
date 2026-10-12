@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	"github.com/fixpro/server/internal/platform/httpx"
+	"github.com/fixpro/server/internal/platform/logging"
+	"go.uber.org/zap"
 )
 
 type Principal struct {
@@ -30,14 +32,14 @@ func AdminSessionOrBasic(env string, sessions *SessionStore, username, password 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if sessions != nil {
 			if p, _, err := sessions.Authenticate(r); err == nil {
-				next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), principalKey, p)))
+				next.ServeHTTP(w, r.WithContext(WithPrincipal(r.Context(), p)))
 				return
 			}
 		}
 		if allowBasic && env == "local" {
 			u, p, ok := r.BasicAuth()
 			if ok && subtle.ConstantTimeCompare([]byte(u), []byte(username)) == 1 && subtle.ConstantTimeCompare([]byte(p), []byte(password)) == 1 {
-				next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), principalKey, Principal{OrgID: 1, Role: "ADMIN", Name: u, LegacyBasic: true})))
+				next.ServeHTTP(w, r.WithContext(WithPrincipal(r.Context(), Principal{OrgID: 1, Role: "ADMIN", Name: u, LegacyBasic: true})))
 				return
 			}
 		}
@@ -57,7 +59,7 @@ func Worker(env string, next http.Handler) http.Handler {
 			httpx.Failure(w, r, httpx.E("UNAUTHORIZED", "需要师傅认证", 401))
 			return
 		}
-		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), principalKey, Principal{OrgID: 1, SubjectID: id, Role: "WORKER", Name: "本地演示师傅"})))
+		next.ServeHTTP(w, r.WithContext(WithPrincipal(r.Context(), Principal{OrgID: 1, SubjectID: id, Role: "WORKER", Name: "本地演示师傅"})))
 	})
 }
 
@@ -77,15 +79,35 @@ func Admin(username, password string, next http.Handler) http.Handler {
 			httpx.Failure(w, r, httpx.E("UNAUTHORIZED", "需要管理员认证", 401))
 			return
 		}
-		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), principalKey, Principal{OrgID: 1, Role: "ADMIN", Name: u})))
+		next.ServeHTTP(w, r.WithContext(WithPrincipal(r.Context(), Principal{OrgID: 1, Role: "ADMIN", Name: u})))
 	})
 }
-func Customer(env string, next http.Handler) http.Handler {
+
+type CustomerAuthenticator interface {
+	Authenticate(*http.Request) (Principal, error)
+}
+
+func Customer(store CustomerAuthenticator, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if env == "local" && strings.TrimSpace(r.Header.Get("Authorization")) == "Bearer local-customer-1" {
-			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), principalKey, Principal{OrgID: 1, SubjectID: 1, Role: "CUSTOMER", Name: "本地演示客户"})))
+		w.Header().Set("Cache-Control", "no-store")
+		if store == nil {
+			httpx.Failure(w, r, httpx.E("CUSTOMER_SESSION_INVALID", "请先授权手机号登录", 401))
 			return
 		}
-		httpx.Failure(w, r, httpx.E("UNAUTHORIZED", "需要客户认证", 401))
+		p, e := store.Authenticate(r)
+		if e != nil {
+			httpx.Failure(w, r, e)
+			return
+		}
+		next.ServeHTTP(w, r.WithContext(WithPrincipal(r.Context(), p)))
 	})
+}
+
+func WithPrincipal(ctx context.Context, p Principal) context.Context {
+	id := p.SubjectID
+	if p.AdminUserID > 0 {
+		id = p.AdminUserID
+	}
+	logging.Bind(ctx, zap.String("principalType", p.Role), zap.String("principalId", strconv.FormatInt(id, 10)), zap.String("orgId", strconv.FormatInt(p.OrgID, 10)))
+	return context.WithValue(ctx, principalKey, p)
 }

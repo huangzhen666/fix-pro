@@ -1,20 +1,2 @@
-interface FixProAppOptions {
-  globalData: {
-    role: 'CUSTOMER' | 'WORKER'
-  }
-}
-
-App<FixProAppOptions>({
-  globalData: {
-    role: 'CUSTOMER',
-  },
-  onLaunch() {
-    if (wx.getAccountInfoSync().miniProgram.envVersion === 'develop' && !wx.getStorageSync('fixpro.accessToken')) {
-      wx.setStorageSync('fixpro.accessToken', 'local-customer-1')
-    }
-    const savedRole = wx.getStorageSync<'CUSTOMER' | 'WORKER'>('fixpro.role')
-    if (savedRole === 'CUSTOMER' || savedRole === 'WORKER') {
-      this.globalData.role = savedRole
-    }
-  },
-})
+import { bootstrap, ensureReady, hasSession, setForeground } from './services/session'
+App({ onLaunch() { bootstrap(); if (hasSession()) void ensureReady().catch(() => {}) }, onShow() { setForeground(true); if (hasSession()) void ensureReady().catch(() => {}) }, onHide() { setForeground(false) } })

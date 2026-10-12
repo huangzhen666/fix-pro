@@ -1,0 +1,1 @@
+`avatar.webp` is the unmodified `testdata/blue-purple-pink.lossless.webp` fixture from golang.org/x/image v0.40.0. Copyright The Go Authors; BSD license is included in LICENSE. Used only to exercise actual WebP decoding.

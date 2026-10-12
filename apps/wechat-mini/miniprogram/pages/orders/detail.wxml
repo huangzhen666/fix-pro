@@ -1,4 +1,4 @@
-<view class="page" wx:if="{{order}}">
+<block wx:if="{{sessionReady}}"><view class="page" wx:if="{{order}}">
   <view class="card order-card">
     <view class="order-header">
       <text class="order-no">订单号 {{order.orderNo}}</text>
@@ -44,3 +44,4 @@
   </view>
 </view>
 <view wx:if="{{!loading && !order}}" class="empty">订单不存在或暂时无法加载</view>
+</block><view wx:else style="padding:40rpx;text-align:center;color:#888">正在校验登录状态，请保持网络连接</view>

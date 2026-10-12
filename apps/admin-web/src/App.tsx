@@ -1,3 +1,4 @@
+import DiagnosticFeedback from './components/DiagnosticFeedback'
 import { lazy, Suspense } from 'react'
 import { Spin } from 'antd'
 import { Navigate, RouterProvider, createBrowserRouter } from 'react-router'
@@ -17,6 +18,7 @@ const WorkerPage = lazy(() => import('./pages/WorkerPage'))
 const SkillPage = lazy(() => import('./pages/SkillPage'))
 const AdminUsersPage = lazy(() => import('./pages/AdminUsersPage'))
 const AdminRolesPage = lazy(() => import('./pages/AdminRolesPage'))
+const CustomerPage = lazy(() => import('./pages/CustomerPage'))
 const ChangePasswordPage = lazy(() => import('./pages/ChangePasswordPage'))
 
 function ProtectedLayout() {
@@ -40,7 +42,7 @@ const router = createBrowserRouter([
       { path: 'work-orders', element: <WorkOrderPage /> },
       { path: 'workers', element: <WorkerPage /> },
       { path: 'worker-skills', element: <SkillPage /> },
-      { path: 'customers', element: <PlaceholderPage title="客户资产" /> },
+      { path: 'customers', element: <CustomerPage /> },
       { path: 'inventory', element: <PlaceholderPage title="材料库存" /> },
       { path: 'after-sales', element: <PlaceholderPage title="售后质保" /> },
       { path: 'enterprises', element: <PlaceholderPage title="企业合同" /> },
@@ -57,6 +59,7 @@ export default function App() {
   return (
     <Suspense fallback={<Spin fullscreen tip="正在加载运维中心" />}>
       <RouterProvider router={router} />
+ <DiagnosticFeedback />
     </Suspense>
   )
 }

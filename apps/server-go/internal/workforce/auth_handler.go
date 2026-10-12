@@ -2,6 +2,8 @@ package workforce
 
 import (
 	"errors"
+	"github.com/fixpro/server/internal/platform/logging"
+	"go.uber.org/zap"
 	"net/http"
 	"strings"
 
@@ -43,6 +45,8 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		httpx.Failure(w, r, err)
 		return
 	}
+	auth.WithPrincipal(r.Context(), result.Principal)
+	logging.Event(r.Context(), "auth", "auth.worker_login", zap.String("result", "success"))
 	httpx.Success(w, r, map[string]any{
 		"token":              result.Token,
 		"expiresAt":          result.ExpiresAt,

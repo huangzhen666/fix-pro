@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"github.com/fixpro/server/internal/platform/database"
 	"net/http"
 	"strconv"
 	"strings"
@@ -15,6 +16,8 @@ import (
 	"github.com/fixpro/server/internal/authorization"
 	"github.com/fixpro/server/internal/platform/auth"
 	"github.com/fixpro/server/internal/platform/httpx"
+	"github.com/fixpro/server/internal/platform/logging"
+	"go.uber.org/zap"
 )
 
 type Handler struct {
@@ -49,7 +52,11 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.sessions.SetLoginCookies(w, result, result.SessionToken)
-	h.writeAudit(r.Context(), result.Principal, "auth.login", "admin_user", strconv.FormatInt(result.Principal.AdminUserID, 10), nil)
+	auth.WithPrincipal(r.Context(), result.Principal)
+	if err := h.writeAudit(r.Context(), h.db, result.Principal, "auth.login", "admin_user", strconv.FormatInt(result.Principal.AdminUserID, 10)); err != nil {
+		logging.FromContext(r.Context()).Error("login audit failed", append(logging.SafeError(err), zap.String("module", "auth"), zap.String("event", "audit.write.failed"))...)
+	}
+	logging.Event(r.Context(), "auth", "auth.login")
 	httpx.Success(w, r, map[string]any{"user": result.Principal, "mustChangePassword": result.MustChangePassword})
 }
 
@@ -100,12 +107,26 @@ func (h *Handler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 		httpx.Failure(w, r, httpx.E("VALIDATION_ERROR", err.Error(), 400))
 		return
 	}
-	_, err = h.db.ExecContext(r.Context(), `UPDATE admin_user SET password_hash=$1, must_change_password=FALSE, version=version+1 WHERE org_id=$2 AND id=$3 AND version=(SELECT version FROM admin_user WHERE org_id=$2 AND id=$3)`, hash, p.OrgID, p.AdminUserID)
+	tx, err := database.BeginTx(r.Context(), h.db)
 	if err != nil {
 		httpx.Failure(w, r, err)
 		return
 	}
-	h.writeAudit(r.Context(), p, "admin_user.change_password", "admin_user", strconv.FormatInt(p.AdminUserID, 10), nil)
+	defer tx.Rollback()
+	_, err = tx.ExecContext(r.Context(), `UPDATE admin_user SET password_hash=$1, must_change_password=FALSE, version=version+1 WHERE org_id=$2 AND id=$3 AND version=(SELECT version FROM admin_user WHERE org_id=$2 AND id=$3)`, hash, p.OrgID, p.AdminUserID)
+	if err != nil {
+		httpx.Failure(w, r, err)
+		return
+	}
+	if err = h.writeAudit(r.Context(), tx, p, "admin_user.change_password", "admin_user", strconv.FormatInt(p.AdminUserID, 10)); err != nil {
+		httpx.Failure(w, r, err)
+		return
+	}
+	if err = tx.Commit(); err != nil {
+		httpx.Failure(w, r, err)
+		return
+	}
+	logging.Event(r.Context(), "admin", "admin_user.change_password")
 	httpx.Success(w, r, map[string]bool{"changed": true})
 }
 
@@ -197,7 +218,7 @@ func (h *Handler) CreateRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	code := fmt.Sprintf("role_%d", time.Now().UnixNano())
-	tx, err := h.db.BeginTx(r.Context(), nil)
+	tx, err := database.BeginTx(r.Context(), h.db)
 	if err != nil {
 		httpx.Failure(w, r, err)
 		return
@@ -213,13 +234,17 @@ func (h *Handler) CreateRole(w http.ResponseWriter, r *http.Request) {
 		httpx.Failure(w, r, err)
 		return
 	}
+	if err = h.writeAudit(r.Context(), tx, p, "admin_role.create", "admin_role", strconv.FormatInt(id, 10)); err != nil {
+		httpx.Failure(w, r, err)
+		return
+	}
 	if err = tx.Commit(); err != nil {
 		httpx.Failure(w, r, err)
 		return
 	}
 	h.authorizer.InvalidateOrg(p.OrgID)
-	h.writeAudit(r.Context(), p, "admin_role.create", "admin_role", strconv.FormatInt(id, 10), in)
 	x, _ := h.getRole(r.Context(), p.OrgID, id)
+	logging.Event(r.Context(), "admin", "admin_role.create")
 	httpx.Success(w, r, x)
 }
 
@@ -241,7 +266,7 @@ func (h *Handler) UpdateRole(w http.ResponseWriter, r *http.Request) {
 		httpx.Failure(w, r, err)
 		return
 	}
-	tx, err := h.db.BeginTx(r.Context(), nil)
+	tx, err := database.BeginTx(r.Context(), h.db)
 	if err != nil {
 		httpx.Failure(w, r, err)
 		return
@@ -257,13 +282,17 @@ func (h *Handler) UpdateRole(w http.ResponseWriter, r *http.Request) {
 		httpx.Failure(w, r, err)
 		return
 	}
+	if err = h.writeAudit(r.Context(), tx, p, "admin_role.update", "admin_role", strconv.FormatInt(id, 10)); err != nil {
+		httpx.Failure(w, r, err)
+		return
+	}
 	if err = tx.Commit(); err != nil {
 		httpx.Failure(w, r, err)
 		return
 	}
 	h.authorizer.InvalidateOrg(p.OrgID)
-	h.writeAudit(r.Context(), p, "admin_role.update", "admin_role", strconv.FormatInt(id, 10), in)
 	x, _ := h.getRole(r.Context(), p.OrgID, id)
+	logging.Event(r.Context(), "admin", "admin_role.update")
 	httpx.Success(w, r, x)
 }
 
@@ -285,12 +314,26 @@ func (h *Handler) DeleteRole(w http.ResponseWriter, r *http.Request) {
 		httpx.Failure(w, r, httpx.E("CONFLICT", "角色仍被用户使用，不能删除", 409))
 		return
 	}
-	if _, err = h.db.ExecContext(r.Context(), `DELETE FROM admin_role WHERE org_id=$1 AND id=$2`, p.OrgID, id); err != nil {
+	tx, err := database.BeginTx(r.Context(), h.db)
+	if err != nil {
+		httpx.Failure(w, r, err)
+		return
+	}
+	defer tx.Rollback()
+	if _, err = tx.ExecContext(r.Context(), `DELETE FROM admin_role WHERE org_id=$1 AND id=$2`, p.OrgID, id); err != nil {
+		httpx.Failure(w, r, err)
+		return
+	}
+	if err = h.writeAudit(r.Context(), tx, p, "admin_role.delete", "admin_role", strconv.FormatInt(id, 10)); err != nil {
+		httpx.Failure(w, r, err)
+		return
+	}
+	if err = tx.Commit(); err != nil {
 		httpx.Failure(w, r, err)
 		return
 	}
 	h.authorizer.InvalidateOrg(p.OrgID)
-	h.writeAudit(r.Context(), p, "admin_role.delete", "admin_role", strconv.FormatInt(id, 10), nil)
+	logging.Event(r.Context(), "admin", "admin_role.delete")
 	httpx.Success(w, r, map[string]bool{"deleted": true})
 }
 
@@ -409,7 +452,7 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		httpx.Failure(w, r, err)
 		return
 	}
-	tx, err := h.db.BeginTx(r.Context(), nil)
+	tx, err := database.BeginTx(r.Context(), h.db)
 	if err != nil {
 		httpx.Failure(w, r, err)
 		return
@@ -426,12 +469,16 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if err = h.writeAudit(r.Context(), tx, p, "admin_user.create", "admin_user", strconv.FormatInt(id, 10)); err != nil {
+		httpx.Failure(w, r, err)
+		return
+	}
 	if err = tx.Commit(); err != nil {
 		httpx.Failure(w, r, err)
 		return
 	}
 	h.authorizer.InvalidateUser(id)
-	h.writeAudit(r.Context(), p, "admin_user.create", "admin_user", strconv.FormatInt(id, 10), nil)
+	logging.Event(r.Context(), "admin", "admin_user.create")
 	httpx.Success(w, r, map[string]any{"id": id, "temporaryPassword": temp})
 }
 
@@ -452,7 +499,7 @@ func (h *Handler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		httpx.Failure(w, r, err)
 		return
 	}
-	tx, err := h.db.BeginTx(r.Context(), nil)
+	tx, err := database.BeginTx(r.Context(), h.db)
 	if err != nil {
 		httpx.Failure(w, r, err)
 		return
@@ -474,13 +521,21 @@ func (h *Handler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if _, err = tx.ExecContext(r.Context(), `UPDATE admin_user_session SET revoked_at=CURRENT_TIMESTAMP(3) WHERE org_id=$1 AND user_id=$2 AND revoked_at IS NULL`, p.OrgID, id); err != nil {
+		httpx.Failure(w, r, err)
+		return
+	}
+	if err = h.writeAudit(r.Context(), tx, p, "admin_user.update", "admin_user", strconv.FormatInt(id, 10)); err != nil {
+		httpx.Failure(w, r, err)
+		return
+	}
 	if err = tx.Commit(); err != nil {
 		httpx.Failure(w, r, err)
 		return
 	}
-	_ = h.sessions.RevokeUserSessions(r.Context(), p.OrgID, id)
+
 	h.authorizer.InvalidateUser(id)
-	h.writeAudit(r.Context(), p, "admin_user.update", "admin_user", strconv.FormatInt(id, 10), nil)
+	logging.Event(r.Context(), "admin", "admin_user.update")
 	httpx.Success(w, r, map[string]bool{"updated": true})
 }
 
@@ -514,16 +569,33 @@ func (h *Handler) SetUserStatus(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	var n int64
-	err = h.db.QueryRowContext(r.Context(), `UPDATE admin_user SET status=$1, version=version+1 WHERE org_id=$2 AND id=$3 AND version=$4 RETURNING id`, in.Status, p.OrgID, id, in.Version).Scan(&n)
+	tx, err := database.BeginTx(r.Context(), h.db)
+	if err != nil {
+		httpx.Failure(w, r, err)
+		return
+	}
+	defer tx.Rollback()
+	err = tx.QueryRowContext(r.Context(), `UPDATE admin_user SET status=$1, version=version+1 WHERE org_id=$2 AND id=$3 AND version=$4 RETURNING id`, in.Status, p.OrgID, id, in.Version).Scan(&n)
 	if err != nil {
 		httpx.Failure(w, r, httpx.E("CONFLICT", "用户已被修改", 409))
 		return
 	}
 	if in.Status != "ACTIVE" {
-		_ = h.sessions.RevokeUserSessions(r.Context(), p.OrgID, id)
+		if _, err = tx.ExecContext(r.Context(), `UPDATE admin_user_session SET revoked_at=CURRENT_TIMESTAMP(3) WHERE org_id=$1 AND user_id=$2 AND revoked_at IS NULL`, p.OrgID, id); err != nil {
+			httpx.Failure(w, r, err)
+			return
+		}
+	}
+	if err = h.writeAudit(r.Context(), tx, p, "admin_user.status", "admin_user", strconv.FormatInt(id, 10)); err != nil {
+		httpx.Failure(w, r, err)
+		return
+	}
+	if err = tx.Commit(); err != nil {
+		httpx.Failure(w, r, err)
+		return
 	}
 	h.authorizer.InvalidateUser(id)
-	h.writeAudit(r.Context(), p, "admin_user.status", "admin_user", strconv.FormatInt(id, 10), in)
+	logging.Event(r.Context(), "admin", "admin_user.status")
 	httpx.Success(w, r, map[string]bool{"updated": true})
 }
 
@@ -544,13 +616,31 @@ func (h *Handler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 		httpx.Failure(w, r, err)
 		return
 	}
-	if _, err = h.db.ExecContext(r.Context(), `UPDATE admin_user SET password_hash=$1,must_change_password=TRUE,version=version+1 WHERE org_id=$2 AND id=$3`, hash, p.OrgID, id); err != nil {
+	tx, err := database.BeginTx(r.Context(), h.db)
+	if err != nil {
 		httpx.Failure(w, r, err)
 		return
 	}
-	_ = h.sessions.RevokeUserSessions(r.Context(), p.OrgID, id)
+	defer tx.Rollback()
+	if _, err = tx.ExecContext(r.Context(), `UPDATE admin_user SET password_hash=$1,must_change_password=TRUE,version=version+1 WHERE org_id=$2 AND id=$3`, hash, p.OrgID, id); err != nil {
+		httpx.Failure(w, r, err)
+		return
+	}
+
+	if _, err = tx.ExecContext(r.Context(), `UPDATE admin_user_session SET revoked_at=CURRENT_TIMESTAMP(3) WHERE org_id=$1 AND user_id=$2 AND revoked_at IS NULL`, p.OrgID, id); err != nil {
+		httpx.Failure(w, r, err)
+		return
+	}
+	if err = h.writeAudit(r.Context(), tx, p, "admin_user.reset_password", "admin_user", strconv.FormatInt(id, 10)); err != nil {
+		httpx.Failure(w, r, err)
+		return
+	}
+	if err = tx.Commit(); err != nil {
+		httpx.Failure(w, r, err)
+		return
+	}
 	h.authorizer.InvalidateUser(id)
-	h.writeAudit(r.Context(), p, "admin_user.reset_password", "admin_user", strconv.FormatInt(id, 10), nil)
+	logging.Event(r.Context(), "admin", "admin_user.reset_password")
 	httpx.Success(w, r, map[string]any{"temporaryPassword": temp})
 }
 
@@ -606,11 +696,16 @@ func (h *Handler) AuditLogs(w http.ResponseWriter, r *http.Request) {
 	httpx.Success(w, r, out)
 }
 
-func (h *Handler) writeAudit(ctx context.Context, p auth.Principal, action, resource, id string, detail any) {
+type auditExecutor interface {
+	ExecContext(context.Context, string, ...any) (sql.Result, error)
+}
+
+func (h *Handler) writeAudit(ctx context.Context, exec auditExecutor, p auth.Principal, action, resource, id string) error {
 	if p.OrgID <= 0 {
-		return
+		return nil
 	}
-	_, _ = h.db.ExecContext(ctx, `INSERT INTO audit_log(org_id,principal_id,action_code,resource_type,resource_id,detail_json) VALUES($1,$2,$3,$4,$5,$6)`, p.OrgID, p.AdminUserID, action, resource, id, detail)
+	_, err := exec.ExecContext(ctx, `INSERT INTO audit_log(org_id,principal_id,action_code,resource_type,resource_id,request_id) VALUES($1,$2,$3,$4,$5,NULLIF($6,''))`, p.OrgID, p.AdminUserID, action, resource, id, httpx.RequestID(ctx))
+	return err
 }
 func clientIP(r *http.Request) string {
 	v := strings.TrimSpace(r.Header.Get("X-Forwarded-For"))

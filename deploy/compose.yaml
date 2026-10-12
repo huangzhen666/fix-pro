@@ -34,6 +34,12 @@ services:
       context: ../apps/server-go
     environment:
       APP_ENV: local
+      WECHAT_MINI_APP_ID: ${WECHAT_MINI_APP_ID:-}
+      WECHAT_MINI_APP_SECRET: ${WECHAT_MINI_APP_SECRET:-}
+      CUSTOMER_MOBILE_ENCRYPTION_KEY: ${CUSTOMER_MOBILE_ENCRYPTION_KEY:-}
+      CUSTOMER_MOBILE_HASH_KEY: ${CUSTOMER_MOBILE_HASH_KEY:-}
+      CUSTOMER_DEFAULT_ORG_ID: ${CUSTOMER_DEFAULT_ORG_ID:-1}
+      CUSTOMER_SESSION_TTL: ${CUSTOMER_SESSION_TTL:-168h}
       HTTP_ADDR: :8080
       DB_DSN: postgres://fixpro:fixpro-local@postgres:5432/fix_pro?sslmode=disable&timezone=UTC
       MEDIA_DRIVER: local

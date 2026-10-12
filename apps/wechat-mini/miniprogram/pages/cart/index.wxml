@@ -1,4 +1,4 @@
-<view class="page">
+<block wx:if="{{sessionReady}}"><view class="page">
   <view wx:if="{{loading}}" class="loading-card">正在加载购物车…</view>
   <view wx:elif="{{!cart.items.length}}" class="empty"><view class="empty-icon">🛒</view><view class="empty-title">购物车还是空的</view><view class="empty-desc">先去挑选需要的维修服务吧</view><button class="go-service" bindtap="goServices">去选择服务</button></view>
   <block wx:else>
@@ -12,3 +12,4 @@
     <view class="checkout"><view><view class="total-label">已选 {{selectedCount}} 项，合计</view><text>¥{{totalText}}</text></view><button type="primary" loading="{{checkoutLoading}}" bindtap="checkout">去结算</button></view>
   </block>
 </view>
+</block><view wx:else style="padding:40rpx;text-align:center;color:#888">正在校验登录状态，请保持网络连接</view>

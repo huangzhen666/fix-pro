@@ -3,6 +3,8 @@ package httpx
 import (
 	"encoding/json"
 	"errors"
+	"github.com/fixpro/server/internal/platform/logging"
+	"io"
 	"net/http"
 )
 
@@ -20,6 +22,7 @@ type Error struct {
 }
 
 func (e *Error) Error() string              { return e.Code + ": " + e.Message }
+func (e *Error) Unwrap() error              { return e.Cause }
 func E(code, msg string, status int) *Error { return &Error{Code: code, Message: msg, Status: status} }
 
 func Success(w http.ResponseWriter, r *http.Request, data any) {
@@ -30,6 +33,10 @@ func Failure(w http.ResponseWriter, r *http.Request, err error) {
 	if !errors.As(err, &e) {
 		e = E("INTERNAL_ERROR", "internal server error", http.StatusInternalServerError)
 	}
+	logging.SetCode(r.Context(), e.Code)
+	if e.Status >= 500 {
+		logging.Root(r.Context(), err, e.Code)
+	}
 	write(w, e.Status, Response{Code: e.Code, Message: e.Message, Data: nil, RequestID: RequestID(r.Context())})
 }
 func DecodeJSON(w http.ResponseWriter, r *http.Request, dst any) error {
@@ -37,6 +44,10 @@ func DecodeJSON(w http.ResponseWriter, r *http.Request, dst any) error {
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(dst); err != nil {
+		return E("VALIDATION_ERROR", "请求参数格式错误", http.StatusBadRequest)
+	}
+	var extra any
+	if err := dec.Decode(&extra); err != io.EOF {
 		return E("VALIDATION_ERROR", "请求参数格式错误", http.StatusBadRequest)
 	}
 	return nil

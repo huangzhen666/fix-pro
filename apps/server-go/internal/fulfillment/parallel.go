@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"github.com/fixpro/server/internal/platform/auth"
+	"github.com/fixpro/server/internal/platform/database"
 	"github.com/fixpro/server/internal/platform/httpx"
 	"strings"
 	"time"
@@ -45,7 +46,7 @@ func (s *Service) InternalReview(ctx context.Context, p auth.Principal, id int64
 	if level != "QA" && level != "DIRECTOR" {
 		return httpx.E("VALIDATION_ERROR", "审核级别不合法", 400)
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := database.BeginTx(ctx, s.db)
 	if err != nil {
 		return err
 	}
@@ -117,7 +118,7 @@ func (s *Service) InternalReview(ctx context.Context, p auth.Principal, id int64
 	if err = s.syncCustomerOrderStatus(ctx, tx, p.OrgID, orderID); err != nil {
 		return err
 	}
-	return tx.Commit()
+	return committed(ctx, tx, "work_order.internal_review", p.OrgID, id, orderID, status, nextStatus)
 }
 
 func (s *Service) SubmitRating(ctx context.Context, p auth.Principal, id int64, req RatingRequest) error {
@@ -127,11 +128,33 @@ func (s *Service) SubmitRating(ctx context.Context, p auth.Principal, id int64, 
 	if req.Stars < 1 || req.Stars > 5 {
 		return httpx.E("VALIDATION_ERROR", "评分需为1-5星", 400)
 	}
-	_, err := s.db.ExecContext(ctx, `INSERT INTO customer_rating(org_id,work_order_id,submission_id,customer_id,stars,content) SELECT $1,$2,id,$3,$4,NULLIF($5,'') FROM completion_submission WHERE org_id=$1 AND work_order_id=$2 ORDER BY attempt_no DESC LIMIT 1`, p.OrgID, id, p.SubjectID, req.Stars, strings.TrimSpace(req.Content))
+	tx, err := database.BeginTx(ctx, s.db)
 	if err != nil {
 		return err
 	}
-	return nil
+	defer tx.Rollback()
+	var eligible bool
+	err = tx.QueryRowContext(ctx, `SELECT w.customer_acceptance_status IN ('MANUAL_ACCEPTED','AUTO_ACCEPTED') FROM work_order w JOIN customer_order o ON o.org_id=w.org_id AND o.id=w.order_id WHERE w.org_id=$1 AND w.id=$2 AND o.customer_id=$3 FOR UPDATE OF w`, p.OrgID, id, p.SubjectID).Scan(&eligible)
+	if err == sql.ErrNoRows {
+		return httpx.E("WORK_ORDER_NOT_FOUND", "工单不存在", 404)
+	}
+	if err != nil {
+		return err
+	}
+	if !eligible {
+		return httpx.E("WORK_ORDER_STATUS_CONFLICT", "验收完成后才可评价", 409)
+	}
+	result, err := tx.ExecContext(ctx, `INSERT INTO customer_rating(org_id,work_order_id,submission_id,customer_id,stars,content) SELECT $1,$2,id,$3,$4,NULLIF($5,'') FROM completion_submission WHERE org_id=$1 AND work_order_id=$2 ORDER BY attempt_no DESC LIMIT 1 ON CONFLICT(org_id,submission_id) DO NOTHING`, p.OrgID, id, p.SubjectID, req.Stars, strings.TrimSpace(req.Content))
+	if err == nil {
+		n, _ := result.RowsAffected()
+		if n != 1 {
+			return httpx.E("RESOURCE_VERSION_CONFLICT", "该工单已评价或暂无完工提交", 409)
+		}
+	}
+	if err != nil {
+		return err
+	}
+	return committed(ctx, tx, "work_order.submit_rating", p.OrgID, id, 0, "", "")
 }
 
 func (s *Service) CustomerServiceConfirmation(ctx context.Context, p auth.Principal, id int64, req ServiceConfirmationRequest) error {
@@ -141,7 +164,7 @@ func (s *Service) CustomerServiceConfirmation(ctx context.Context, p auth.Princi
 	if req.Decision != "SECOND_VISIT_REQUIRED" && req.Decision != "NO_SECOND_VISIT" {
 		return httpx.E("VALIDATION_ERROR", "客服决定不合法", 400)
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := database.BeginTx(ctx, s.db)
 	if err != nil {
 		return err
 	}
@@ -184,7 +207,7 @@ func (s *Service) CustomerServiceConfirmation(ctx context.Context, p auth.Princi
 	if err = s.syncCustomerOrderStatus(ctx, tx, p.OrgID, orderID); err != nil {
 		return err
 	}
-	return tx.Commit()
+	return committed(ctx, tx, "work_order.customer_service_confirmation", p.OrgID, id, orderID, status, nextStatus)
 }
 
 func (s *Service) WorkOrderTimeline(ctx context.Context, p auth.Principal, id int64) ([]TimelineEvent, error) {
@@ -264,7 +287,7 @@ func (s *Service) AutoAcceptDue(ctx context.Context) error {
 }
 
 func (s *Service) autoAcceptDueCandidate(ctx context.Context, candidate autoAcceptCandidate) error {
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := database.BeginTx(ctx, s.db)
 	if err != nil {
 		return err
 	}
@@ -301,7 +324,7 @@ func (s *Service) autoAcceptDueCandidate(ctx context.Context, candidate autoAcce
 	if err = s.syncCustomerOrderStatus(ctx, tx, candidate.orgID, candidate.orderID); err != nil {
 		return err
 	}
-	return tx.Commit()
+	return committed(ctx, tx, "work_order.auto_accepted", candidate.orgID, candidate.id, candidate.orderID, candidate.status, nextStatus)
 }
 
 // AutoRecallUnstartedDue returns an expired appointment to dispatch when the
@@ -339,7 +362,7 @@ func (s *Service) AutoRecallUnstartedDue(ctx context.Context) error {
 }
 
 func (s *Service) autoRecallUnstartedWorkOrder(ctx context.Context, orgID, id int64) error {
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := database.BeginTx(ctx, s.db)
 	if err != nil {
 		return err
 	}
@@ -369,7 +392,7 @@ func (s *Service) autoRecallUnstartedWorkOrder(ctx context.Context, orgID, id in
 	if _, err = tx.ExecContext(ctx, `INSERT INTO work_order_status_history(org_id,work_order_id,from_status,to_status,event_code,operator_type,operator_id,operator_name,reason) VALUES($1,$2,$3,$4,'SYSTEM_RECALLED_NO_SERVICE','SYSTEM',0,'system','预约结束后未开始服务，系统自动收回')`, orgID, id, status, WorkOrderPendingDispatch); err != nil {
 		return err
 	}
-	return tx.Commit()
+	return committed(ctx, tx, "work_order.auto_recalled", orgID, id, 0, status, WorkOrderPendingDispatch)
 }
 
 func (s *Service) StringifyOutcome(v sql.NullString) string {

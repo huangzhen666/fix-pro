@@ -9,23 +9,42 @@ import (
 	"github.com/fixpro/server/internal/authorization"
 	"github.com/fixpro/server/internal/cart"
 	"github.com/fixpro/server/internal/catalog"
+	"github.com/fixpro/server/internal/customer"
 	"github.com/fixpro/server/internal/fulfillment"
 	"github.com/fixpro/server/internal/media"
 	"github.com/fixpro/server/internal/order"
 	"github.com/fixpro/server/internal/platform/auth"
 	"github.com/fixpro/server/internal/platform/config"
 	"github.com/fixpro/server/internal/platform/httpx"
+	"github.com/fixpro/server/internal/platform/logging"
+	"github.com/fixpro/server/internal/platform/wechat"
 	"github.com/fixpro/server/internal/workforce"
-	"log/slog"
+	"go.uber.org/zap"
 	"net/http"
 	"strings"
 	"time"
 )
 
-func New(c config.Config, db *sql.DB, log *slog.Logger) (http.Handler, error) {
+func New(c config.Config, db *sql.DB, log *zap.Logger) (http.Handler, error) {
+	return NewWithContext(context.Background(), c, db, log)
+}
+func NewWithContext(parent context.Context, c config.Config, db *sql.DB, log *zap.Logger) (http.Handler, error) {
+	if c.Logging.Level == "" {
+		c.Logging = logging.Defaults()
+	}
 	if c.MediaDriver != "local" {
 		return nil, fmt.Errorf("media driver %q is configured but its production adapter is not included in this slice", c.MediaDriver)
 	}
+	var mobileCodec *customer.MobileCodec
+	if c.MobileEncryptionKey != "" || c.MobileHashKey != "" {
+		var err error
+		mobileCodec, err = customer.NewMobileCodec(c.MobileEncryptionKey, c.MobileHashKey)
+		if err != nil {
+			return nil, err
+		}
+	}
+	customerService := customer.New(db, wechat.New(c.WechatAppID, c.WechatSecret), mobileCodec, c.CustomerOrgID, c.WechatAppID, c.CustomerTTL)
+	customerAPI := customer.NewHandler(customerService)
 	mux := http.NewServeMux()
 	cat := catalog.NewHandler(catalog.New(db))
 	crt := cart.NewHandler(cart.New(db))
@@ -39,19 +58,34 @@ func New(c config.Config, db *sql.DB, log *slog.Logger) (http.Handler, error) {
 	fulService := fulfillment.New(db, ms)
 	ful := fulfillment.NewHandler(fulService)
 	runFulfillmentTimers := func() {
-		if err := fulService.AutoRecallUnstartedDue(context.Background()); err != nil {
-			log.Error("auto recall unstarted work orders", "error", err)
-		}
-		if err := fulService.AutoAcceptDue(context.Background()); err != nil {
-			log.Error("auto acceptance", "error", err)
+		for _, job := range []struct {
+			name string
+			fn   func(context.Context) error
+		}{{"avatar_cleanup", ms.CollectAvatars}, {"auto_recall", fulService.AutoRecallUnstartedDue}, {"auto_acceptance", fulService.AutoAcceptDue}} {
+			if parent.Err() != nil {
+				return
+			}
+			logging.RunJob(parent, log, c.Logging, job.name, job.fn)
 		}
 	}
+	jobsDone := make(chan struct{})
 	go func() {
+		defer close(jobsDone)
 		ticker := time.NewTicker(time.Minute)
 		defer ticker.Stop()
 		runFulfillmentTimers()
-		for range ticker.C {
-			runFulfillmentTimers()
+		previous := db.Stats()
+		for {
+			select {
+			case <-parent.Done():
+				return
+			case <-ticker.C:
+				runFulfillmentTimers()
+				current := db.Stats()
+				ctx := logging.Context(parent, log, c.Logging, "")
+				logging.Event(ctx, "database", "db.pool.snapshot", zap.Int("open", current.OpenConnections), zap.Int("inUse", current.InUse), zap.Int("idle", current.Idle), zap.Int64("waitCount", current.WaitCount), zap.Int64("waitDurationMs", current.WaitDuration.Milliseconds()), zap.Int64("waitCountDelta", current.WaitCount-previous.WaitCount), zap.Int64("waitDurationMsDelta", (current.WaitDuration-previous.WaitDuration).Milliseconds()))
+				previous = current
+			}
 		}
 	}()
 	workerSessions := auth.NewWorkerSessionStore(db, c.WorkerDevTokenEnabled)
@@ -93,6 +127,13 @@ func New(c config.Config, db *sql.DB, log *slog.Logger) (http.Handler, error) {
 				if err != nil {
 					httpx.Failure(w, r, err)
 					return
+				}
+				if allowed && strings.HasPrefix(r.URL.Path, "/api/v1/admin/customers/") && strings.HasSuffix(r.URL.Path, "/orders") {
+					allowed, err = authorizer.Check(r.Context(), authorization.Subject{UserID: p.AdminUserID, OrgID: p.OrgID, PlatformSuperAdmin: p.PlatformSuperAdmin}, "order.view")
+					if err != nil {
+						httpx.Failure(w, r, err)
+						return
+					}
 				}
 				if !allowed {
 					httpx.Failure(w, r, httpx.E("FORBIDDEN", "没有执行该操作的权限", http.StatusForbidden))
@@ -196,7 +237,29 @@ func New(c config.Config, db *sql.DB, log *slog.Logger) (http.Handler, error) {
 	mux.Handle("POST /api/v1/worker/work-orders/{id}/media/images", worker(ful.UploadEvidence))
 	mux.Handle("POST /api/v1/worker/work-orders/{id}/evidence", worker(ful.BindEvidence))
 	mux.Handle("POST /api/v1/worker/work-orders/{id}/submit-completion", worker(ful.SubmitCompletion))
-	customer := func(h http.HandlerFunc) http.Handler { return auth.Customer(c.Env, h) }
+	mux.Handle("GET /api/v1/admin/customers/overview", admin(customerAPI.Overview))
+	mux.Handle("GET /api/v1/admin/customers", admin(customerAPI.Customers))
+	mux.Handle("GET /api/v1/admin/customers/{id}", admin(customerAPI.AdminDetail))
+	mux.Handle("GET /api/v1/admin/customers/{id}/orders", admin(customerAPI.AdminOrders))
+	mux.Handle("GET /api/v1/admin/customers/{id}/avatar/content", admin(med.CustomerAvatar))
+	mux.HandleFunc("POST /api/v1/mini/auth/phone/login", customerAPI.Login)
+	customer := func(h http.HandlerFunc) http.Handler {
+		return auth.Customer(customerService, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			rw := &customerResponse{ResponseWriter: w, status: 200}
+			h(rw, r)
+			path := r.URL.Path
+			if rw.status >= 200 && rw.status < 300 && (strings.HasPrefix(path, "/api/v1/mini/orders") || strings.HasPrefix(path, "/api/v1/mini/work-orders") || strings.HasPrefix(path, "/api/v1/mini/addresses") || strings.HasPrefix(path, "/api/v1/mini/cart") || path == "/api/v1/mini/profile" || path == "/api/v1/mini/checkout/contact") && r.Header.Get("X-Customer-Interaction") == "1" && !strings.Contains(path, "/auth/") && !strings.Contains(path, "/media/") {
+				p, _ := auth.From(r.Context())
+				customerService.Touch(r.Context(), p)
+			}
+		}))
+	}
+	mux.Handle("POST /api/v1/mini/auth/session/verify", customer(customerAPI.Verify))
+	mux.Handle("GET /api/v1/mini/auth/me", customer(customerAPI.Me))
+	mux.Handle("GET /api/v1/mini/profile", customer(customerAPI.Profile))
+	mux.Handle("PUT /api/v1/mini/profile", customer(customerAPI.Update))
+	mux.Handle("GET /api/v1/mini/checkout/contact", customer(customerAPI.Contact))
+	mux.Handle("POST /api/v1/mini/media/avatar", customer(med.UploadAvatar))
 	mux.Handle("POST /api/v1/mini/media/fault", customer(med.UploadFault))
 	mux.Handle("GET /api/v1/mini/media/{id}/content", customer(med.Protected))
 	mux.Handle("DELETE /api/v1/mini/media/{id}", customer(med.Delete))
@@ -218,12 +281,14 @@ func New(c config.Config, db *sql.DB, log *slog.Logger) (http.Handler, error) {
 	mux.Handle("POST /api/v1/mini/work-orders/{id}/acceptance", customer(ful.CustomerAcceptance))
 	mux.Handle("POST /api/v1/mini/work-orders/{id}/rating", customer(ful.SubmitRating))
 	mux.Handle("GET /api/v1/mini/work-orders/{id}/timeline", customer(ful.WorkOrderTimeline))
-	return httpx.Middleware(log, c.CORSAllowedOrigins, mux), nil
+	return &runningApplication{Handler: httpx.MiddlewareConfig(log, c.Logging, c.CORSAllowedOrigins, mux), done: jobsDone}, nil
 }
 
 func adminPermission(r *http.Request) string {
 	path := r.URL.Path
 	switch {
+	case strings.HasPrefix(path, "/api/v1/admin/customers"):
+		return "customer.view"
 	case strings.HasPrefix(path, "/api/v1/admin/auth/"):
 		return ""
 	case path == "/api/v1/admin/permissions":
@@ -312,5 +377,29 @@ func adminPermission(r *http.Request) string {
 	default:
 		// New admin routes must be explicitly added to the permission matrix.
 		return "__route_not_registered__"
+	}
+}
+
+type customerResponse struct {
+	http.ResponseWriter
+	status int
+}
+
+func (w *customerResponse) WriteHeader(status int) {
+	w.status = status
+	w.ResponseWriter.WriteHeader(status)
+}
+
+type runningApplication struct {
+	http.Handler
+	done <-chan struct{}
+}
+
+func (a *runningApplication) Wait(ctx context.Context) error {
+	select {
+	case <-a.done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
 	}
 }

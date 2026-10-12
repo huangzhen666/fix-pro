@@ -1,4 +1,4 @@
 {
-  "desc": "FixPro sitemap",
+  "desc": "懂修匠 sitemap",
   "rules": [{ "action": "allow", "page": "*" }]
 }

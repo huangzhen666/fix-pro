@@ -1,0 +1,1155 @@
+{
+  "apiVersion": 1,
+  "groups": [
+    {
+      "orgId": 1,
+      "name": "懂修匠 diagnostics",
+      "folder": "懂修匠",
+      "interval": "1m",
+      "rules": [
+        {
+          "uid": "fixpro-api-errors",
+          "title": "API 异常率",
+          "condition": "C",
+          "data": [
+            {
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 600,
+                "to": 0
+              },
+              "datasourceUid": "fixpro-loki",
+              "model": {
+                "refId": "A",
+                "expr": "((sum(count_over_time({service=\"fix-pro-api\"} | json | __error__=\"\" | event=\"http.request.completed\" | route!=\"GET /actuator/health\" | route!=\"GET /api/v1/public/ping\" | method!=\"OPTIONS\" | status >= 500 [5m])) / sum(count_over_time({service=\"fix-pro-api\"} | json | __error__=\"\" | event=\"http.request.completed\" | route!=\"GET /actuator/health\" | route!=\"GET /api/v1/public/ping\" | method!=\"OPTIONS\" [5m]))) > 0.05 and sum(count_over_time({service=\"fix-pro-api\"} | json | __error__=\"\" | event=\"http.request.completed\" | route!=\"GET /actuator/health\" | route!=\"GET /api/v1/public/ping\" | method!=\"OPTIONS\" [5m])) >= 20) or vector(0)",
+                "queryType": "instant",
+                "instant": true,
+                "range": false,
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "datasource": {
+                  "uid": "fixpro-loki",
+                  "type": "loki"
+                }
+              }
+            },
+            {
+              "refId": "B",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "refId": "B",
+                "type": "reduce",
+                "expression": "A",
+                "reducer": "last",
+                "settings": {
+                  "mode": "dropNN"
+                },
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                }
+              }
+            },
+            {
+              "refId": "C",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "refId": "C",
+                "type": "threshold",
+                "expression": "B",
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [
+                        0
+                      ],
+                      "type": "gt"
+                    },
+                    "operator": {
+                      "type": "and"
+                    },
+                    "query": {
+                      "params": [
+                        "C"
+                      ]
+                    },
+                    "reducer": {
+                      "type": "last"
+                    },
+                    "type": "query"
+                  }
+                ],
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                }
+              }
+            }
+          ],
+          "noDataState": "NoData",
+          "execErrState": "Error",
+          "for": "5m",
+          "annotations": {
+            "summary": "API 异常率",
+            "runbook_url": "docs/runbooks/production-logging.md",
+            "dashboard_uid": "fixpro-diagnostics"
+          },
+          "labels": {
+            "service": "fix-pro-api",
+            "severity": "warning"
+          },
+          "isPaused": false
+        },
+        {
+          "uid": "fixpro-core-errors",
+          "title": "下单或派单失败",
+          "condition": "C",
+          "data": [
+            {
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 600,
+                "to": 0
+              },
+              "datasourceUid": "fixpro-loki",
+              "model": {
+                "refId": "A",
+                "expr": "sum by (route) (count_over_time({service=\"fix-pro-api\"} | json | __error__=\"\" | event=\"http.request.completed\" | route!=\"GET /actuator/health\" | route!=\"GET /api/v1/public/ping\" | method!=\"OPTIONS\" | method=\"POST\" | route=~\"POST /api/v1/mini/orders|POST /api/v1/admin/work-orders/\\\\{id\\\\}/(assign|reassign)\" | status >= 500 [5m])) or vector(0)",
+                "queryType": "instant",
+                "instant": true,
+                "range": false,
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "datasource": {
+                  "uid": "fixpro-loki",
+                  "type": "loki"
+                }
+              }
+            },
+            {
+              "refId": "B",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "refId": "B",
+                "type": "reduce",
+                "expression": "A",
+                "reducer": "last",
+                "settings": {
+                  "mode": "dropNN"
+                },
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                }
+              }
+            },
+            {
+              "refId": "C",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "refId": "C",
+                "type": "threshold",
+                "expression": "B",
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [
+                        2
+                      ],
+                      "type": "gt"
+                    },
+                    "operator": {
+                      "type": "and"
+                    },
+                    "query": {
+                      "params": [
+                        "C"
+                      ]
+                    },
+                    "reducer": {
+                      "type": "last"
+                    },
+                    "type": "query"
+                  }
+                ],
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                }
+              }
+            }
+          ],
+          "noDataState": "NoData",
+          "execErrState": "Error",
+          "for": "0s",
+          "annotations": {
+            "summary": "下单或派单失败",
+            "runbook_url": "docs/runbooks/production-logging.md",
+            "dashboard_uid": "fixpro-diagnostics"
+          },
+          "labels": {
+            "service": "fix-pro-api",
+            "severity": "warning"
+          },
+          "isPaused": false
+        },
+        {
+          "uid": "fixpro-panic",
+          "title": "HTTP 或任务 Panic",
+          "condition": "C",
+          "data": [
+            {
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 600,
+                "to": 0
+              },
+              "datasourceUid": "fixpro-loki",
+              "model": {
+                "refId": "A",
+                "expr": "sum(count_over_time({service=\"fix-pro-api\"} | json | __error__=\"\" | event=~\"http.panic|job.panic\" [5m])) or vector(0)",
+                "queryType": "instant",
+                "instant": true,
+                "range": false,
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "datasource": {
+                  "uid": "fixpro-loki",
+                  "type": "loki"
+                }
+              }
+            },
+            {
+              "refId": "B",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "refId": "B",
+                "type": "reduce",
+                "expression": "A",
+                "reducer": "last",
+                "settings": {
+                  "mode": "dropNN"
+                },
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                }
+              }
+            },
+            {
+              "refId": "C",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "refId": "C",
+                "type": "threshold",
+                "expression": "B",
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [
+                        0
+                      ],
+                      "type": "gt"
+                    },
+                    "operator": {
+                      "type": "and"
+                    },
+                    "query": {
+                      "params": [
+                        "C"
+                      ]
+                    },
+                    "reducer": {
+                      "type": "last"
+                    },
+                    "type": "query"
+                  }
+                ],
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                }
+              }
+            }
+          ],
+          "noDataState": "NoData",
+          "execErrState": "Error",
+          "for": "0s",
+          "annotations": {
+            "summary": "HTTP 或任务 Panic",
+            "runbook_url": "docs/runbooks/production-logging.md",
+            "dashboard_uid": "fixpro-diagnostics"
+          },
+          "labels": {
+            "service": "fix-pro-api",
+            "severity": "warning"
+          },
+          "isPaused": false
+        },
+        {
+          "uid": "fixpro-dependency",
+          "title": "微信依赖失败",
+          "condition": "C",
+          "data": [
+            {
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 600,
+                "to": 0
+              },
+              "datasourceUid": "fixpro-loki",
+              "model": {
+                "refId": "A",
+                "expr": "((sum(count_over_time({service=\"fix-pro-api\"} | json | __error__=\"\" | event=\"dependency.attempt.completed\" | result=\"failure\" [5m])) / sum(count_over_time({service=\"fix-pro-api\"} | json | __error__=\"\" | event=\"dependency.attempt.completed\" [5m]))) > 0.2 and sum(count_over_time({service=\"fix-pro-api\"} | json | __error__=\"\" | event=\"dependency.attempt.completed\" | result=\"failure\" [5m])) >= 5) or vector(0)",
+                "queryType": "instant",
+                "instant": true,
+                "range": false,
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "datasource": {
+                  "uid": "fixpro-loki",
+                  "type": "loki"
+                }
+              }
+            },
+            {
+              "refId": "B",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "refId": "B",
+                "type": "reduce",
+                "expression": "A",
+                "reducer": "last",
+                "settings": {
+                  "mode": "dropNN"
+                },
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                }
+              }
+            },
+            {
+              "refId": "C",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "refId": "C",
+                "type": "threshold",
+                "expression": "B",
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [
+                        0
+                      ],
+                      "type": "gt"
+                    },
+                    "operator": {
+                      "type": "and"
+                    },
+                    "query": {
+                      "params": [
+                        "C"
+                      ]
+                    },
+                    "reducer": {
+                      "type": "last"
+                    },
+                    "type": "query"
+                  }
+                ],
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                }
+              }
+            }
+          ],
+          "noDataState": "NoData",
+          "execErrState": "Error",
+          "for": "0s",
+          "annotations": {
+            "summary": "微信依赖失败",
+            "runbook_url": "docs/runbooks/production-logging.md",
+            "dashboard_uid": "fixpro-diagnostics"
+          },
+          "labels": {
+            "service": "fix-pro-api",
+            "severity": "warning"
+          },
+          "isPaused": false
+        },
+        {
+          "uid": "fixpro-slow",
+          "title": "普通业务请求 P95 超时",
+          "condition": "C",
+          "data": [
+            {
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 600,
+                "to": 0
+              },
+              "datasourceUid": "fixpro-loki",
+              "model": {
+                "refId": "A",
+                "expr": "(quantile_over_time(0.95,{service=\"fix-pro-api\"} | json | __error__=\"\" | event=\"http.request.completed\" | route!=\"GET /actuator/health\" | route!=\"GET /api/v1/public/ping\" | method!=\"OPTIONS\" | route!~\".*(media|avatar).*\" | unwrap durationMs | __error__=\"\" [5m]) by (route) > 1000 and on(route) sum by(route)(count_over_time({service=\"fix-pro-api\"} | json | __error__=\"\" | event=\"http.request.completed\" | route!=\"GET /actuator/health\" | route!=\"GET /api/v1/public/ping\" | method!=\"OPTIONS\" | route!~\".*(media|avatar).*\" [5m])) >= 20) or vector(0)",
+                "queryType": "instant",
+                "instant": true,
+                "range": false,
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "datasource": {
+                  "uid": "fixpro-loki",
+                  "type": "loki"
+                }
+              }
+            },
+            {
+              "refId": "B",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "refId": "B",
+                "type": "reduce",
+                "expression": "A",
+                "reducer": "last",
+                "settings": {
+                  "mode": "dropNN"
+                },
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                }
+              }
+            },
+            {
+              "refId": "C",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "refId": "C",
+                "type": "threshold",
+                "expression": "B",
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [
+                        0
+                      ],
+                      "type": "gt"
+                    },
+                    "operator": {
+                      "type": "and"
+                    },
+                    "query": {
+                      "params": [
+                        "C"
+                      ]
+                    },
+                    "reducer": {
+                      "type": "last"
+                    },
+                    "type": "query"
+                  }
+                ],
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                }
+              }
+            }
+          ],
+          "noDataState": "NoData",
+          "execErrState": "Error",
+          "for": "10m",
+          "annotations": {
+            "summary": "普通业务请求 P95 超时",
+            "runbook_url": "docs/runbooks/production-logging.md",
+            "dashboard_uid": "fixpro-diagnostics"
+          },
+          "labels": {
+            "service": "fix-pro-api",
+            "severity": "warning"
+          },
+          "isPaused": false
+        },
+        {
+          "uid": "fixpro-job-failed",
+          "title": "后台任务连续失败",
+          "condition": "C",
+          "data": [
+            {
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 600,
+                "to": 0
+              },
+              "datasourceUid": "fixpro-loki",
+              "model": {
+                "refId": "A",
+                "expr": "(sum by(jobName,instanceId)(count_over_time({service=\"fix-pro-api\"} | json | __error__=\"\" | event=\"job.failed\" [3m])) >= 3 unless sum by(jobName,instanceId)(count_over_time({service=\"fix-pro-api\"} | json | __error__=\"\" | event=\"job.completed\" [3m]))) or vector(0)",
+                "queryType": "instant",
+                "instant": true,
+                "range": false,
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "datasource": {
+                  "uid": "fixpro-loki",
+                  "type": "loki"
+                }
+              }
+            },
+            {
+              "refId": "B",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "refId": "B",
+                "type": "reduce",
+                "expression": "A",
+                "reducer": "last",
+                "settings": {
+                  "mode": "dropNN"
+                },
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                }
+              }
+            },
+            {
+              "refId": "C",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "refId": "C",
+                "type": "threshold",
+                "expression": "B",
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [
+                        0
+                      ],
+                      "type": "gt"
+                    },
+                    "operator": {
+                      "type": "and"
+                    },
+                    "query": {
+                      "params": [
+                        "C"
+                      ]
+                    },
+                    "reducer": {
+                      "type": "last"
+                    },
+                    "type": "query"
+                  }
+                ],
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                }
+              }
+            }
+          ],
+          "noDataState": "NoData",
+          "execErrState": "Error",
+          "for": "0s",
+          "annotations": {
+            "summary": "后台任务连续失败",
+            "runbook_url": "docs/runbooks/production-logging.md",
+            "dashboard_uid": "fixpro-diagnostics"
+          },
+          "labels": {
+            "service": "fix-pro-api",
+            "severity": "warning"
+          },
+          "isPaused": false
+        },
+        {
+          "uid": "fixpro-components",
+          "title": "观测组件不可用",
+          "condition": "C",
+          "data": [
+            {
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 600,
+                "to": 0
+              },
+              "datasourceUid": "fixpro-prometheus",
+              "model": {
+                "refId": "A",
+                "expr": "min(up{job=~\"alloy|loki|log-probe|node\"})",
+                "queryType": "instant",
+                "instant": true,
+                "range": false,
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "datasource": {
+                  "uid": "fixpro-prometheus",
+                  "type": "prometheus"
+                }
+              }
+            },
+            {
+              "refId": "B",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "refId": "B",
+                "type": "reduce",
+                "expression": "A",
+                "reducer": "last",
+                "settings": {
+                  "mode": "dropNN"
+                },
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                }
+              }
+            },
+            {
+              "refId": "C",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "refId": "C",
+                "type": "threshold",
+                "expression": "B",
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [
+                        1
+                      ],
+                      "type": "lt"
+                    },
+                    "operator": {
+                      "type": "and"
+                    },
+                    "query": {
+                      "params": [
+                        "C"
+                      ]
+                    },
+                    "reducer": {
+                      "type": "last"
+                    },
+                    "type": "query"
+                  }
+                ],
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                }
+              }
+            }
+          ],
+          "noDataState": "NoData",
+          "execErrState": "Error",
+          "for": "5m",
+          "annotations": {
+            "summary": "观测组件不可用",
+            "runbook_url": "docs/runbooks/production-logging.md",
+            "dashboard_uid": "fixpro-diagnostics"
+          },
+          "labels": {
+            "service": "fix-pro-api",
+            "severity": "warning"
+          },
+          "isPaused": false
+        },
+        {
+          "uid": "fixpro-delivery",
+          "title": "采集链断流",
+          "condition": "C",
+          "data": [
+            {
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 600,
+                "to": 0
+              },
+              "datasourceUid": "fixpro-prometheus",
+              "model": {
+                "refId": "A",
+                "expr": "fixpro_log_probe_delivery_up",
+                "queryType": "instant",
+                "instant": true,
+                "range": false,
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "datasource": {
+                  "uid": "fixpro-prometheus",
+                  "type": "prometheus"
+                }
+              }
+            },
+            {
+              "refId": "B",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "refId": "B",
+                "type": "reduce",
+                "expression": "A",
+                "reducer": "last",
+                "settings": {
+                  "mode": "dropNN"
+                },
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                }
+              }
+            },
+            {
+              "refId": "C",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "refId": "C",
+                "type": "threshold",
+                "expression": "B",
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [
+                        1
+                      ],
+                      "type": "lt"
+                    },
+                    "operator": {
+                      "type": "and"
+                    },
+                    "query": {
+                      "params": [
+                        "C"
+                      ]
+                    },
+                    "reducer": {
+                      "type": "last"
+                    },
+                    "type": "query"
+                  }
+                ],
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                }
+              }
+            }
+          ],
+          "noDataState": "NoData",
+          "execErrState": "Error",
+          "for": "5m",
+          "annotations": {
+            "summary": "采集链断流",
+            "runbook_url": "docs/runbooks/production-logging.md",
+            "dashboard_uid": "fixpro-diagnostics"
+          },
+          "labels": {
+            "service": "fix-pro-api",
+            "severity": "warning"
+          },
+          "isPaused": false
+        },
+        {
+          "uid": "fixpro-job-stopped",
+          "title": "任务未产生结束日志",
+          "condition": "C",
+          "data": [
+            {
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 600,
+                "to": 0
+              },
+              "datasourceUid": "fixpro-prometheus",
+              "model": {
+                "refId": "A",
+                "expr": "fixpro_log_probe_jobs_up",
+                "queryType": "instant",
+                "instant": true,
+                "range": false,
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "datasource": {
+                  "uid": "fixpro-prometheus",
+                  "type": "prometheus"
+                }
+              }
+            },
+            {
+              "refId": "B",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "refId": "B",
+                "type": "reduce",
+                "expression": "A",
+                "reducer": "last",
+                "settings": {
+                  "mode": "dropNN"
+                },
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                }
+              }
+            },
+            {
+              "refId": "C",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "refId": "C",
+                "type": "threshold",
+                "expression": "B",
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [
+                        1
+                      ],
+                      "type": "lt"
+                    },
+                    "operator": {
+                      "type": "and"
+                    },
+                    "query": {
+                      "params": [
+                        "C"
+                      ]
+                    },
+                    "reducer": {
+                      "type": "last"
+                    },
+                    "type": "query"
+                  }
+                ],
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                }
+              }
+            }
+          ],
+          "noDataState": "NoData",
+          "execErrState": "Error",
+          "for": "0s",
+          "annotations": {
+            "summary": "任务未产生结束日志",
+            "runbook_url": "docs/runbooks/production-logging.md",
+            "dashboard_uid": "fixpro-diagnostics"
+          },
+          "labels": {
+            "service": "fix-pro-api",
+            "severity": "warning"
+          },
+          "isPaused": false
+        },
+        {
+          "uid": "fixpro-dropped",
+          "title": "采集器丢弃事件",
+          "condition": "C",
+          "data": [
+            {
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 600,
+                "to": 0
+              },
+              "datasourceUid": "fixpro-prometheus",
+              "model": {
+                "refId": "A",
+                "expr": "sum(increase(loki_write_dropped_entries_total[5m]))",
+                "queryType": "instant",
+                "instant": true,
+                "range": false,
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "datasource": {
+                  "uid": "fixpro-prometheus",
+                  "type": "prometheus"
+                }
+              }
+            },
+            {
+              "refId": "B",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "refId": "B",
+                "type": "reduce",
+                "expression": "A",
+                "reducer": "last",
+                "settings": {
+                  "mode": "dropNN"
+                },
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                }
+              }
+            },
+            {
+              "refId": "C",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "refId": "C",
+                "type": "threshold",
+                "expression": "B",
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [
+                        0
+                      ],
+                      "type": "gt"
+                    },
+                    "operator": {
+                      "type": "and"
+                    },
+                    "query": {
+                      "params": [
+                        "C"
+                      ]
+                    },
+                    "reducer": {
+                      "type": "last"
+                    },
+                    "type": "query"
+                  }
+                ],
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                }
+              }
+            }
+          ],
+          "noDataState": "NoData",
+          "execErrState": "Error",
+          "for": "0s",
+          "annotations": {
+            "summary": "采集器丢弃事件",
+            "runbook_url": "docs/runbooks/production-logging.md",
+            "dashboard_uid": "fixpro-diagnostics"
+          },
+          "labels": {
+            "service": "fix-pro-api",
+            "severity": "warning"
+          },
+          "isPaused": false
+        },
+        {
+          "uid": "fixpro-disk",
+          "title": "观测存储磁盘超过80%",
+          "condition": "C",
+          "data": [
+            {
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 600,
+                "to": 0
+              },
+              "datasourceUid": "fixpro-prometheus",
+              "model": {
+                "refId": "A",
+                "expr": "max(1 - node_filesystem_avail_bytes{fstype!~\"tmpfs|overlay|squashfs\",mountpoint!~\"/host/(proc|sys|dev).*\"} / node_filesystem_size_bytes{fstype!~\"tmpfs|overlay|squashfs\",mountpoint!~\"/host/(proc|sys|dev).*\"})",
+                "queryType": "instant",
+                "instant": true,
+                "range": false,
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "datasource": {
+                  "uid": "fixpro-prometheus",
+                  "type": "prometheus"
+                }
+              }
+            },
+            {
+              "refId": "B",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "refId": "B",
+                "type": "reduce",
+                "expression": "A",
+                "reducer": "last",
+                "settings": {
+                  "mode": "dropNN"
+                },
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                }
+              }
+            },
+            {
+              "refId": "C",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "datasourceUid": "__expr__",
+              "model": {
+                "refId": "C",
+                "type": "threshold",
+                "expression": "B",
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [
+                        0.8
+                      ],
+                      "type": "gt"
+                    },
+                    "operator": {
+                      "type": "and"
+                    },
+                    "query": {
+                      "params": [
+                        "C"
+                      ]
+                    },
+                    "reducer": {
+                      "type": "last"
+                    },
+                    "type": "query"
+                  }
+                ],
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__"
+                }
+              }
+            }
+          ],
+          "noDataState": "NoData",
+          "execErrState": "Error",
+          "for": "10m",
+          "annotations": {
+            "summary": "观测存储磁盘超过80%",
+            "runbook_url": "docs/runbooks/production-logging.md",
+            "dashboard_uid": "fixpro-diagnostics"
+          },
+          "labels": {
+            "service": "fix-pro-api",
+            "severity": "warning"
+          },
+          "isPaused": false
+        }
+      ]
+    }
+  ],
+  "contactPoints": [
+    {
+      "orgId": 1,
+      "name": "fixpro-operations",
+      "receivers": [
+        {
+          "uid": "fixpro-webhook",
+          "type": "webhook",
+          "settings": {
+            "url": "$ALERT_WEBHOOK_URL",
+            "httpMethod": "POST"
+          },
+          "disableResolveMessage": false
+        }
+      ]
+    }
+  ],
+  "policies": [
+    {
+      "orgId": 1,
+      "receiver": "fixpro-operations",
+      "group_by": [
+        "grafana_folder",
+        "alertname",
+        "service"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h"
+    }
+  ]
+}

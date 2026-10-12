@@ -6,14 +6,17 @@ import (
 	"time"
 
 	"github.com/fixpro/server/internal/platform/config"
-	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/stdlib"
 )
 
 func Open(ctx context.Context, c config.Config) (*sql.DB, error) {
-	db, err := sql.Open("pgx", c.DBDSN)
+	pc, err := pgx.ParseConfig(c.DBDSN)
 	if err != nil {
 		return nil, err
 	}
+	pc.Tracer = tracer{}
+	db := stdlib.OpenDB(*pc)
 	db.SetMaxOpenConns(c.DBMaxOpen)
 	db.SetMaxIdleConns(c.DBMaxIdle)
 	db.SetConnMaxLifetime(30 * time.Minute)

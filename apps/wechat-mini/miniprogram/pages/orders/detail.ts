@@ -1,3 +1,4 @@
+import { protectedPage } from '../../services/guard'
 import { getCustomerOrder, getWorkOrderTimeline, acceptWorkOrder, rateWorkOrder, repeatCustomerOrder, type CustomerOrderDetail, type CustomerTimelineEvent, type CustomerWorkOrder } from '../../services/orders'
 import { download } from '../../services/request'
 
@@ -129,7 +130,7 @@ function buildFlow(work: CustomerWorkOrder, orderCreatedAt: string, events: Cust
   return { steps, current, appointment }
 }
 
-Page({
+protectedPage({
   data: { loading: true, orderId: '', order: null as CustomerOrderView | null, acceptingWorkOrderId: '', reordering: false },
 
   onLoad(query: { id?: string }) {

@@ -1,0 +1,16 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+scrape_configs:
+  - job_name: alloy
+    static_configs:
+      - targets: ["alloy:12345"]
+  - job_name: loki
+    static_configs:
+      - targets: ["loki:3100"]
+  - job_name: node
+    static_configs:
+      - targets: ["node-exporter:9100"]
+  - job_name: log-probe
+    static_configs:
+      - targets: ["log-probe:9098"]

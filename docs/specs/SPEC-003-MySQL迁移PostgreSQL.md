@@ -1,4 +1,4 @@
-# SPEC-003｜FixPro 数据库从 MySQL 迁移到 PostgreSQL
+# SPEC-003｜懂修匠 数据库从 MySQL 迁移到 PostgreSQL
 
 **状态：** Implemented  
 **版本：** V1.0  
@@ -10,7 +10,7 @@
 
 ## 1. 结论
 
-FixPro 后端数据库由 MySQL 8.4 切换为 PostgreSQL 18，Go 后端继续使用 `database/sql`，驱动改为 `github.com/jackc/pgx/v5/stdlib`。本次不引入 ORM、不重写业务模块、不修改 React 或微信小程序 API。
+懂修匠 后端数据库由 MySQL 8.4 切换为 PostgreSQL 18，Go 后端继续使用 `database/sql`，驱动改为 `github.com/jackc/pgx/v5/stdlib`。本次不引入 ORM、不重写业务模块、不修改 React 或微信小程序 API。
 
 迁移必须同时完成：
 
