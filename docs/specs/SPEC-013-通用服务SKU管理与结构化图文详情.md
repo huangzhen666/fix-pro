@@ -60,7 +60,7 @@
 
 | 层级 | 内容 | 是否必需 |
 | --- | --- | --- |
-| 基础身份 | 编码、分类、名称、简述、图片、状态、建议技能 | 延续基础规则 |
+| 基础身份 | 编码、分类、名称、简述、图片、状态、建议技能 | 编码自动生成；建议技能可选 |
 | 销售规则 | 固定价格、单位、单份定义、数量范围/步长/合并方式、费用说明 | 必需 |
 | 服务边界 | 服务对象、包含内容；可选的不包含与不适用情况 | 核心内容必需，限制按实际填写 |
 | 交付约定 | 验收/交付标准、售后政策 | 必需；不等于必须提供期限质保 |
@@ -110,7 +110,7 @@ SKU 统一使用非空 JSONB/DTO 对象 `detailProfile`。`schemaVersion` 固定
 | `billing.quantityExplanation` | 5–200 字，说明购买数量含义，必填 |
 | `billing.visitFeeMode` | `INCLUDED / WAIVED / NOT_APPLICABLE`，必填 |
 | `billing.feeDescription` | 5–200 字，费用说明，必填 |
-| `includedItems` | 1–12 项 `{ title, description, iconKey? }`，必填 |
+| `includedItems` | 1–12 项 `{ title, description, iconKey?, imageMediaId? }`，必填 |
 | `excludedItems` | 0–12 项 `{ title, description }`，可选 |
 | `unsuitableConditions` | 0–8 个字符串，每项 2–100 字，可选 |
 | `purchaseNotices` | 0–8 个字符串，每项 5–150 字，可选；有关键限制须在此填写 |
@@ -279,7 +279,7 @@ SKU 统一使用非空 JSONB/DTO 对象 `detailProfile`。`schemaVersion` 固定
 
 ### 9.1 唯一事实来源
 
-- 基础身份、basePrice、unit、封面/轮播、状态、建议技能保持基础字段；其他规则统一在 detailProfile。
+- 基础身份、basePrice、unit、封面/轮播、状态、建议技能保持基础字段；其他规则统一在 detailProfile。新建时SKU编码由服务端生成并校验唯一性，不再要求管理端提交手工编码；保存后编码不可变。
 - 删除 `serviceScope`、`exclusions`、`warrantyDescription` 及对应旧数据库列和订单文本快照；不生成兼容摘要或双写。
 - 当前 SKU 使用 `detail_profile`，非空 JSONB，约束为对象且 schemaVersion 为1；发布版本保存完整 snapshot_json；订单项使用非空 `detail_profile_snapshot`。
 - 新订单保留基础成交字段、数量、需求文字及媒体，服务规则只读取成交快照；SKU后续修改不改写已成交订单。
@@ -338,9 +338,9 @@ SKU 统一使用非空 JSONB/DTO 对象 `detailProfile`。`schemaVersion` 固定
 - **C1 页面**：320/375/430px无横向溢出、遮挡；主图不会挤压所有价格信息，底栏处理安全区。
 - **C2 文案**：保洁无默认“故障”“施工”“质保天数”，检测不默认出现修复承诺；栏目标题由统一组件提供，关键限制默认展开。
 - **C3 素材**：单张成果图可发布，前后对照必须两图有效；越权/未完成/非法媒体均拒绝，无增强内容不留空卡。
+- **C4 安全**：HTML为纯文本，图片失效有占位，既有发布或成交素材保持可读，越权订单和媒体访问被拒绝。
 - **C5 基础视觉**：四个示例分别仅保留一张主图、无项目照片、无增强内容，均显示图标项目卡、费用边界、交付及售后层次；不是三个长段落连续堆叠，不要求补图才能达到完成标准。
 - **C6 图文增强**：给项目添加照片或补充案例后，系统自动使用预设组件，运营不改布局。移除增强图片后回到图标方案，不发生卡片重叠、空占位或页面断层。
-- **C4 安全**：HTML为纯文本，图片失效有占位，既有发布或成交素材保持可读，越权订单和媒体访问被拒绝。
 
 ### D. 清理与重建
 
