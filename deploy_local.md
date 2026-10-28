@@ -118,7 +118,7 @@
 
 该命令只转换历史占位密码，生成 Argon2id(`w+手机号`) 哈希，并标记师傅首次登录必须改密；已经改过正式密码的账号不会被覆盖。新建师傅由后台接口直接生成初始密码。
 
-首次启用后台权限体系时初始化管理员（密码只在命令输出显示一次；已有同名用户会被重置为该密码并要求改密）：
+首次启用后台权限体系时初始化管理员（默认 `admin / 12345678`，密码不输出到日志；已有同名用户会被重置为初始化密码并要求改密）：
 
     go run ./cmd/bootstrap-admin -org-id 1 -username admin -display-name 本地管理员 -platform-super-admin
 
@@ -129,7 +129,7 @@
     $env:MEDIA_DRIVER='local'
     $env:MEDIA_LOCAL_ROOT='D:\work\fix-pro\.tmp\media-current'
     $env:APP_ADMIN_USERNAME='admin'
-    $env:APP_ADMIN_PASSWORD='change-me-in-production'
+    $env:APP_ADMIN_PASSWORD='12345678'
     $env:APP_ADMIN_BASIC_COMPAT='false' # 默认关闭 Basic Auth；仅应急回滚时临时设为 true
     $env:APP_ADMIN_COOKIE_SECURE='false' # 本地 HTTP 使用 false，HTTPS 生产必须 true
     $env:WORKER_DEV_TOKEN_ENABLED='false' # 默认使用手机号登录；仅临时联调才显式开启

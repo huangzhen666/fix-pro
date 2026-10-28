@@ -36,6 +36,7 @@ type Item struct {
 	FaultDescription *string      `json:"faultDescription"`
 	FaultMedia       []FaultMedia `json:"faultMedia"`
 	FaultComplete    bool         `json:"faultComplete"`
+	Available        bool         `json:"available"`
 }
 type View struct {
 	Items       []Item `json:"items"`
@@ -87,7 +88,7 @@ func (s *Service) Get(ctx context.Context, p auth.Principal) (View, error) {
 	if e != nil {
 		return View{}, e
 	}
-	rows, e := s.db.QueryContext(ctx, `SELECT ci.id,ci.sku_id,ci.sku_version,ci.quantity,ci.unit_price,ci.fault_description,v.snapshot_json FROM shopping_cart_item ci JOIN service_sku_version v ON v.org_id=ci.org_id AND v.sku_id=ci.sku_id AND v.version_no=ci.sku_version WHERE ci.org_id=$1 AND ci.cart_id=$2 ORDER BY ci.created_at`, p.OrgID, cart)
+	rows, e := s.db.QueryContext(ctx, `SELECT ci.id,ci.sku_id,ci.sku_version,ci.quantity,ci.unit_price,ci.fault_description,v.snapshot_json,(s.status='PUBLISHED' AND s.current_published_version IS NOT NULL) FROM shopping_cart_item ci JOIN service_sku s ON s.org_id=ci.org_id AND s.id=ci.sku_id JOIN service_sku_version v ON v.org_id=ci.org_id AND v.sku_id=ci.sku_id AND v.version_no=ci.sku_version WHERE ci.org_id=$1 AND ci.cart_id=$2 ORDER BY ci.created_at`, p.OrgID, cart)
 	if e != nil {
 		return View{}, e
 	}
@@ -99,7 +100,7 @@ func (s *Service) Get(ctx context.Context, p auth.Principal) (View, error) {
 		var fault sql.NullString
 		var raw []byte
 		var snap catalog.PublishedSKU
-		if e = rows.Scan(&item, &sku, &x.SKUVersion, &x.Quantity, &x.UnitPrice, &fault, &raw); e != nil {
+		if e = rows.Scan(&item, &sku, &x.SKUVersion, &x.Quantity, &x.UnitPrice, &fault, &raw, &x.Available); e != nil {
 			return out, e
 		}
 		if e = json.Unmarshal(raw, &snap); e != nil {
@@ -118,7 +119,9 @@ func (s *Service) Get(ctx context.Context, p auth.Principal) (View, error) {
 		x.FaultComplete = fault.Valid && len([]rune(strings.TrimSpace(fault.String))) >= 5 && len(x.FaultMedia) > 0
 		out.Items = append(out.Items, x)
 		out.ItemCount += x.Quantity
-		out.TotalAmount += x.Subtotal
+		if x.Available {
+			out.TotalAmount += x.Subtotal
+		}
 	}
 	return out, rows.Err()
 }

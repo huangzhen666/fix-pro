@@ -41,7 +41,14 @@ func TestLegacyPasswordHashCanVerifyAndRequiresRehash(t *testing.T) {
 }
 
 func TestPasswordMinimumLength(t *testing.T) {
-	if _, err := HashPassword("short"); err == nil {
-		t.Fatal("short password should be rejected")
+	if _, err := HashPassword("Abc1234"); err == nil {
+		t.Fatal("seven-character password should be rejected")
+	}
+	hash, err := HashPassword("Abc12345")
+	if err != nil {
+		t.Fatalf("eight-character password should be accepted: %v", err)
+	}
+	if !VerifyPassword("Abc12345", hash) {
+		t.Fatal("eight-character password should verify")
 	}
 }

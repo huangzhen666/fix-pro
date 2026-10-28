@@ -141,7 +141,7 @@ func (s *WorkerSessionStore) RevokeWorkerSessions(ctx context.Context, orgID, wo
 }
 
 func (s *WorkerSessionStore) ChangePassword(ctx context.Context, p Principal, token, currentPassword, newPassword string) error {
-	if strings.TrimSpace(newPassword) == "" || len([]rune(newPassword)) < 12 || !hasLetterAndDigit(newPassword) {
+	if strings.TrimSpace(newPassword) == "" || len([]rune(newPassword)) < 8 || !hasLetterAndDigit(newPassword) {
 		return ErrWorkerPasswordTooWeak
 	}
 	if currentPassword == newPassword {

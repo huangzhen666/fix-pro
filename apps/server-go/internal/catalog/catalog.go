@@ -532,6 +532,10 @@ func (s *Service) Publish(ctx context.Context, n int64, user string) (PublishRes
 		if e == nil {
 			var current PublishedSKU
 			if json.Unmarshal(currentRaw, &current) == nil && samePublishedSKU(current, snap) {
+				// Reuse the snapshot, but restore availability after an off-shelf action.
+				if _, e = s.db.ExecContext(ctx, `UPDATE service_sku SET status='PUBLISHED' WHERE org_id=1 AND id=$1 AND status<>'PUBLISHED'`, n); e != nil {
+					return PublishResult{}, e
+				}
 				return PublishResult{x.ID, "PUBLISHED", *x.PublishedVersion, publishedAt}, nil
 			}
 		}

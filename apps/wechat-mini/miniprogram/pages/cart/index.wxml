@@ -2,14 +2,28 @@
   <view wx:if="{{loading}}" class="loading-card">正在加载购物车…</view>
   <view wx:elif="{{!cart.items.length}}" class="empty"><view class="empty-icon">🛒</view><view class="empty-title">购物车还是空的</view><view class="empty-desc">先去挑选需要的维修服务吧</view><button class="go-service" bindtap="goServices">去选择服务</button></view>
   <block wx:else>
-    <view class="page-heading"><view class="page-title">购物车</view><view class="page-subtitle">共 {{cart.itemCount}} 项服务</view></view>
-    <view class="card item" wx:for="{{cart.items}}" wx:key="id" wx:for-index="index">
-      <view class="head"><view class="item-select {{item.selected ? 'selected' : ''}}" data-index="{{index}}" bindtap="toggleSelected"><text wx:if="{{item.selected}}">✓</text></view><image class="cover" src="{{item.coverImageUrl}}" mode="aspectFill"/><view class="grow"><view class="name">{{item.name}}</view><view class="unit-price">¥{{item.unitPrice/100}} / {{item.unit}}</view><view class="subtotal">¥{{item.subtotalText}}</view></view><view class="counter"><button data-index="{{index}}" data-delta="-1" bindtap="change">−</button><text>{{item.quantity}}</text><button data-index="{{index}}" data-delta="1" bindtap="change">+</button></view></view>
-      <view class="info-block"><view class="info-heading"><view><text class="info-title">补充信息</text><text class="optional">选填</text></view><text class="info-tip">描述现状，帮助师傅提前判断</text></view><textarea value="{{item.faultDescription}}" data-index="{{index}}" bindinput="inputFault" bindblur="blurFault" maxlength="500" placeholder="可描述当前现状、异常表现、发生时间等"/></view>
-      <scroll-view scroll-x class="media-row"><view class="media-wrap" wx:for="{{item.faultMedia}}" wx:key="id" wx:for-item="media" wx:for-index="mediaIndex"><image wx:if="{{media.mediaType==='IMAGE'}}" src="{{media.localUrl}}" mode="aspectFill"/><video wx:else src="{{media.localUrl}}" controls/><view class="delete" data-index="{{index}}" data-media-index="{{mediaIndex}}" catchtap="removeMedia">×</view></view><button class="upload" data-index="{{index}}" bindtap="choose"><text class="upload-plus">＋</text><text>添加图片/视频</text><text class="upload-optional">选填</text></button></scroll-view>
-      <view class="item-footer"><button class="remove-button" data-index="{{index}}" bindtap="remove">移除服务</button><text wx:if="{{savingId===item.id}}" class="syncing">正在同步…</text></view>
+    <view class="cart-tip">已加入 {{cart.itemCount}} 件服务<text>左滑服务可删除</text></view>
+    <view class="item {{!item.available ? 'unavailable' : ''}}" wx:for="{{cart.items}}" wx:key="id" wx:for-index="index">
+      <view class="head"><view class="item-select {{!item.available ? 'disabled' : ''}} {{item.selected ? 'selected' : ''}}" data-index="{{index}}" bindtap="toggleSelected" role="checkbox" aria-checked="{{item.selected}}" aria-disabled="{{!item.available}}" aria-label="选择{{item.name}}"><text wx:if="{{item.selected}}">✓</text></view><view class="name">{{item.name}}</view><text wx:if="{{!item.available}}" class="unavailable-label">已下架</text></view>
+      <view class="swipe-container">
+        <button class="swipe-delete" data-index="{{index}}" catchtap="remove" disabled="{{updatingId || savingId || checkoutLoading}}">删除</button>
+        <view class="service-row {{dragging && swipeId === item.id ? 'dragging' : ''}}" style="transform:translateX({{swipeId === item.id ? -swipeOffset : 0}}px)" data-id="{{item.id}}" bindtouchstart="touchStart" bindtouchmove="touchMove" bindtouchend="touchEnd" bindtouchcancel="touchCancel">
+          <image class="cover" src="{{item.coverImageUrl}}" mode="aspectFill"/>
+          <view class="grow">
+            <view class="unit-price">单价 ¥{{item.unitPrice/100}} / {{item.unit}}</view>
+            <view class="detail-entry" data-id="{{item.id}}" bindtap="toggleDetails">{{item.faultDescription || (item.faultMedia.length ? '已添加图片/视频' : '补充服务信息（选填）')}}<text>›</text></view>
+            <view class="price-row"><view class="subtotal">¥{{item.subtotalText}}</view><view class="counter"><button data-index="{{index}}" data-delta="-1" catchtap="change" disabled="{{!item.available || item.quantity <= 1 || updatingId || savingId || checkoutLoading}}">−</button><text>{{item.quantity}}</text><button data-index="{{index}}" data-delta="1" catchtap="change" disabled="{{!item.available || item.quantity >= 99 || updatingId || savingId || checkoutLoading}}">+</button></view></view>
+          </view>
+        </view>
+      </view>
+      <block wx:if="{{expandedId === item.id}}">
+        <view class="info-block"><view class="info-heading"><text class="info-title">补充信息</text><text class="optional">选填</text></view><textarea value="{{item.faultDescription}}" data-index="{{index}}" bindinput="inputFault" bindblur="blurFault" maxlength="500" placeholder="描述当前现状、异常表现、发生时间等" disabled="{{updatingId || checkoutLoading}}"/></view>
+        <scroll-view scroll-x class="media-row"><view class="media-wrap" wx:for="{{item.faultMedia}}" wx:key="id" wx:for-item="media" wx:for-index="mediaIndex"><image wx:if="{{media.mediaType==='IMAGE'}}" src="{{media.localUrl}}" mode="aspectFill"/><video wx:else src="{{media.localUrl}}" controls/><view class="delete" data-index="{{index}}" data-media-index="{{mediaIndex}}" catchtap="removeMedia">×</view></view><button class="upload" data-index="{{index}}" bindtap="choose"><text class="upload-plus">＋</text><text>添加图片/视频</text></button></scroll-view>
+      </block>
+      <view class="item-footer"><text wx:if="{{savingId===item.id}}" class="syncing">正在同步…</text><text wx:elif="{{updatingId===item.id}}" class="syncing">正在更新…</text><view wx:else class="supplement-link" data-id="{{item.id}}" bindtap="toggleDetails">{{expandedId === item.id ? '收起补充信息' : '补充信息'}}<text>（选填）</text></view><button class="remove-button" data-index="{{index}}" bindtap="remove" disabled="{{updatingId || savingId || checkoutLoading}}">删除</button></view>
     </view>
-    <view class="checkout"><view><view class="total-label">已选 {{selectedCount}} 项，合计</view><text>¥{{totalText}}</text></view><button type="primary" loading="{{checkoutLoading}}" bindtap="checkout">去结算</button></view>
+    <view class="list-end">已经到底啦～</view>
+    <view class="checkout"><view class="select-all" bindtap="toggleAll"><view class="item-select {{allSelected ? 'selected' : ''}}"><text wx:if="{{allSelected}}">✓</text></view><text>全选</text></view><view class="total"><view class="total-label">合计</view><text>¥{{totalText}}</text></view><button type="primary" loading="{{checkoutLoading}}" disabled="{{!selectedCount || savingId || updatingId || checkoutLoading}}" bindtap="checkout">去结算({{selectedCount}})</button></view>
   </block>
-</view>
-</block><view wx:else style="padding:40rpx;text-align:center;color:#888">正在校验登录状态，请保持网络连接</view>
+</view></block>
+<view wx:else class="session-loading">正在校验登录状态，请保持网络连接</view>

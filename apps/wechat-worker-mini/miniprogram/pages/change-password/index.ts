@@ -10,7 +10,7 @@ Page({
   async onSubmit(): Promise<void> {
     const { currentPassword, newPassword, confirmPassword } = this.data
     if (newPassword !== confirmPassword) { this.setData({ errorMessage: '两次输入的新密码不一致' }); return }
-    if (newPassword.length < 12 || !/[A-Za-z]/.test(newPassword) || !/\d/.test(newPassword)) { this.setData({ errorMessage: '新密码至少 12 位，且必须包含字母和数字' }); return }
+    if (newPassword.length < 8 || !/[A-Za-z]/.test(newPassword) || !/\d/.test(newPassword)) { this.setData({ errorMessage: '新密码至少 8 位，且必须包含字母和数字' }); return }
     if (this.data.submitting) return
     this.setData({ submitting: true, errorMessage: '' })
     try {

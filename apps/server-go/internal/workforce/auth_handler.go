@@ -106,7 +106,7 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	case errors.Is(err, auth.ErrWorkerCurrentPassword):
 		httpx.Failure(w, r, httpx.E("WORKER_CURRENT_PASSWORD_INVALID", "当前密码错误", http.StatusBadRequest))
 	case errors.Is(err, auth.ErrWorkerPasswordTooWeak):
-		httpx.Failure(w, r, httpx.E("WORKER_PASSWORD_WEAK", "新密码至少 12 位，且必须包含字母和数字，不能使用初始密码", http.StatusBadRequest))
+		httpx.Failure(w, r, httpx.E("WORKER_PASSWORD_WEAK", "新密码至少 8 位，且必须包含字母和数字，不能使用初始密码", http.StatusBadRequest))
 	case err != nil:
 		httpx.Failure(w, r, err)
 	default:

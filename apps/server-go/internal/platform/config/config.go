@@ -9,6 +9,8 @@ import (
 	"time"
 )
 
+const DefaultAdminPassword = "12345678"
+
 type Config struct {
 	Logging               logging.Config
 	WechatAppID           string
@@ -40,7 +42,7 @@ func Load() (Config, error) {
 		DBDSN:     env("DB_DSN", "postgres://fixpro:fixpro-local@localhost:5433/fix_pro?sslmode=disable&timezone=UTC"),
 		DBMaxOpen: envInt("DB_MAX_OPEN_CONNS", 20), DBMaxIdle: envInt("DB_MAX_IDLE_CONNS", 5),
 		MediaDriver: env("MEDIA_DRIVER", "local"), MediaLocalRoot: env("MEDIA_LOCAL_ROOT", os.TempDir()+"/fixpro-media"),
-		AdminUsername: env("APP_ADMIN_USERNAME", "admin"), AdminPassword: env("APP_ADMIN_PASSWORD", "change-me-in-production"),
+		AdminUsername: env("APP_ADMIN_USERNAME", "admin"), AdminPassword: env("APP_ADMIN_PASSWORD", DefaultAdminPassword),
 		AdminBasicCompat: envBool("APP_ADMIN_BASIC_COMPAT", false), AdminCookieSecure: envBool("APP_ADMIN_COOKIE_SECURE", false),
 		WorkerDevTokenEnabled: envBool("WORKER_DEV_TOKEN_ENABLED", false),
 		CORSAllowedOrigins:    split(env("CORS_ALLOWED_ORIGINS", "http://localhost:5173")), ShutdownTimeout: 15 * time.Second,

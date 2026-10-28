@@ -172,8 +172,8 @@ const (
 // The encoded format keeps parameters with the hash so future cost increases can
 // be rolled out through NeedsPasswordRehash and the next successful login.
 func HashPassword(password string) (string, error) {
-	if len(password) < 12 {
-		return "", errors.New("password must contain at least 12 characters")
+	if len(password) < 8 {
+		return "", errors.New("password must contain at least 8 characters")
 	}
 	salt := make([]byte, argon2SaltLen)
 	if _, err := rand.Read(salt); err != nil {

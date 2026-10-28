@@ -44,4 +44,4 @@ Loki Compactor 开启保留删除，默认 720h；测试设置 168h。保留不�
 
 完整处置见 `docs/runbooks/production-logging.md`。关闭观测服务不会改变 API 启动依赖，保留本地轮转和磁盘监测；不要运行 `down -v` 作为普通回滚。
 
-管理员初始化的自动生成密码只写入交互终端，或显式 `-password-output` 创建的 0600 新文件；自动化也可注入 `BOOTSTRAP_ADMIN_PASSWORD`，不在容器 stdout 打印初始密码。
+管理员初始化默认 `admin / 12345678`，首次登录必须改密，无需交互终端。可用 `BOOTSTRAP_ADMIN_PASSWORD` 或 `-password` 覆盖；可选 `-password-output` 创建 0600 新文件。不在容器 stdout 打印初始密码。

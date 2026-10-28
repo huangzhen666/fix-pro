@@ -2,8 +2,6 @@ package main
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/base64"
 	"flag"
 	"fmt"
 	"github.com/fixpro/server/internal/platform/logging"
@@ -21,8 +19,8 @@ func run() int {
 	orgID := flag.Int64("org-id", 1, "organization id")
 	username := flag.String("username", "admin", "admin username")
 	displayName := flag.String("display-name", "平台管理员", "display name")
-	password := flag.String("password", "", "initial password; omitted means generate one")
-	passwordOutput := flag.String("password-output", "", "private new file for generated password when no terminal")
+	password := flag.String("password", "", "initial password; defaults to BOOTSTRAP_ADMIN_PASSWORD, APP_ADMIN_PASSWORD, or 12345678")
+	passwordOutput := flag.String("password-output", "", "optional private new file for initial password")
 	platform := flag.Bool("platform-super-admin", false, "grant platform super admin")
 	flag.Parse()
 	log := logging.Bootstrap("fix-pro-bootstrap-admin")
@@ -45,32 +43,17 @@ func run() int {
 		return 1
 	}
 	defer db.Close()
-	pass := strings.TrimSpace(*password)
-	if pass == "" {
-		pass = os.Getenv("BOOTSTRAP_ADMIN_PASSWORD")
-	}
+	pass := initialPassword(*password, os.Getenv("BOOTSTRAP_ADMIN_PASSWORD"), c.AdminPassword)
 	var secretOutput *os.File
-	if pass == "" {
-		if *passwordOutput != "" {
-			secretOutput, err = os.OpenFile(*passwordOutput, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
-		} else {
-			secretOutput, err = os.OpenFile("/dev/tty", os.O_WRONLY, 0)
-		}
+	if *passwordOutput != "" {
+		secretOutput, err = os.OpenFile(*passwordOutput, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
 		if err != nil {
-			log.Error("generated password requires terminal or private output file", logging.SafeError(err)...)
+			log.Error("private password output failed", logging.SafeError(err)...)
 			return 1
 		}
 		defer secretOutput.Close()
 	}
 
-	if pass == "" {
-		b := make([]byte, 18)
-		if _, err := rand.Read(b); err != nil {
-			log.Error("password", append(logging.SafeError(err), zap.String("module", "maintenance"), zap.String("event", "maintenance.failed"), zap.String("operation", "password"))...)
-			return 1
-		}
-		pass = "Fx!" + base64.RawURLEncoding.EncodeToString(b)
-	}
 	hash, err := auth.HashPassword(pass)
 	if err != nil {
 		log.Error("password", append(logging.SafeError(err), zap.String("module", "maintenance"), zap.String("event", "maintenance.failed"), zap.String("operation", "password"))...)
@@ -111,4 +94,17 @@ func run() int {
 	}
 	log.Info("administrator initialized", zap.String("module", "maintenance"), zap.String("event", "maintenance.admin_initialized"), zap.String("principalId", fmt.Sprint(id)))
 	return 0
+}
+
+func initialPassword(explicit, bootstrap, configured string) string {
+	if password := strings.TrimSpace(explicit); password != "" {
+		return password
+	}
+	if bootstrap != "" {
+		return bootstrap
+	}
+	if configured != "" {
+		return configured
+	}
+	return config.DefaultAdminPassword
 }

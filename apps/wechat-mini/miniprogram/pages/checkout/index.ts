@@ -1,5 +1,6 @@
 import { showApiError } from '../../services/request'
 import { protectedPage } from '../../services/guard'
+import { getService } from '../../services/catalog'
 import { getCart, type Cart } from '../../services/cart'
 import { createOrder } from '../../services/orders'
 import { formatAddress, listAddresses, type CustomerAddress } from '../../services/addresses'
@@ -58,6 +59,7 @@ protectedPage({
   data: {
     cart: { items: [], itemCount: 0, totalAmount: 0 } as Cart,
     totalText: '0.00',
+    directItem: null as { skuId: string; skuVersion: number; quantity: number } | null,
     contactName: '',
     contactMobile: '',
     serviceAddress: '',
@@ -74,12 +76,28 @@ protectedPage({
     showAppointmentPicker: false,
     submitting: false,
   },
-  async onLoad() {
+  async onLoad(options: Record<string, string>) {
     const storedItemIDs = wx.getStorageSync<unknown>(checkoutItemsStorageKey)
     wx.removeStorageSync(checkoutItemsStorageKey)
     const itemIDs = Array.isArray(storedItemIDs) ? storedItemIDs.filter((id): id is string => typeof id === 'string') : null
-    const [cartResult, addresses, contact] = await Promise.all([getCart(), listAddresses(), request<{ contactMobile: string }>({ url: "/api/v1/mini/checkout/contact" })])
-    const cart = selectedCart(cartResult, itemIDs)
+    let directItem: typeof this.data.directItem = null
+    let cart: Cart
+    if (options.skuId) {
+      const quantity = Number(options.quantity)
+      const skuVersion = Number(options.skuVersion)
+      if (!Number.isInteger(quantity) || quantity < 1 || quantity > 99 || !Number.isInteger(skuVersion) || skuVersion < 1) throw new Error('下单参数无效，请返回服务详情重新选择')
+      const service = await getService(options.skuId)
+      if (service.publishedVersion !== skuVersion) throw new Error('服务信息已更新，请返回详情确认后重新下单')
+      directItem = { skuId: service.id, skuVersion, quantity }
+      cart = { items: [{ id: 'direct', skuId: service.id, skuVersion, name: service.name, coverImageUrl: service.coverImageUrl, unitPrice: service.price, unit: service.unit, quantity, subtotal: service.price * quantity, faultMedia: [], faultComplete: false, available: true }], itemCount: quantity, totalAmount: service.price * quantity }
+    } else {
+      cart = selectedCart(await getCart(), itemIDs)
+    }
+    if (cart.items.some(item => !item.available)) {
+      wx.showModal({ title: '服务已下架', content: '所选服务已下架，无法下单，请返回购物车重新选择。', showCancel: false, success: () => wx.navigateBack() })
+      return
+    }
+    const [addresses, contact] = await Promise.all([listAddresses(), request<{ contactMobile: string }>({ url: '/api/v1/mini/checkout/contact' })])
     if (!cart.items.length) {
       wx.showToast({ title: itemIDs ? '所选服务已不在购物车中' : '购物车为空', icon: 'none' })
       setTimeout(() => wx.navigateBack(), 500)
@@ -87,7 +105,7 @@ protectedPage({
     }
     const appointmentDates = buildAppointmentDates()
     const selectedAddress = addresses.find(item => item.isDefault) || addresses[0] || null
-    this.setData({ cart, totalText: (cart.totalAmount / 100).toFixed(2), appointmentDates, selectedAddress, contactName: selectedAddress?.contactName || '', contactMobile: selectedAddress?.contactMobile || contact.contactMobile, serviceAddress: selectedAddress ? formatAddress(selectedAddress) : '' })
+    this.setData({ cart, directItem, totalText: (cart.totalAmount / 100).toFixed(2), appointmentDates, selectedAddress, contactName: selectedAddress?.contactName || '', contactMobile: selectedAddress?.contactMobile || contact.contactMobile, serviceAddress: selectedAddress ? formatAddress(selectedAddress) : '' })
   },
   onShow() {
     const selected = wx.getStorageSync<CustomerAddress | null>('fixpro.selectedAddress')
@@ -136,13 +154,15 @@ protectedPage({
     this.setData({ submitting: true })
     const key = `${Date.now()}-${Math.random().toString(16).slice(2)}`
     try {
-      const result = await createOrder({ contactName, contactMobile, serviceAddress, appointmentDate, appointmentSlot, cartItemIds: this.data.cart.items.map(item => item.id) }, key)
+      const result = await createOrder({ contactName, contactMobile, serviceAddress, appointmentDate, appointmentSlot, ...(this.data.directItem ? { directItem: this.data.directItem } : { cartItemIds: this.data.cart.items.map(item => item.id) }) }, key)
       wx.redirectTo({ url: `/pages/checkout/result?orderNo=${result.orderNo}&status=${result.status}&amount=${result.totalAmount}` })
     } catch (e: any) {
-      if (e instanceof ApiError && e.code === 'CART_SKU_CHANGED') {
+      if (e instanceof ApiError && e.code === 'SKU_NOT_AVAILABLE') {
+        wx.showModal({ title: '服务已下架', content: this.data.directItem ? '服务已下架，无法下单，请返回重新选择。' : '所选服务已下架，无法下单，请返回购物车重新选择。', showCancel: false, success: () => wx.navigateBack() })
+      } else if (e instanceof ApiError && e.code === 'CART_SKU_CHANGED') {
         wx.showModal({
           title: '服务信息已更新',
-          content: '服务价格或内容已变化，请返回购物车刷新并确认后再提交。',
+          content: this.data.directItem ? '服务价格或内容已变化，请返回详情确认后重新下单。' : '服务价格或内容已变化，请返回购物车刷新并确认后再提交。',
           showCancel: false,
           success: () => wx.navigateBack(),
         })

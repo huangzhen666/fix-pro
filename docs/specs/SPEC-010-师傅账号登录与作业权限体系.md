@@ -273,7 +273,7 @@ passwordVersion
 规则：
 
 - `newPassword` 与 `confirmPassword` 必须完全一致；
-- 最少 12 位，至少包含字母和数字；实现阶段可增加特殊字符要求，但不能降低 12 位下限；
+- 最少 8 位，至少包含字母和数字；实现阶段可增加特殊字符要求，但不能降低 8 位下限；
 - 新密码不能等于当前密码或 `w+手机号`；
 - `currentPassword` 错误返回 `400 WORKER_CURRENT_PASSWORD_INVALID`；
 - 校验通过后使用 Argon2id 重新生成哈希，递增 `password_version`，设置 `must_change_password=false`，撤销旧会话；
@@ -532,7 +532,7 @@ apps/server-go/db/migrations/000013_worker_auth.down.sql
 - 首次登录访问工单列表返回 423；
 - 当前密码错误不能修改；
 - 新密码和确认密码不一致不能修改；
-- 新密码不满足 12 位、字母和数字要求不能修改；
+- 新密码不满足 8 位、字母和数字要求不能修改；
 - 修改成功后旧 Token 和旧密码失效，新密码可登录；
 - 修改后 `must_change_password=false`、`password_version` 递增。
 

@@ -32,7 +32,15 @@ docker compose -f deploy/compose.yaml up -d --build postgres migrate server
 
 - 健康检查：`http://localhost:8080/actuator/health`
 - Ping：`http://localhost:8080/api/v1/public/ping`
-- 管理员首次使用：先执行 `go run ./cmd/bootstrap-admin -org-id 1 -username admin -platform-super-admin`，命令只显示一次随机临时密码；登录后必须改密
+- 管理员首次使用：先执行 `go run ./cmd/bootstrap-admin -org-id 1 -username admin -platform-super-admin`，默认账号/密码为 `admin / 12345678`，登录后必须改密；可通过 `BOOTSTRAP_ADMIN_PASSWORD` 或 `-password` 覆盖
+
+云端使用本项目 Docker 镜像时，先完成数据库迁移，再在运行中的后端容器初始化管理员：
+
+```bash
+docker compose -f deploy/compose.yaml exec -T server /app/bootstrap-admin -org-id 1 -username admin -platform-super-admin
+```
+
+初始化无需交互终端，默认密码为 `12345678`，密码不会写入日志。优先级为 `-password` → `BOOTSTRAP_ADMIN_PASSWORD` → `APP_ADMIN_PASSWORD` → 默认值。普通重启不会重置密码；已有数据库的密码不会因升级镜像自动改变，显式重新执行初始化命令会重置同名账号并要求首次登录改密。自定义 Compose 项目需使用实际配置文件或容器名执行该命令。
 - 客户小程序：微信手机号快捷登录，已移除演示令牌
 
 ## 本机启动 Go 后端

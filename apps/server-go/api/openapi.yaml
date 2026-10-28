@@ -82,7 +82,7 @@ paths:
   /api/v1/admin/media/images:
     post: {security: [{adminBasic: []}], responses: {'200': {description: SKU image uploaded}}}
   /api/v1/mini/cart:
-    get: {security: [{miniBearer: []}], responses: {'200': {description: Cart}}}
+    get: {security: [{miniBearer: []}], responses: {'200': {description: 'Cart items include available (current publication status); totalAmount excludes unavailable items'}}}
   /api/v1/mini/cart/items:
     post: {security: [{miniBearer: []}], responses: {'200': {description: Item added}}}
   /api/v1/mini/media/fault:
@@ -91,6 +91,28 @@ paths:
     post:
       security: [{miniBearer: []}]
       parameters: [{name: Idempotency-Key, in: header, required: true, schema: {type: string, maxLength: 128}}]
+      description: 使用 cartItemIds 结算购物车选中项，或使用 directItem 立即下单。两者不能同时传递；立即下单不会修改购物车，价格由服务端已发布版本确定。下架服务禁止下单，返回 SKU_NOT_AVAILABLE（409）。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [contactName, contactMobile, serviceAddress, appointmentDate, appointmentSlot]
+              properties:
+                contactName: {type: string}
+                contactMobile: {type: string}
+                serviceAddress: {type: string}
+                appointmentDate: {type: string, format: date}
+                appointmentSlot: {type: string}
+                cartItemIds: {type: array, minItems: 1, items: {type: string}}
+                directItem:
+                  type: object
+                  required: [skuId, skuVersion, quantity]
+                  properties:
+                    skuId: {type: string}
+                    skuVersion: {type: integer, minimum: 1}
+                    quantity: {type: integer, minimum: 1, maximum: 99}
       responses: {'200': {description: Order created or replayed}}
   /api/v1/mini/orders/{id}:
     get: {security: [{miniBearer: []}], parameters: [{$ref: '#/components/parameters/Id'}], responses: {'200': {description: Customer order detail and work order progress}}}

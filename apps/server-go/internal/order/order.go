@@ -27,13 +27,20 @@ type Service struct{ db *sql.DB }
 
 func New(db *sql.DB) *Service { return &Service{db} }
 
+type DirectItem struct {
+	SKUID      string `json:"skuId"`
+	SKUVersion int    `json:"skuVersion"`
+	Quantity   int    `json:"quantity"`
+}
+
 type Write struct {
-	ContactName     string   `json:"contactName"`
-	ContactMobile   string   `json:"contactMobile"`
-	ServiceAddress  string   `json:"serviceAddress"`
-	AppointmentDate string   `json:"appointmentDate"`
-	AppointmentSlot string   `json:"appointmentSlot"`
-	CartItemIDs     []string `json:"cartItemIds"`
+	ContactName     string      `json:"contactName"`
+	ContactMobile   string      `json:"contactMobile"`
+	ServiceAddress  string      `json:"serviceAddress"`
+	AppointmentDate string      `json:"appointmentDate"`
+	AppointmentSlot string      `json:"appointmentSlot"`
+	CartItemIDs     []string    `json:"cartItemIds"`
+	DirectItem      *DirectItem `json:"directItem,omitempty"`
 }
 type Result struct {
 	ID          string    `json:"id"`
@@ -180,6 +187,17 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, key string, w Wr
 	if e != nil {
 		return Result{}, e
 	}
+	var directSKU int64
+	if w.DirectItem != nil {
+		if w.CartItemIDs != nil || w.DirectItem.Quantity < 1 || w.DirectItem.Quantity > 99 || w.DirectItem.SKUVersion < 1 {
+			return Result{}, httpx.E("VALIDATION_ERROR", "立即下单参数无效", 400)
+		}
+		var parseErr error
+		directSKU, parseErr = strconv.ParseInt(w.DirectItem.SKUID, 10, 64)
+		if parseErr != nil || directSKU <= 0 {
+			return Result{}, httpx.E("VALIDATION_ERROR", "服务 ID 无效", 400)
+		}
+	}
 	date, _ := time.ParseInLocation("2006-01-02", w.AppointmentDate, time.Local)
 	hour := 0
 	fmt.Sscanf(w.AppointmentSlot, "%d:00", &hour)
@@ -218,59 +236,92 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, key string, w Wr
 		return Result{}, e
 	}
 	var cart int64
-	e = tx.QueryRowContext(ctx, `SELECT id FROM shopping_cart WHERE org_id=$1 AND customer_id=$2 FOR UPDATE`, p.OrgID, p.SubjectID).Scan(&cart)
-	if e == sql.ErrNoRows {
-		return Result{}, httpx.E("CART_EMPTY", "购物车为空", 400)
-	}
-	if e != nil {
-		return Result{}, e
-	}
-	rows, e := tx.QueryContext(ctx, `SELECT ci.id,ci.sku_id,ci.sku_version,ci.quantity,ci.unit_price,COALESCE(ci.fault_description,''),v.snapshot_json,s.status,s.current_published_version,cv.snapshot_json FROM shopping_cart_item ci JOIN service_sku_version v ON v.org_id=ci.org_id AND v.sku_id=ci.sku_id AND v.version_no=ci.sku_version JOIN service_sku s ON s.id=ci.sku_id AND s.org_id=ci.org_id LEFT JOIN service_sku_version cv ON cv.org_id=s.org_id AND cv.sku_id=s.id AND cv.version_no=s.current_published_version WHERE ci.org_id=$1 AND ci.cart_id=$2 FOR UPDATE OF ci, v, s`, p.OrgID, cart)
-	if e != nil {
-		return Result{}, e
-	}
 	items := []checkout{}
-	selectedFound := 0
-	for rows.Next() {
+	if w.DirectItem != nil {
 		var x checkout
-		var raw, currentRaw []byte
-		if e = rows.Scan(&x.id, &x.sku, &x.version, &x.quantity, &x.price, &x.fault, &raw, &x.status, &x.current, &currentRaw); e != nil {
-			rows.Close()
-			return Result{}, e
+		var raw []byte
+		x.sku, x.quantity = directSKU, w.DirectItem.Quantity
+		e = tx.QueryRowContext(ctx, `SELECT s.status,s.current_published_version,v.snapshot_json FROM service_sku s JOIN service_sku_version v ON v.org_id=s.org_id AND v.sku_id=s.id AND v.version_no=s.current_published_version WHERE s.org_id=$1 AND s.id=$2 FOR SHARE OF s,v`, p.OrgID, directSKU).Scan(&x.status, &x.current, &raw)
+		if e == sql.ErrNoRows {
+			return Result{}, httpx.E("SKU_NOT_AVAILABLE", "服务不可购买", 404)
 		}
-		if selectedIDs != nil {
-			if !selectedIDs[x.id] {
-				continue
-			}
-			selectedFound++
+		if e != nil {
+			return Result{}, e
 		}
 		if e = json.Unmarshal(raw, &x.snap); e != nil {
-			rows.Close()
 			return Result{}, e
 		}
-		if len(currentRaw) > 0 {
-			if e = json.Unmarshal(currentRaw, &x.currentSnap); e != nil {
+		if x.status != "PUBLISHED" {
+			return Result{}, httpx.E("SKU_NOT_AVAILABLE", "服务已下架，无法下单", 409)
+		}
+		if int(x.current.Int64) != w.DirectItem.SKUVersion {
+			return Result{}, httpx.E("CART_SKU_CHANGED", "服务信息已更新，请返回详情确认后重新下单", 409)
+		}
+		x.version, x.price, x.currentSnap = int(x.current.Int64), x.snap.Price, x.snap
+		items = append(items, x)
+	} else {
+		e = tx.QueryRowContext(ctx, `SELECT id FROM shopping_cart WHERE org_id=$1 AND customer_id=$2 FOR UPDATE`, p.OrgID, p.SubjectID).Scan(&cart)
+		if e == sql.ErrNoRows {
+			return Result{}, httpx.E("CART_EMPTY", "购物车为空", 400)
+		}
+		if e != nil {
+			return Result{}, e
+		}
+		rows, e := tx.QueryContext(ctx, `SELECT ci.id,ci.sku_id,ci.sku_version,ci.quantity,ci.unit_price,COALESCE(ci.fault_description,''),v.snapshot_json,s.status,s.current_published_version,cv.snapshot_json FROM shopping_cart_item ci JOIN service_sku_version v ON v.org_id=ci.org_id AND v.sku_id=ci.sku_id AND v.version_no=ci.sku_version JOIN service_sku s ON s.id=ci.sku_id AND s.org_id=ci.org_id LEFT JOIN service_sku_version cv ON cv.org_id=s.org_id AND cv.sku_id=s.id AND cv.version_no=s.current_published_version WHERE ci.org_id=$1 AND ci.cart_id=$2 FOR UPDATE OF ci, v, s`, p.OrgID, cart)
+		if e != nil {
+			return Result{}, e
+		}
+		selectedFound := 0
+		for rows.Next() {
+			var x checkout
+			var raw, currentRaw []byte
+			if e = rows.Scan(&x.id, &x.sku, &x.version, &x.quantity, &x.price, &x.fault, &raw, &x.status, &x.current, &currentRaw); e != nil {
 				rows.Close()
 				return Result{}, e
 			}
+			if selectedIDs != nil {
+				if !selectedIDs[x.id] {
+					continue
+				}
+				selectedFound++
+			}
+			if e = json.Unmarshal(raw, &x.snap); e != nil {
+				rows.Close()
+				return Result{}, e
+			}
+			if len(currentRaw) > 0 {
+				if e = json.Unmarshal(currentRaw, &x.currentSnap); e != nil {
+					rows.Close()
+					return Result{}, e
+				}
+			}
+			items = append(items, x)
 		}
-		items = append(items, x)
-	}
-	rows.Close()
-	if selectedIDs != nil && selectedFound != len(selectedIDs) {
-		return Result{}, httpx.E("CART_ITEM_NOT_FOUND", "所选服务已不在购物车中", 404)
-	}
-	if len(items) == 0 {
-		return Result{}, httpx.E("CART_EMPTY", "购物车为空", 400)
+		if e = rows.Err(); e != nil {
+			rows.Close()
+			return Result{}, e
+		}
+		rows.Close()
+		if selectedIDs != nil && selectedFound != len(selectedIDs) {
+			return Result{}, httpx.E("CART_ITEM_NOT_FOUND", "所选服务已不在购物车中", 404)
+		}
+		if len(items) == 0 {
+			return Result{}, httpx.E("CART_EMPTY", "购物车为空", 400)
+		}
 	}
 	var total int64
 	count := 0
 	for _, x := range items {
 		var media int
-		if e = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM shopping_cart_item_media cim JOIN media_asset m ON m.id=cim.media_id AND m.org_id=cim.org_id WHERE cim.org_id=$1 AND cim.cart_item_id=$2 AND m.status='READY'`, p.OrgID, x.id).Scan(&media); e != nil {
-			return Result{}, e
+		if w.DirectItem == nil {
+			if e = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM shopping_cart_item_media cim JOIN media_asset m ON m.id=cim.media_id AND m.org_id=cim.org_id WHERE cim.org_id=$1 AND cim.cart_item_id=$2 AND m.status='READY'`, p.OrgID, x.id).Scan(&media); e != nil {
+				return Result{}, e
+			}
 		}
-		if x.status != "PUBLISHED" || !x.current.Valid || x.currentSnap.ID == "" || x.price != x.currentSnap.Price {
+		if x.status != "PUBLISHED" || !x.current.Valid || x.currentSnap.ID == "" {
+			return Result{}, httpx.E("SKU_NOT_AVAILABLE", "所选服务已下架，无法下单，请返回购物车重新选择", 409)
+		}
+		if x.price != x.currentSnap.Price {
 			return Result{}, httpx.E("CART_SKU_CHANGED", "服务价格或版本已变化，请刷新购物车", 409)
 		}
 		if int(x.current.Int64) != x.version {
@@ -305,14 +356,18 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, key string, w Wr
 		if e != nil {
 			return Result{}, e
 		}
-		if _, e = tx.ExecContext(ctx, `INSERT INTO order_item_media(org_id,order_item_id,media_id,media_type,sort_order) SELECT cim.org_id,$1,cim.media_id,m.media_type,cim.sort_order FROM shopping_cart_item_media cim JOIN media_asset m ON m.id=cim.media_id AND m.org_id=cim.org_id WHERE cim.org_id=$2 AND cim.cart_item_id=$3`, itemID, p.OrgID, x.id); e != nil {
-			return Result{}, e
+		if w.DirectItem == nil {
+			if _, e = tx.ExecContext(ctx, `INSERT INTO order_item_media(org_id,order_item_id,media_id,media_type,sort_order) SELECT cim.org_id,$1,cim.media_id,m.media_type,cim.sort_order FROM shopping_cart_item_media cim JOIN media_asset m ON m.id=cim.media_id AND m.org_id=cim.org_id WHERE cim.org_id=$2 AND cim.cart_item_id=$3`, itemID, p.OrgID, x.id); e != nil {
+				return Result{}, e
+			}
 		}
 	}
 	if _, e = tx.ExecContext(ctx, `INSERT INTO order_status_history(org_id,order_id,from_status,to_status,event_code,operator_type,operator_id,operator_name) VALUES($1,$2,NULL,$3,'ORDER_CREATED','CUSTOMER',$4,$5)`, p.OrgID, orderID, fulfillment.OrderPendingConfirmation, p.SubjectID, p.Name); e != nil {
 		return Result{}, e
 	}
-	if selectedIDs == nil {
+	if w.DirectItem != nil {
+		// Direct orders leave the customer's shopping cart unchanged.
+	} else if selectedIDs == nil {
 		if _, e = tx.ExecContext(ctx, `DELETE FROM shopping_cart_item_media cim USING shopping_cart_item ci WHERE ci.id=cim.cart_item_id AND ci.org_id=cim.org_id AND ci.org_id=$1 AND ci.cart_id=$2`, p.OrgID, cart); e != nil {
 			return Result{}, e
 		}

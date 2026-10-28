@@ -1,7 +1,7 @@
 import { request, upload } from './request'
 import { hasSession } from './session'
 export interface FaultMedia { id: string; mediaType: 'IMAGE'|'VIDEO'; name: string; url: string }
-export interface CartItem { id:string;skuId:string;skuVersion:number;name:string;coverImageUrl:string;unitPrice:number;unit:string;quantity:number;subtotal:number;faultDescription?:string;faultMedia:FaultMedia[];faultComplete:boolean }
+export interface CartItem { id:string;skuId:string;skuVersion:number;name:string;coverImageUrl:string;unitPrice:number;unit:string;quantity:number;subtotal:number;faultDescription?:string;faultMedia:FaultMedia[];faultComplete:boolean;available:boolean }
 export interface Cart { items:CartItem[];itemCount:number;totalAmount:number }
 export const getCart=()=>hasSession()?request<Cart>({url:'/api/v1/mini/cart',method:'GET'}):Promise.resolve<Cart>({items:[],itemCount:0,totalAmount:0})
 export const addCart=(skuId:string,quantity:number)=>request<Cart>({url:'/api/v1/mini/cart/items',method:'POST',data:{skuId,quantity}})

@@ -38,7 +38,7 @@ go tool air -c .air.toml -d
 ## 2. 验证管理端 SKU 正向链路
 
 1. 启动管理后台：`npm run admin:dev`。
-2. 使用 `admin / change-me-in-production` 登录。
+2. 使用 `admin / 12345678` 登录。
 3. 在“服务分类”新建或选择分类。
 4. 在“服务 SKU”上传封面图，填写固定价格、服务范围、除外项、质保说明并保存。
 5. 发布 SKU，确认列表状态为 `PUBLISHED`。
@@ -56,10 +56,10 @@ go tool air -c .air.toml -d
 ## 4. API 快速检查
 
 ```powershell
-curl.exe -u admin:change-me-in-production http://localhost:8080/api/v1/admin/catalog/categories?includeDisabled=true
+curl.exe -u admin:12345678 http://localhost:8080/api/v1/admin/catalog/categories?includeDisabled=true
 curl.exe http://localhost:8080/api/v1/catalog/categories
 curl.exe -H "Authorization: Bearer <手机号登录返回的accessToken>" http://localhost:8080/api/v1/mini/cart
-curl.exe -u admin:change-me-in-production http://localhost:8080/api/v1/admin/orders?page=1&pageSize=20
+curl.exe -u admin:12345678 http://localhost:8080/api/v1/admin/orders?page=1&pageSize=20
 ```
 
 所有 JSON 接口保持 `{code,message,data,requestId}` 响应外壳，业务 ID 为字符串，金额单位为分。
@@ -75,7 +75,7 @@ go test ./...
 go build ./cmd/server ./cmd/migrate
 ```
 
-生产环境不得使用默认管理员密码、本地客户令牌或本地媒体存储。需要在上线前接入正式身份认证和对象存储。
+管理员初始化默认密码为 `12345678`，首次登录必须修改；生产环境不得使用本地客户令牌或本地媒体存储，需要接入正式身份认证和对象存储。
 
 ## PLAN-011 客户手机号登录与用户管理
 
