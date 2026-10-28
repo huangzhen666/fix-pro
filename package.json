@@ -13,7 +13,9 @@
     "admin:lint": "npm run lint --workspace admin-web",
     "mini:typecheck": "npm run typecheck --workspace wechat-mini",
     "mini:worker:typecheck": "npm run typecheck --workspace wechat-worker-mini",
-    "check": "npm run admin:lint && npm run admin:build && npm run mini:typecheck && npm run mini:worker:typecheck"
+    "check": "npm run admin:lint && npm run admin:build && npm run mini:typecheck && npm run mini:worker:typecheck",
+    "mini:test:home": "node --test scripts/test-mini-home.cjs",
+    "mini:test:shopping": "node scripts/test-mini-shopping.cjs"
   },
   "engines": {
     "node": ">=24"

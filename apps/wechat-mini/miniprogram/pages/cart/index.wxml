@@ -1,6 +1,6 @@
 <block wx:if="{{sessionReady}}"><view class="page">
   <view wx:if="{{loading}}" class="loading-card">正在加载购物车…</view>
-  <view wx:elif="{{!cart.items.length}}" class="empty"><view class="empty-icon">🛒</view><view class="empty-title">购物车还是空的</view><view class="empty-desc">先去挑选需要的维修服务吧</view><button class="go-service" bindtap="goServices">去选择服务</button></view>
+  <view wx:elif="{{!cart.items.length}}" class="empty"><view class="empty-icon"><image src="/assets/icons/cart.svg" mode="aspectFit"/></view><view class="empty-title">购物车还是空的</view><view class="empty-desc">先去挑选需要的维修服务吧</view><button class="go-service" bindtap="goServices">去选择服务</button></view>
   <block wx:else>
     <view class="cart-tip">已加入 {{cart.itemCount}} 件服务<text>左滑服务可删除</text></view>
     <view class="item {{!item.available ? 'unavailable' : ''}}" wx:for="{{cart.items}}" wx:key="id" wx:for-index="index">

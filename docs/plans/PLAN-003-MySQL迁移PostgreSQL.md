@@ -1,4 +1,4 @@
-# PLAN-003｜懂修匠 MySQL 迁移 PostgreSQL 实施计划
+# PLAN-003｜灵狸护家 MySQL 迁移 PostgreSQL 实施计划
 
 **状态：** Completed  
 **版本：** V1.0  
@@ -11,7 +11,7 @@
 
 ## 1. 交付目标
 
-将 懂修匠 Go 后端的唯一业务数据库从 MySQL 8.4 改为 PostgreSQL 18，同时保持 React 管理后台、微信小程序和 `/api/v1` 契约不变。
+将 灵狸护家 Go 后端的唯一业务数据库从 MySQL 8.4 改为 PostgreSQL 18，同时保持 React 管理后台、微信小程序和 `/api/v1` 契约不变。
 
 最终形态：
 

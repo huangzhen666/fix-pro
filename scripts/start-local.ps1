@@ -170,5 +170,5 @@ Wait-HttpOk -Url 'http://127.0.0.1:8080/api/v1/public/ping' -TimeoutSeconds 30
 Wait-HttpOk -Url 'http://127.0.0.1:5173/' -TimeoutSeconds 30
 Wait-HttpOk -Url 'http://127.0.0.1:5173/api/v1/public/ping' -TimeoutSeconds 30
 
-Write-Host '懂修匠 local startup complete.'
+Write-Host '灵狸护家 local startup complete.'
 Write-Host 'Use -Migrate only after migration files or database changes; do not run npm install or go mod download for daily startup.'

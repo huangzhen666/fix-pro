@@ -8,14 +8,14 @@
     "pages/profile/index"
   ],
   "window": {
-    "navigationBarTitleText": "懂修匠 师傅作业",
+    "navigationBarTitleText": "灵狸护家 · 师傅工作台",
     "navigationBarBackgroundColor": "#ffffff",
     "navigationBarTextStyle": "black",
-    "backgroundColor": "#f5f7fa"
+    "backgroundColor": "#faf6ef"
   },
   "tabBar": {
     "color": "#667085",
-    "selectedColor": "#1677ff",
+    "selectedColor": "#873316",
     "backgroundColor": "#ffffff",
     "list": [
       { "pagePath": "pages/workbench/index", "text": "工作台" },

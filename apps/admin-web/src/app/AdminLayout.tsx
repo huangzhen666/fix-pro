@@ -32,10 +32,10 @@ export function AdminLayout() {
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
-      <Sider width={220} theme="dark">
+      <Sider width={220} theme="dark" className="brand-sider">
         <div className="brand-mark">
-          <span className="brand-dot" />
-          懂修匠 运维中心
+          <img src="/logo.png" alt="灵狸护家" />
+          <span>灵狸护家<small>运营管理中心</small></span>
         </div>
         <Menu
           theme="dark"
@@ -58,7 +58,7 @@ export function AdminLayout() {
         >
           <Space>
             <Typography.Text strong>单城自营环境</Typography.Text>
-            <Tag color="blue">V1 初始化</Tag>
+            <Tag color="#c97831">V1 初始化</Tag>
           </Space>
           <Button
             type="text"

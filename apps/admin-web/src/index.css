@@ -1,7 +1,7 @@
 :root {
   font-family: Inter, "PingFang SC", "Microsoft YaHei", sans-serif;
-  color: #1f2329;
-  background: #f5f7fa;
+  color: #34251f;
+  background: #fffbf6;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 }
@@ -28,18 +28,40 @@ body {
   gap: 10px;
   height: 64px;
   padding: 0 20px;
-  color: white;
-  font-size: 18px;
+  color: #fff8ed;
+  font-size: 17px;
   font-weight: 700;
   letter-spacing: 0.02em;
 }
 
-.brand-dot {
-  width: 12px;
-  height: 12px;
-  border-radius: 4px;
-  background: #69b1ff;
-  box-shadow: 0 0 0 5px rgb(105 177 255 / 18%);
+.brand-mark img {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #fff8ed;
+}
+
+.brand-mark span { display: flex; flex-direction: column; gap: 2px; }
+.brand-mark small { color: #f2c58f; font-size: 11px; font-weight: 400; }
+
+.brand-sider.ant-layout-sider { background: #713017; }
+.brand-sider .ant-menu { background: transparent; }
+.brand-sider .ant-menu-item-selected { background: #a64e22 !important; }
+.brand-sider .ant-menu-item:hover { background: rgb(255 244 226 / 12%) !important; }
+
+.login-brand {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 4px;
+}
+.login-brand img {
+  width: 76px;
+  height: 76px;
+  object-fit: cover;
+  border-radius: 18px;
+  background: #fff8ed;
 }
 
 .page-container {
@@ -138,11 +160,11 @@ body {
   place-items: center;
   padding: 32px;
   background:
-    radial-gradient(circle at 15% 20%, rgb(22 119 255 / 16%), transparent 34%),
-    linear-gradient(145deg, #f7faff 0%, #eef4ff 52%, #f8fafc 100%);
+    radial-gradient(circle at 15% 20%, rgb(239 164 82 / 24%), transparent 34%),
+    linear-gradient(145deg, #fff8eb 0%, #f8ead8 52%, #fffbf6 100%);
 }
 
 .login-card {
   width: 420px;
-  box-shadow: 0 20px 60px rgb(15 23 42 / 10%);
+  box-shadow: 0 20px 60px rgb(104 48 22 / 14%);
 }

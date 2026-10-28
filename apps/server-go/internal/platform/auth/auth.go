@@ -75,7 +75,7 @@ func Admin(username, password string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		u, p, ok := r.BasicAuth()
 		if !ok || subtle.ConstantTimeCompare([]byte(u), []byte(username)) != 1 || subtle.ConstantTimeCompare([]byte(p), []byte(password)) != 1 {
-			w.Header().Set("WWW-Authenticate", `Basic realm="FixPro"`)
+			w.Header().Set("WWW-Authenticate", `Basic realm="Lingli Home Care"`)
 			httpx.Failure(w, r, httpx.E("UNAUTHORIZED", "需要管理员认证", 401))
 			return
 		}

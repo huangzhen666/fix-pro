@@ -300,7 +300,7 @@ CREATE TRIGGER trg_work_order_updated_at BEFORE UPDATE ON work_order FOR EACH RO
 CREATE TRIGGER trg_shopping_cart_updated_at BEFORE UPDATE ON shopping_cart FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER trg_shopping_cart_item_updated_at BEFORE UPDATE ON shopping_cart_item FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
-INSERT INTO organization (id, name, status) VALUES (1, 'FixPro Local', 'ACTIVE');
+INSERT INTO organization (id, name, status) VALUES (1, '灵狸护家本地演示', 'ACTIVE');
 INSERT INTO customer (id, org_id, display_name, source_channel) VALUES (1, 1, '本地演示客户', 'LOCAL');
 INSERT INTO service_category (id, org_id, parent_id, name, sort_order, status) VALUES
     (1001, 1, NULL, '精准测漏', 10, 'ACTIVE'),

@@ -1,4 +1,4 @@
 {
-  "desc": "懂修匠 sitemap",
+  "desc": "灵狸护家小程序站点地图",
   "rules": [{ "action": "allow", "page": "*" }]
 }

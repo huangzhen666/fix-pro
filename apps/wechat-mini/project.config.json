@@ -1,7 +1,7 @@
 {
   "appid": "wxe52c1d4c8c6f794c",
-  "projectname": "懂修匠客户小程序",
-  "description": "懂修匠 客户端与师傅工作台",
+  "projectname": "灵狸护家客户小程序",
+  "description": "灵狸护家家庭服务客户端",
   "miniprogramRoot": "miniprogram/",
   "compileType": "miniprogram",
   "setting": {

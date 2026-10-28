@@ -10,7 +10,7 @@
 
 ## 1. 结论
 
-本期使用 Casbin 建设 懂修匠 管理后台的用户、角色与权限体系，替换当前“单一 Basic Auth 管理员 + 固定 ADMIN 角色 + 全量静态菜单”的临时实现。
+本期使用 Casbin 建设 灵狸护家 管理后台的用户、角色与权限体系，替换当前“单一 Basic Auth 管理员 + 固定 ADMIN 角色 + 全量静态菜单”的临时实现。
 
 目标链路为：
 
@@ -104,14 +104,14 @@
 
 | 能力 | 负责组件 |
 | --- | --- |
-| 用户名、密码、账号状态 | 懂修匠 `admin_user` |
-| 登录、退出、会话续期 | 懂修匠 Go 后端 |
-| 用户属于哪些租户 | 懂修匠 PostgreSQL |
-| 用户拥有哪些角色 | 懂修匠 PostgreSQL + Casbin Adapter |
-| 角色拥有哪些权限 | 懂修匠 PostgreSQL + Casbin Adapter |
+| 用户名、密码、账号状态 | 灵狸护家 `admin_user` |
+| 登录、退出、会话续期 | 灵狸护家 Go 后端 |
+| 用户属于哪些租户 | 灵狸护家 PostgreSQL |
+| 用户拥有哪些角色 | 灵狸护家 PostgreSQL + Casbin Adapter |
+| 角色拥有哪些权限 | 灵狸护家 PostgreSQL + Casbin Adapter |
 | 当前请求是否允许 | Casbin Enforcer |
 | 菜单树和按钮权限 | Go 后端根据有效权限生成 |
-| 权限变更审计 | 懂修匠 `audit_log` / 专用安全审计记录 |
+| 权限变更审计 | 灵狸护家 `audit_log` / 专用安全审计记录 |
 
 Casbin 不保存密码，不签发登录会话，也不直接生成 React 菜单。
 
@@ -621,7 +621,7 @@ GET /api/v1/admin/auth/me
   },
   "organization": {
     "id": "1",
-    "name": "懂修匠 总部"
+    "name": "灵狸护家 总部"
   },
   "roles": [
     { "id": "20", "name": "履约调度" }

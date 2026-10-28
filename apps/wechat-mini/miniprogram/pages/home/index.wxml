@@ -1,1 +1,32 @@
-<view class="home"><view class="hero"><view class="brand">懂修匠 正规家庭维修</view><view class="slogan">测得准 · 修得好 · 有质保</view><view class="search" bindtap="openSearch"><text class="search-icon">⌕</text><text>搜索漏水检测、水路维修</text></view></view><view class="category-panel"><view class="category-grid"><view class="category" wx:for="{{categories}}" wx:key="id" data-id="{{item.id}}" bindtap="openCategory"><view class="category-icon">{{item.icon}}</view><view>{{item.name}}</view></view><view class="category" bindtap="openCategory" data-id=""><view class="category-icon all">⌘</view><view>全部服务</view></view></view></view><view class="promise"><view><text>透明报价</text><text class="muted">范围与除外项写清楚</text></view><view><text>过程留证</text><text class="muted">图片视频随订单保存</text></view><view><text>售后可查</text><text class="muted">服务承诺版本化</text></view></view><view class="section-head"><view>推荐服务</view><view class="more" bindtap="openCategory">更多 ›</view></view><view class="recommend-grid"><view class="service-card" wx:for="{{recommended}}" wx:key="id" data-id="{{item.id}}" bindtap="openService"><image src="{{item.coverImageUrl}}" mode="aspectFill"/><view class="service-name">{{item.name}}</view><view class="price">¥{{item.priceText}}<text>/{{item.unit}}</text></view></view></view><view wx:if="{{!loading && !recommended.length}}" class="empty-card">后台发布服务后，将在这里自动展示</view><view class="help" bindtap="openEmergency"><view><view class="help-title">不知道该选什么服务？</view><view class="muted">描述问题，由客服协助判断</view></view><view>去咨询 ›</view></view><view class="cart-float" bindtap="openCart">🛒<text wx:if="{{cartCount}}">{{cartCount}}</text></view></view>
+<view class="home">
+  <view class="brand-row">
+    <image class="brand-logo" src="/assets/brand/logo-small.png" mode="aspectFit"/>
+    <text class="brand-slogan">让每个家安心舒适</text>
+    <view class="service-city"><image src="/assets/icons/map-pin.svg" mode="aspectFit"/><text>汉川市</text></view>
+  </view>
+  <view class="search-sticky">
+    <view class="search" bindtap="openSearch" role="button" aria-label="搜索维修服务"><image src="/assets/icons/search.svg" mode="aspectFit"/><text>搜索服务，如漏水检测</text></view>
+  </view>
+  <view wx:if="{{loading && !categories.length}}" class="state-card"><view class="state-title">正在为你加载服务…</view><view class="state-description">稍等一下，马上就好</view></view>
+  <view wx:elif="{{error}}" class="state-card"><view class="state-title">{{error}}</view><button class="retry-button" bindtap="load">重新加载</button></view>
+  <block wx:else>
+    <view class="category-panel">
+      <view class="category-grid">
+        <view class="category" wx:for="{{categories}}" wx:key="id" data-id="{{item.id}}" bindtap="openCategory" role="button" aria-label="{{item.name}}"><view class="category-icon"><image src="{{item.iconUrl}}" mode="aspectFit"/></view><text class="category-name">{{item.displayName || item.name}}</text></view>
+        <view class="category" data-id="" bindtap="openCategory" role="button" aria-label="查看全部服务"><view class="category-icon"><image src="/assets/icons/grid.svg" mode="aspectFit"/></view><text class="category-name">全部服务</text></view>
+      </view>
+      <view class="promise"><view><image src="/assets/icons/check-circle.svg" mode="aspectFit"/><text>透明报价</text></view><view><image src="/assets/icons/check-circle.svg" mode="aspectFit"/><text>过程留证</text></view><view><image src="/assets/icons/check-circle.svg" mode="aspectFit"/><text>售后可查</text></view></view>
+    </view>
+    <view class="recommend-section">
+      <view class="section-head"><text>服务推荐</text><view class="more" data-id="" bindtap="openCategory">全部服务<image src="/assets/icons/chevron-right.svg" mode="aspectFit"/></view></view>
+      <view class="recommend-list">
+        <view class="service-card" wx:for="{{recommended}}" wx:key="id" data-id="{{item.id}}" bindtap="openService" role="button" aria-label="查看{{item.name}}">
+          <view class="service-cover"><image wx:if="{{!item.imageFailed}}" class="service-image" src="{{item.coverImageUrl}}" mode="aspectFill" data-id="{{item.id}}" binderror="imageError"/><image wx:else class="fallback-icon" src="/assets/icons/wrench.svg" mode="aspectFit"/></view>
+          <view class="service-copy"><view class="service-name">{{item.name}}</view><view wx:if="{{item.description}}" class="service-description">{{item.description}}</view><view class="service-bottom"><view class="price"><text class="currency">¥</text>{{item.priceText}}<text class="unit">/{{item.unit}}</text></view><image class="service-arrow" src="/assets/icons/chevron-right.svg" mode="aspectFit"/></view></view>
+        </view>
+      </view>
+      <view wx:if="{{!loading && !recommended.length}}" class="state-card empty-state"><image class="state-icon" src="/assets/icons/grid.svg" mode="aspectFit"/><view class="state-title">服务正在准备中</view><view class="state-description">请稍后再来看看</view></view>
+    </view>
+  </block>
+  <view class="cart-float" bindtap="openCart" role="button" aria-label="查看购物车，共{{cartCount}}件服务"><view class="cart-icon-wrap"><image src="/assets/icons/cart.svg" mode="aspectFit"/><text wx:if="{{cartCount}}" class="cart-count">{{cartCount > 99 ? '99+' : cartCount}}</text></view><text>购物车</text></view>
+</view>

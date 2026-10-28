@@ -1,6 +1,6 @@
 apiVersion: 1
 datasources:
-  - name: 懂修匠 Logs
+  - name: 灵狸护家 Logs
     uid: fixpro-loki
     type: loki
     access: proxy
@@ -8,7 +8,7 @@ datasources:
     isDefault: true
     jsonData:
       maxLines: 2000
-  - name: 懂修匠 Health
+  - name: 灵狸护家 Health
     uid: fixpro-prometheus
     type: prometheus
     access: proxy

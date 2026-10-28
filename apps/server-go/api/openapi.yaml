@@ -1,6 +1,6 @@
 openapi: 3.1.0
 info:
-  title: 懂修匠 API
+  title: 灵狸护家 API
   version: 1.0.0-go
 servers:
   - url: http://localhost:8080

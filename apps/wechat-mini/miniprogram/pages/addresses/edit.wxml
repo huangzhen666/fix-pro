@@ -15,7 +15,7 @@
       <view class="form-row"><text class="label">手机号码</text><input class="field" placeholder-class="placeholder" type="number" maxlength="11" placeholder="请填写手机号码" value="{{form.contactMobile}}" data-field="contactMobile" bindinput="input" disabled="{{saving}}"/><button wx:if="{{form.contactMobile}}" class="clear-button" bindtap="clearMobile" disabled="{{saving}}" aria-label="清空手机号码">×</button></view>
       <view class="notice">订单信息将开放给联系人，请谨慎填写</view>
     </view>
-    <view class="default-row"><text>设为默认地址</text><switch checked="{{form.isDefault}}" color="#1677ff" bindchange="defaultChange" disabled="{{saving}}"/></view>
+    <view class="default-row"><text>设为默认地址</text><switch checked="{{form.isDefault}}" color="#204F76" bindchange="defaultChange" disabled="{{saving}}"/></view>
     <button class="save-button" loading="{{saving}}" disabled="{{saving || locating}}" bindtap="save">保存</button>
   </view>
 </block>

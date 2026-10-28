@@ -40,9 +40,13 @@ export function LoginPage() {
     <main className="login-shell">
       <Card className="login-card" bordered={false}>
         <Space direction="vertical" size={4} style={{ marginBottom: 24 }}>
-          <Typography.Title level={2} style={{ margin: 0 }}>
-            懂修匠 运维中心
-          </Typography.Title>
+          <div className="login-brand">
+            <img src="/logo.png" alt="灵狸护家品牌标志" />
+            <div>
+              <Typography.Title level={2} style={{ margin: 0 }}>灵狸护家</Typography.Title>
+              <Typography.Text type="secondary">运营管理中心</Typography.Text>
+            </div>
+          </div>
           <Typography.Text type="secondary">
             使用后台账号登录，权限由角色统一控制。
           </Typography.Text>

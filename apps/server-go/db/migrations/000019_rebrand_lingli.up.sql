@@ -1,0 +1,1 @@
+UPDATE organization SET name = '灵狸护家本地演示' WHERE id = 1 AND name IN ('懂修匠本地演示', 'FixPro Local');

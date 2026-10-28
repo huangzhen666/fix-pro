@@ -17,29 +17,36 @@
     "pages/profile/edit"
   ],
   "window": {
-    "navigationBarTitleText": "懂修匠 家居运维",
+    "navigationBarTitleText": "灵狸护家 · 家庭服务",
     "navigationBarBackgroundColor": "#ffffff",
     "navigationBarTextStyle": "black",
-    "backgroundColor": "#f5f7fa"
+    "backgroundColor": "#F5F7FA"
   },
   "tabBar": {
-    "color": "#667085",
-    "selectedColor": "#1677ff",
-    "backgroundColor": "#ffffff",
+    "color": "#5F6F84",
+    "selectedColor": "#173E61",
+    "backgroundColor": "#FFFFFF",
     "list": [
       {
         "pagePath": "pages/home/index",
-        "text": "首页"
+        "text": "首页",
+        "iconPath": "assets/tabbar/home.png",
+        "selectedIconPath": "assets/tabbar/home-selected.png"
       },
       {
         "pagePath": "pages/services/index",
-        "text": "全部服务"
+        "text": "全部服务",
+        "iconPath": "assets/tabbar/services.png",
+        "selectedIconPath": "assets/tabbar/services-selected.png"
       },
       {
         "pagePath": "pages/profile/index",
-        "text": "我的"
+        "text": "我的",
+        "iconPath": "assets/tabbar/profile.png",
+        "selectedIconPath": "assets/tabbar/profile-selected.png"
       }
-    ]
+    ],
+    "borderStyle": "white"
   },
   "sitemapLocation": "sitemap.json",
   "requiredPrivateInfos": [

@@ -1,4 +1,4 @@
-# 懂修匠 日志与健康观测栈
+# 灵狸护家 日志与健康观测栈
 
 链路：Go Zap JSON → Docker json-file → 受限 Docker 日志代理 → Alloy → Loki → Grafana。Prometheus 和 log-probe 独立监测日志链，不需要应用内远程日志写入。
 
@@ -15,7 +15,7 @@ docker compose --env-file deploy/observability/.env.local \
   -f deploy/compose.yaml -f deploy/observability/compose.observability.yaml up -d --build
 ```
 
-打开 `http://localhost:3000`，登录后进入 懂修匠 文件夹。Loki、Docker 代理、Alloy、Prometheus 不发布主机端口。跨主机入口需配置受控 TLS 代理，不能直接发布 Loki API。当前 overlay 针对已有本地 Compose，不是已验证的生产部署方案；生产数据库、媒体适配器和密钥遵循原有部署要求。
+打开 `http://localhost:3000`，登录后进入 灵狸护家 文件夹。Loki、Docker 代理、Alloy、Prometheus 不发布主机端口。跨主机入口需配置受控 TLS 代理，不能直接发布 Loki API。当前 overlay 针对已有本地 Compose，不是已验证的生产部署方案；生产数据库、媒体适配器和密钥遵循原有部署要求。
 
 维护命令容器需添加 `fixpro.logs=true` 标签、保留结束后的容器直到采集确认，并使用同一轮转策略。初始化工具 stdout 保留计数报告，省略媒体 object-key 清单；完整清理清单仍由原有数据库清单管理。
 

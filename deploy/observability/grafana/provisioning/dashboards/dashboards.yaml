@@ -1,7 +1,7 @@
 apiVersion: 1
 providers:
-  - name: 懂修匠
-    folder: 懂修匠
+  - name: 灵狸护家
+    folder: 灵狸护家
     type: file
     disableDeletion: false
     updateIntervalSeconds: 30

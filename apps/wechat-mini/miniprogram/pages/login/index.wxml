@@ -1,5 +1,5 @@
 <view class="login">
-  <view class="brand">懂修匠</view>
+  <view class="login-brand"><image src="../../assets/brand/logo-small.png" mode="aspectFit"/><text>灵狸护家</text></view>
   <view class="title">手机号快捷登录</view>
   <view class="hint">未注册手机号将自动创建账号</view>
   <button class="login-button" type="primary" open-type="getPhoneNumber" bindgetphonenumber="login" disabled="{{busy}}" loading="{{busy}}">{{busy ? '登录中…' : '手机号快捷登录'}}</button>
@@ -11,7 +11,7 @@
 <view wx:if="{{showPrivacy}}" class="privacy-mask" catchtap="stopPropagation" catchtouchmove="stopPropagation">
   <view class="privacy-dialog" role="dialog" aria-label="隐私保护提示">
     <view class="privacy-title">隐私保护提示</view>
-    <view class="privacy-content">欢迎使用 懂修匠。为提供手机号登录与维修服务，请先阅读并同意<text class="privacy-link" bindtap="privacy">《{{privacyTitle}}》</text>及<text class="privacy-link" bindtap="terms">《用户协议》</text>。同意后将继续微信手机号授权。</view>
+    <view class="privacy-content">欢迎使用灵狸护家。为提供手机号登录与维修服务，请先阅读并同意<text class="privacy-link" bindtap="privacy">《{{privacyTitle}}》</text>及<text class="privacy-link" bindtap="terms">《用户协议》</text>。同意后将继续微信手机号授权。</view>
     <view class="privacy-actions">
       <button class="privacy-cancel" bindtap="privacyDeclined">暂不同意</button>
       <button id="privacy-agree" class="privacy-confirm" type="primary" open-type="agreePrivacyAuthorization" bindagreeprivacyauthorization="privacyAgreed">同意并继续</button>

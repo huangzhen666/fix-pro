@@ -1,8 +1,8 @@
-.page { min-height: 100vh; padding: 24rpx; background: #f5f7fa; box-sizing: border-box; }
+.page { min-height: 100vh; padding: 24rpx; background: #faf6ef; box-sizing: border-box; }
 .card { margin-bottom: 20rpx; padding: 28rpx; background: #fff; border-radius: 16rpx; }
 .row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14rpx; }
 .title { font-size: 30rpx; font-weight: 600; }
-.status { color: #1677ff; font-size: 24rpx; }
+.status { color: #873316; font-size: 24rpx; }
 .muted { margin-top: 8rpx; color: #667085; font-size: 24rpx; }
 .deadline { margin-top: 12rpx; padding: 12rpx 16rpx; color: #b54708; background: #fffaeb; border-radius: 10rpx; font-size: 23rpx; line-height: 1.5; }
 .deadline-expired { color: #b42318; background: #fef3f2; }

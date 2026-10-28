@@ -5,7 +5,7 @@
 ## 从反馈到根因
 
 1. 收集请求参考号、发生时间、操作和受控业务 ID。客户端参考号意味着可能未收到服务端响应，不能据此认定请求已到应用。
-2. Grafana → 懂修匠 线上诊断 → 选环境和时间前后 15 分钟，填写 requestId；看 http.request.completed 的状态、errorCode、route、durationMs、身份、实例/版本。
+2. Grafana → 灵狸护家 线上诊断 → 选环境和时间前后 15 分钟，填写 requestId；看 http.request.completed 的状态、errorCode、route、durationMs、身份、实例/版本。
 3. 查同 ID 的 http.request.failed / http.panic、db.query.slow、dependency.attempt.completed，使用 operation、queryName、sqlState 和 caller 定位。安全摘要不包含 SQL 参数/个人资料。
 4. 按组织和订单/工单 ID 查看业务事件，再用只读 SQL 核对数据库历史的 request_id/job_run_id。诊断事件可能缺失，数据库提交记录为事实来源。
 5. 对照 version/gitCommit 查对应部署代码。静态 queryName 查询 `apps/server-go/api/diagnostic-queries.json`；运行时动态 SQL 未收入清单时使用 operation。源码调整后运行 `python3 scripts/generate-diagnostic-queries.py` 更新清单。

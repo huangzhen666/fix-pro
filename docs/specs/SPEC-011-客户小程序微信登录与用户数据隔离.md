@@ -235,7 +235,7 @@
 
 资料更新采用完整的可编辑字段快照：`displayName` 必填，`avatarMediaId=null` 表示默认头像，提交原头像 ID 表示保留。未知字段或试图修改手机号、角色、组织、客户 ID 的请求返回校验错误。`version` 不匹配返回 409，不覆盖其他设备已保存的资料。
 
-登录接口不接受明文 `mobile`、`openid`、`customerId`、`orgId` 或 `role` 作为身份依据。`phoneCode` 和 `loginCode` 均须有效；任一验证失败时整体登录失败，不产生新客户或会话。手机号兑换响应按微信官方契约验证 AppID 水印、字段和号码范围。微信服务端 access_token 与 懂修匠 客户 Token 分别管理，客户端不能接触前者。
+登录接口不接受明文 `mobile`、`openid`、`customerId`、`orgId` 或 `role` 作为身份依据。`phoneCode` 和 `loginCode` 均须有效；任一验证失败时整体登录失败，不产生新客户或会话。手机号兑换响应按微信官方契约验证 AppID 水印、字段和号码范围。微信服务端 access_token 与 灵狸护家 客户 Token 分别管理，客户端不能接触前者。
 
 本期不注册 `/api/v1/mini/auth/logout` 或客户端账号切换接口；管理员和师傅已有的退出接口不受影响。客户会话过期、账户禁用或服务端撤销仍返回失效结果，客户端清理缓存并引导重新授权。
 

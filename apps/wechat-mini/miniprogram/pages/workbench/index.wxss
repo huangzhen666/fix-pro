@@ -7,12 +7,12 @@
 .task-item {
   padding: 24rpx;
   border-radius: 14rpx;
-  background: #f6f8fb;
+  background: var(--color-page);
 }
 
 .task-value {
   margin-bottom: 6rpx;
-  color: #1677ff;
-  font-size: 42rpx;
-  font-weight: 800;
+  color: var(--color-primary);
+  font-size:21px;
+  font-weight:600;
 }

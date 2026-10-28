@@ -3,8 +3,8 @@
   "groups": [
     {
       "orgId": 1,
-      "name": "懂修匠 diagnostics",
-      "folder": "懂修匠",
+      "name": "灵狸护家 diagnostics",
+      "folder": "灵狸护家",
       "interval": "1m",
       "rules": [
         {

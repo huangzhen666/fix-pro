@@ -265,8 +265,8 @@ passwordVersion
 ```json
 {
   "currentPassword": "w13800138000",
-  "newPassword": "FixPro@20260816",
-  "confirmPassword": "FixPro@20260816"
+  "newPassword": "Lingli@20260816",
+  "confirmPassword": "Lingli@20260816"
 }
 ```
 

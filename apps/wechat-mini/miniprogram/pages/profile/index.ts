@@ -88,5 +88,4 @@ Page({
   },
   openAddresses() { wx.navigateTo({ url: '/pages/addresses/index' }) },
   placeholder(e: any) { wx.showToast({ title: `${e.currentTarget.dataset.name}将在后续版本开放`, icon: 'none' }) },
-  contact() { wx.showModal({ title: '联系客服', content: '本地演示环境暂未配置企业微信或客服电话。', showCancel: false }) },
 })

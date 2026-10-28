@@ -1,0 +1,20 @@
+/* PLAN-014: shared customer mini-program palette. */
+page {
+  --color-page: #F5F7FA;
+  --color-surface: #FFFFFF;
+  --color-text: #1F2937;
+  --color-text-secondary: #5F6F84;
+  --color-primary: #204F76;
+  --color-primary-soft: #EDF3F8;
+  --color-primary-disabled: #D6E1EB;
+  --color-disabled-text: #687E92;
+  --color-brand-accent: #E77932;
+  --color-price: #B94B20;
+  --color-border: #E8EDF2;
+  --color-danger: #C83E3E;
+  --color-danger-soft: #FBEFEE;
+  --color-success: #247A55;
+  --color-on-primary: #FFFFFF;
+  --radius-card: 14px;
+  --space-page: 16px;
+}
