@@ -1,198 +1,1866 @@
+---
 openapi: 3.1.0
 info:
   title: 灵狸护家 API
-  version: 1.0.0-go
+  version: 2.0.0-service-sku
 servers:
-  - url: http://localhost:8080
+- url: http://localhost:8080
 components:
   parameters:
     RequestId:
       name: X-Request-Id
       in: header
       required: false
-      description: Single diagnostic ID; invalid values are replaced by server-generated IDs.
-      schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$'}
+      description: Single diagnostic ID; invalid values are replaced by server-generated
+        IDs.
+      schema:
+        type: string
+        pattern: "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
     Id:
       name: id
       in: path
       required: true
-      schema: {type: string, pattern: '^[1-9][0-9]*$'}
+      schema:
+        type: string
+        pattern: "^[1-9][0-9]*$"
   securitySchemes:
-    miniBearer: {type: http, scheme: bearer}
-    adminSession: {type: apiKey, in: cookie, name: fixpro_admin_session}
-    adminBasic: {type: http, scheme: basic, description: Deprecated local compatibility only}
+    miniBearer:
+      type: http
+      scheme: bearer
+    adminSession:
+      type: apiKey
+      in: cookie
+      name: fixpro_admin_session
+    adminBasic:
+      type: http
+      scheme: basic
+      description: Deprecated local compatibility only
   headers:
     RequestId:
-      description: Diagnostic request ID; returned on JSON, media and error responses and exposed by CORS.
-      schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$'}
+      description: Diagnostic request ID; returned on JSON, media and error responses
+        and exposed by CORS.
+      schema:
+        type: string
+        pattern: "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
     CSRFToken:
       description: Required on state-changing admin requests when using cookie sessions.
-      schema: {type: string}
+      schema:
+        type: string
   schemas:
     ApiResponse:
       type: object
-      required: [code, message, data, requestId]
+      required:
+      - code
+      - message
+      - data
+      - requestId
       properties:
-        code: {type: string}
-        message: {type: string}
+        code:
+          type: string
+        message:
+          type: string
         data: {}
-        requestId: {type: string}
+        requestId:
+          type: string
+    ServiceItem:
+      type: object
+      additionalProperties: false
+      properties:
+        title:
+          type: string
+          minLength: 2
+          maxLength: 30
+        description:
+          type: string
+          minLength: 5
+          maxLength: 200
+        iconKey:
+          type: string
+          enum:
+          - service
+          - inspect
+          - protect
+          - tool
+          - clean
+          - install
+          - report
+          - confirm
+        imageMediaId:
+          type: string
+          minLength: 1
+          maxLength: 150
+      required:
+      - title
+      - description
+    QuantityRule:
+      type: object
+      additionalProperties: false
+      properties:
+        min:
+          type: integer
+          minimum: 1
+          maximum: 9999
+        max:
+          type: integer
+          minimum: 1
+          maximum: 9999
+        step:
+          type: integer
+          minimum: 1
+          maximum: 9999
+        aggregation:
+          type: string
+          enum:
+          - INDEPENDENT
+          - ADDITIVE
+      required:
+      - min
+      - max
+      - step
+      - aggregation
+    CollectionField:
+      type: object
+      additionalProperties: false
+      properties:
+        mode:
+          type: string
+          enum:
+          - HIDDEN
+          - OPTIONAL
+          - REQUIRED
+        label:
+          type: string
+          minLength: 2
+          maxLength: 20
+        hint:
+          type: string
+          minLength: 5
+          maxLength: 150
+      required:
+      - mode
+    AfterSales:
+      type: object
+      additionalProperties: false
+      properties:
+        type:
+          type: string
+          enum:
+          - WARRANTY
+          - REWORK
+          - SUPPORT
+        summary:
+          type: string
+          minLength: 5
+          maxLength: 120
+        coverage:
+          type: string
+          minLength: 5
+          maxLength: 300
+        exclusions:
+          type: array
+          items:
+            type: string
+            minLength: 5
+            maxLength: 150
+          minItems: 0
+          maxItems: 8
+        contactDescription:
+          type: string
+          minLength: 5
+          maxLength: 150
+        period:
+          type: object
+          additionalProperties: false
+          properties:
+            value:
+              type: integer
+              minimum: 1
+              maximum: 3650
+            unit:
+              type: string
+              enum:
+              - HOUR
+              - DAY
+              - MONTH
+            startDescription:
+              type: string
+              minLength: 5
+              maxLength: 100
+          required:
+          - value
+          - unit
+          - startDescription
+      required:
+      - type
+      - summary
+      - coverage
+      - contactDescription
+    Enhancements:
+      type: object
+      additionalProperties: false
+      properties:
+        tags:
+          type: array
+          items:
+            type: string
+            minLength: 2
+            maxLength: 16
+          minItems: 0
+          maxItems: 6
+        facts:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              label:
+                type: string
+                minLength: 2
+                maxLength: 20
+              value:
+                type: string
+                minLength: 1
+                maxLength: 100
+            required:
+            - label
+            - value
+          minItems: 0
+          maxItems: 8
+        resources:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              name:
+                type: string
+                minLength: 2
+                maxLength: 30
+              provider:
+                type: string
+                enum:
+                - PROVIDER
+                - CUSTOMER
+                - SHARED
+              description:
+                type: string
+                minLength: 5
+                maxLength: 150
+            required:
+            - name
+            - provider
+            - description
+          minItems: 0
+          maxItems: 8
+        preparations:
+          type: array
+          items:
+            type: string
+            minLength: 5
+            maxLength: 150
+          minItems: 0
+          maxItems: 8
+        steps:
+          type: array
+          items:
+            "$ref": "#/components/schemas/StepItem"
+          minItems: 0
+          maxItems: 6
+        gallery:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              mediaId:
+                type: string
+                minLength: 1
+                maxLength: 150
+              caption:
+                type: string
+                minLength: 5
+                maxLength: 100
+            required:
+            - mediaId
+            - caption
+          minItems: 0
+          maxItems: 6
+        comparisons:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              title:
+                type: string
+                minLength: 2
+                maxLength: 30
+              beforeMediaId:
+                type: string
+                minLength: 1
+                maxLength: 150
+              afterMediaId:
+                type: string
+                minLength: 1
+                maxLength: 150
+              description:
+                type: string
+                minLength: 5
+                maxLength: 200
+              effectNotice:
+                type: string
+                minLength: 5
+                maxLength: 150
+            required:
+            - title
+            - beforeMediaId
+            - afterMediaId
+            - description
+            - effectNotice
+          minItems: 0
+          maxItems: 3
+        faqs:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              question:
+                type: string
+                minLength: 5
+                maxLength: 60
+              answer:
+                type: string
+                minLength: 5
+                maxLength: 300
+            required:
+            - question
+            - answer
+          minItems: 0
+          maxItems: 6
+    ServiceProfile:
+      type: object
+      additionalProperties: false
+      properties:
+        schemaVersion:
+          type: integer
+          const: 1
+        templateKey:
+          type: string
+          minLength: 1
+          maxLength: 64
+        serviceTarget:
+          type: string
+          minLength: 5
+          maxLength: 150
+        billing:
+          type: object
+          additionalProperties: false
+          properties:
+            unitDefinition:
+              type: string
+              minLength: 5
+              maxLength: 120
+            quantity:
+              "$ref": "#/components/schemas/QuantityRule"
+            quantityExplanation:
+              type: string
+              minLength: 5
+              maxLength: 200
+            visitFeeMode:
+              type: string
+              enum:
+              - INCLUDED
+              - WAIVED
+              - NOT_APPLICABLE
+            feeDescription:
+              type: string
+              minLength: 5
+              maxLength: 200
+          required:
+          - unitDefinition
+          - quantity
+          - quantityExplanation
+          - visitFeeMode
+          - feeDescription
+        includedItems:
+          type: array
+          items:
+            "$ref": "#/components/schemas/ServiceItem"
+          minItems: 1
+          maxItems: 12
+        excludedItems:
+          type: array
+          items:
+            "$ref": "#/components/schemas/ExcludedItem"
+          minItems: 0
+          maxItems: 12
+        unsuitableConditions:
+          type: array
+          items:
+            type: string
+            minLength: 2
+            maxLength: 100
+          minItems: 0
+          maxItems: 8
+        purchaseNotices:
+          type: array
+          items:
+            type: string
+            minLength: 5
+            maxLength: 150
+          minItems: 0
+          maxItems: 8
+        acceptanceCriteria:
+          type: array
+          items:
+            type: string
+            minLength: 5
+            maxLength: 150
+          minItems: 1
+          maxItems: 8
+        afterSales:
+          "$ref": "#/components/schemas/AfterSales"
+        demandCollection:
+          type: object
+          additionalProperties: false
+          properties:
+            description:
+              "$ref": "#/components/schemas/CollectionField"
+            media:
+              "$ref": "#/components/schemas/CollectionField"
+          required:
+          - description
+          - media
+        enhancements:
+          anyOf:
+          - "$ref": "#/components/schemas/Enhancements"
+          - type: 'null'
+      required:
+      - schemaVersion
+      - serviceTarget
+      - billing
+      - includedItems
+      - acceptanceCriteria
+      - afterSales
+      - demandCollection
+      description: Drafts may be incomplete. Publishing requires all core business
+        fields; WARRANTY requires period; enabled media and enhancement entries must
+        be complete. Maximum 64 KiB. No layout/modules/style fields.
+    SkuWrite:
+      type: object
+      additionalProperties: false
+      properties:
+        categoryId:
+          type: string
+          minLength: 1
+          maxLength: 150
+        name:
+          type: string
+          minLength: 2
+          maxLength: 128
+        description:
+          type: string
+          maxLength: 500
+        detailProfile:
+          "$ref": "#/components/schemas/DraftServiceProfile"
+        priceMode:
+          type: string
+          enum:
+          - FIXED
+        basePrice:
+          type: integer
+          minimum: 0
+          maximum: 99999999
+        unit:
+          type: string
+          minLength: 1
+          maxLength: 8
+        coverMediaId:
+          type: string
+        galleryMediaIds:
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 150
+          minItems: 0
+          maxItems: 8
+        requiredSkillIds:
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 150
+          minItems: 0
+          maxItems: 100
+        version:
+          type: integer
+          minimum: 0
+      required:
+      - categoryId
+      - name
+      - detailProfile
+      - priceMode
+      - unit
+    SkuTemplate:
+      type: object
+      additionalProperties: false
+      properties:
+        key:
+          type: string
+          minLength: 1
+          maxLength: 64
+        name:
+          type: string
+          minLength: 2
+          maxLength: 30
+        unit:
+          type: string
+          minLength: 1
+          maxLength: 8
+        profile:
+          "$ref": "#/components/schemas/DraftServiceProfile"
+        candidates:
+          type: array
+          items:
+            "$ref": "#/components/schemas/ServiceItem"
+          minItems: 0
+          maxItems: 12
+      required:
+      - key
+      - name
+      - unit
+      - profile
+      - candidates
+    ServiceSummary:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          minLength: 1
+          maxLength: 150
+        skuCode:
+          type: string
+          minLength: 1
+          maxLength: 150
+        name:
+          type: string
+          minLength: 2
+          maxLength: 128
+        description:
+          type: string
+        priceMode:
+          type: string
+          enum:
+          - FIXED
+        price:
+          type: integer
+        unit:
+          type: string
+          minLength: 1
+          maxLength: 8
+        coverImageUrl:
+          type: string
+          minLength: 1
+          maxLength: 150
+        galleryImageUrls:
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 150
+          minItems: 0
+          maxItems: 9
+        publishedVersion:
+          type: integer
+        unitDefinition:
+          type: string
+          minLength: 5
+          maxLength: 120
+        quantityRule:
+          "$ref": "#/components/schemas/QuantityRule"
+    ServiceDetail:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          minLength: 1
+          maxLength: 150
+        skuCode:
+          type: string
+          minLength: 1
+          maxLength: 150
+        name:
+          type: string
+          minLength: 2
+          maxLength: 128
+        description:
+          type: string
+        priceMode:
+          type: string
+          enum:
+          - FIXED
+        price:
+          type: integer
+        unit:
+          type: string
+          minLength: 1
+          maxLength: 8
+        coverImageUrl:
+          type: string
+          minLength: 1
+          maxLength: 150
+        galleryImageUrls:
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 150
+          minItems: 0
+          maxItems: 8
+        publishedVersion:
+          type: integer
+        detailProfile:
+          "$ref": "#/components/schemas/ServiceProfile"
+      required:
+      - id
+      - name
+      - price
+      - unit
+      - publishedVersion
+      - detailProfile
+    CartDemandWrite:
+      type: object
+      additionalProperties: false
+      properties:
+        demandDescription:
+          type: string
+          maxLength: 500
+        mediaIds:
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 150
+          minItems: 0
+          maxItems: 8
+      required:
+      - demandDescription
+      - mediaIds
+    DemandMedia:
+      type: object
+      properties:
+        id:
+          type: string
+        mediaType:
+          enum:
+          - IMAGE
+          - VIDEO
+        name:
+          type: string
+        url:
+          type: string
+    CartItem:
+      type: object
+      properties:
+        id:
+          type: string
+        skuId:
+          type: string
+        name:
+          type: string
+        unit:
+          type: string
+        coverImageUrl:
+          type: string
+        demandDescription:
+          type: string
+        skuVersion:
+          type: integer
+        currentVersion:
+          type: integer
+        quantity:
+          type: integer
+        unitPrice:
+          type: integer
+        subtotal:
+          type: integer
+        available:
+          type: boolean
+        needsConfirmation:
+          type: boolean
+        demandComplete:
+          type: boolean
+        detailProfile:
+          "$ref": "#/components/schemas/ServiceProfile"
+        demandMedia:
+          type: array
+          items:
+            "$ref": "#/components/schemas/DemandMedia"
+    CartView:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            "$ref": "#/components/schemas/CartItem"
+        itemCount:
+          type: integer
+        totalAmount:
+          type: integer
+    ExcludedItem:
+      type: object
+      additionalProperties: false
+      properties:
+        title:
+          type: string
+          minLength: 2
+          maxLength: 30
+        description:
+          type: string
+          minLength: 5
+          maxLength: 200
+      required:
+      - title
+      - description
+    StepItem:
+      type: object
+      additionalProperties: false
+      properties:
+        title:
+          type: string
+          minLength: 2
+          maxLength: 30
+        description:
+          type: string
+          minLength: 5
+          maxLength: 200
+        iconKey:
+          type: string
+          enum:
+          - service
+          - inspect
+          - protect
+          - tool
+          - clean
+          - install
+          - report
+          - confirm
+      required:
+      - title
+      - description
+    DraftServiceProfile:
+      type: object
+      additionalProperties: false
+      properties:
+        schemaVersion:
+          type: integer
+          const: 1
+        templateKey:
+          type: string
+          minLength: 0
+          maxLength: 64
+        serviceTarget:
+          type: string
+          minLength: 0
+          maxLength: 150
+        billing:
+          type: object
+          additionalProperties: false
+          properties:
+            unitDefinition:
+              type: string
+              minLength: 0
+              maxLength: 120
+            quantity:
+              type: object
+              additionalProperties: false
+              properties:
+                min:
+                  type: integer
+                  minimum: 0
+                  maximum: 9999
+                max:
+                  type: integer
+                  minimum: 0
+                  maximum: 9999
+                step:
+                  type: integer
+                  minimum: 0
+                  maximum: 9999
+                aggregation:
+                  type: string
+                  enum:
+                  - INDEPENDENT
+                  - ADDITIVE
+                  - ''
+            quantityExplanation:
+              type: string
+              minLength: 0
+              maxLength: 200
+            visitFeeMode:
+              type: string
+              enum:
+              - INCLUDED
+              - WAIVED
+              - NOT_APPLICABLE
+              - ''
+            feeDescription:
+              type: string
+              minLength: 0
+              maxLength: 200
+        includedItems:
+          type:
+          - array
+          - 'null'
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              title:
+                type: string
+                minLength: 0
+                maxLength: 30
+              description:
+                type: string
+                minLength: 0
+                maxLength: 200
+              iconKey:
+                type: string
+                enum:
+                - service
+                - inspect
+                - protect
+                - tool
+                - clean
+                - install
+                - report
+                - confirm
+                - ''
+              imageMediaId:
+                type: string
+                minLength: 0
+                maxLength: 150
+          minItems: 0
+          maxItems: 12
+        excludedItems:
+          type:
+          - array
+          - 'null'
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              title:
+                type: string
+                minLength: 0
+                maxLength: 30
+              description:
+                type: string
+                minLength: 0
+                maxLength: 200
+          minItems: 0
+          maxItems: 12
+        unsuitableConditions:
+          type:
+          - array
+          - 'null'
+          items:
+            type: string
+            minLength: 0
+            maxLength: 100
+          minItems: 0
+          maxItems: 8
+        purchaseNotices:
+          type:
+          - array
+          - 'null'
+          items:
+            type: string
+            minLength: 0
+            maxLength: 150
+          minItems: 0
+          maxItems: 8
+        acceptanceCriteria:
+          type:
+          - array
+          - 'null'
+          items:
+            type: string
+            minLength: 0
+            maxLength: 150
+          minItems: 0
+          maxItems: 8
+        afterSales:
+          type: object
+          additionalProperties: false
+          properties:
+            type:
+              type: string
+              enum:
+              - WARRANTY
+              - REWORK
+              - SUPPORT
+              - ''
+            summary:
+              type: string
+              minLength: 0
+              maxLength: 120
+            coverage:
+              type: string
+              minLength: 0
+              maxLength: 300
+            exclusions:
+              type:
+              - array
+              - 'null'
+              items:
+                type: string
+                minLength: 0
+                maxLength: 150
+              minItems: 0
+              maxItems: 8
+            contactDescription:
+              type: string
+              minLength: 0
+              maxLength: 150
+            period:
+              type: object
+              additionalProperties: false
+              properties:
+                value:
+                  type: integer
+                  minimum: 0
+                  maximum: 3650
+                unit:
+                  type: string
+                  enum:
+                  - HOUR
+                  - DAY
+                  - MONTH
+                  - ''
+                startDescription:
+                  type: string
+                  minLength: 0
+                  maxLength: 100
+        demandCollection:
+          type: object
+          additionalProperties: false
+          properties:
+            description:
+              type: object
+              additionalProperties: false
+              properties:
+                mode:
+                  type: string
+                  enum:
+                  - HIDDEN
+                  - OPTIONAL
+                  - REQUIRED
+                  - ''
+                label:
+                  type: string
+                  minLength: 0
+                  maxLength: 20
+                hint:
+                  type: string
+                  minLength: 0
+                  maxLength: 150
+            media:
+              type: object
+              additionalProperties: false
+              properties:
+                mode:
+                  type: string
+                  enum:
+                  - HIDDEN
+                  - OPTIONAL
+                  - REQUIRED
+                  - ''
+                label:
+                  type: string
+                  minLength: 0
+                  maxLength: 20
+                hint:
+                  type: string
+                  minLength: 0
+                  maxLength: 150
+        enhancements:
+          anyOf:
+          - type: object
+            additionalProperties: false
+            properties:
+              tags:
+                type:
+                - array
+                - 'null'
+                items:
+                  type: string
+                  minLength: 0
+                  maxLength: 16
+                minItems: 0
+                maxItems: 6
+              facts:
+                type:
+                - array
+                - 'null'
+                items:
+                  type: object
+                  additionalProperties: false
+                  properties:
+                    label:
+                      type: string
+                      minLength: 0
+                      maxLength: 20
+                    value:
+                      type: string
+                      minLength: 0
+                      maxLength: 100
+                minItems: 0
+                maxItems: 8
+              resources:
+                type:
+                - array
+                - 'null'
+                items:
+                  type: object
+                  additionalProperties: false
+                  properties:
+                    name:
+                      type: string
+                      minLength: 0
+                      maxLength: 30
+                    provider:
+                      type: string
+                      enum:
+                      - PROVIDER
+                      - CUSTOMER
+                      - SHARED
+                      - ''
+                    description:
+                      type: string
+                      minLength: 0
+                      maxLength: 150
+                minItems: 0
+                maxItems: 8
+              preparations:
+                type:
+                - array
+                - 'null'
+                items:
+                  type: string
+                  minLength: 0
+                  maxLength: 150
+                minItems: 0
+                maxItems: 8
+              steps:
+                type:
+                - array
+                - 'null'
+                items:
+                  type: object
+                  additionalProperties: false
+                  properties:
+                    title:
+                      type: string
+                      minLength: 0
+                      maxLength: 30
+                    description:
+                      type: string
+                      minLength: 0
+                      maxLength: 200
+                    iconKey:
+                      type: string
+                      enum:
+                      - service
+                      - inspect
+                      - protect
+                      - tool
+                      - clean
+                      - install
+                      - report
+                      - confirm
+                      - ''
+                minItems: 0
+                maxItems: 6
+              gallery:
+                type:
+                - array
+                - 'null'
+                items:
+                  type: object
+                  additionalProperties: false
+                  properties:
+                    mediaId:
+                      type: string
+                      minLength: 0
+                      maxLength: 150
+                    caption:
+                      type: string
+                      minLength: 0
+                      maxLength: 100
+                minItems: 0
+                maxItems: 6
+              comparisons:
+                type:
+                - array
+                - 'null'
+                items:
+                  type: object
+                  additionalProperties: false
+                  properties:
+                    title:
+                      type: string
+                      minLength: 0
+                      maxLength: 30
+                    beforeMediaId:
+                      type: string
+                      minLength: 0
+                      maxLength: 150
+                    afterMediaId:
+                      type: string
+                      minLength: 0
+                      maxLength: 150
+                    description:
+                      type: string
+                      minLength: 0
+                      maxLength: 200
+                    effectNotice:
+                      type: string
+                      minLength: 0
+                      maxLength: 150
+                minItems: 0
+                maxItems: 3
+              faqs:
+                type:
+                - array
+                - 'null'
+                items:
+                  type: object
+                  additionalProperties: false
+                  properties:
+                    question:
+                      type: string
+                      minLength: 0
+                      maxLength: 60
+                    answer:
+                      type: string
+                      minLength: 0
+                      maxLength: 300
+                minItems: 0
+                maxItems: 6
+          - type: 'null'
+      description: Draft fields may be incomplete. Publishing uses the strict ServiceProfile
+        and conditional policy/media validation.
+      required:
+      - schemaVersion
+    WorkerServiceItem:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        unit:
+          type: string
+        quantity:
+          type: integer
+          description: Purchased units; cumulative billing is not an evidence-object
+            count.
+        detailProfile:
+          "$ref": "#/components/schemas/ServiceProfile"
+        customerNote:
+          type: string
+        customerMedia:
+          type: array
+          items:
+            "$ref": "#/components/schemas/DemandMedia"
+        evidencePairs:
+          type: array
+          items:
+            type: object
+            properties:
+              unitNo:
+                type: integer
+              before:
+                type: object
+              after:
+                type: object
 paths:
-  /api/v1/admin/auth/login:
+  "/api/v1/admin/auth/login":
     post:
-      responses: {'200': {description: Admin session created}, '401': {description: Invalid credentials}}
-  /api/v1/admin/auth/logout:
-    post: {security: [{adminSession: []}], responses: {'200': {description: Session revoked}}}
-  /api/v1/admin/auth/me:
-    get: {security: [{adminSession: []}], responses: {'200': {description: Current admin and effective permissions}}}
-  /api/v1/admin/auth/password:
-    post: {security: [{adminSession: []}], parameters: [{name: X-CSRF-Token, in: header, required: true, schema: {type: string}}], responses: {'200': {description: Password changed}}}
-  /api/v1/admin/permissions:
-    get: {security: [{adminSession: []}], responses: {'200': {description: Permission catalog}}}
-  /api/v1/admin/roles:
-    get: {security: [{adminSession: []}], responses: {'200': {description: Role list}}}
-    post: {security: [{adminSession: []}], responses: {'200': {description: Role created}}}
-  /api/v1/admin/users:
-    get: {security: [{adminSession: []}], responses: {'200': {description: Admin user list}}}
-    post: {security: [{adminSession: []}], responses: {'200': {description: Admin user created with one-time temporary password}}}
-  /api/v1/admin/users/{id}/status:
-    post: {security: [{adminSession: []}], parameters: [{$ref: '#/components/parameters/Id'}, {name: X-CSRF-Token, in: header, required: true, schema: {type: string}}], responses: {'200': {description: Admin user status updated}}}
-  /api/v1/admin/audit-logs:
-    get: {security: [{adminSession: []}], responses: {'200': {description: Audit log list}}}
-  /actuator/health:
-    get: {responses: {'200': {description: Healthy}}}
-  /api/v1/public/ping:
-    get: {responses: {'200': {description: Pong}}}
-  /api/v1/catalog/categories:
-    get: {responses: {'200': {description: Published services grouped by category}}}
-  /api/v1/catalog/services:
-    get:
-      parameters: [{name: keyword, in: query, schema: {type: string}}]
-      responses: {'200': {description: Published service list}}
-  /api/v1/catalog/services/{id}:
-    get:
-      parameters: [{$ref: '#/components/parameters/Id'}]
-      responses: {'200': {description: Published service detail}}
-  /api/v1/admin/catalog/categories:
-    get: {security: [{adminBasic: []}], responses: {'200': {description: Categories}}}
-    post: {security: [{adminBasic: []}], responses: {'200': {description: Category created}}}
-  /api/v1/admin/catalog/skus:
-    get: {security: [{adminBasic: []}], responses: {'200': {description: SKU page}}}
-    post: {security: [{adminBasic: []}], responses: {'200': {description: SKU draft created}}}
-  /api/v1/admin/media/images:
-    post: {security: [{adminBasic: []}], responses: {'200': {description: SKU image uploaded}}}
-  /api/v1/mini/cart:
-    get: {security: [{miniBearer: []}], responses: {'200': {description: 'Cart items include available (current publication status); totalAmount excludes unavailable items'}}}
-  /api/v1/mini/cart/items:
-    post: {security: [{miniBearer: []}], responses: {'200': {description: Item added}}}
-  /api/v1/mini/media/fault:
-    post: {security: [{miniBearer: []}], responses: {'200': {description: Fault evidence uploaded}}}
-  /api/v1/mini/orders:
+      responses:
+        '200':
+          description: Admin session created
+        '401':
+          description: Invalid credentials
+  "/api/v1/admin/auth/logout":
     post:
-      security: [{miniBearer: []}]
-      parameters: [{name: Idempotency-Key, in: header, required: true, schema: {type: string, maxLength: 128}}]
-      description: 使用 cartItemIds 结算购物车选中项，或使用 directItem 立即下单。两者不能同时传递；立即下单不会修改购物车，价格由服务端已发布版本确定。下架服务禁止下单，返回 SKU_NOT_AVAILABLE（409）。
+      security:
+      - adminSession: []
+      responses:
+        '200':
+          description: Session revoked
+  "/api/v1/admin/auth/me":
+    get:
+      security:
+      - adminSession: []
+      responses:
+        '200':
+          description: Current admin and effective permissions
+  "/api/v1/admin/auth/password":
+    post:
+      security:
+      - adminSession: []
+      parameters:
+      - name: X-CSRF-Token
+        in: header
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Password changed
+  "/api/v1/admin/permissions":
+    get:
+      security:
+      - adminSession: []
+      responses:
+        '200':
+          description: Permission catalog
+  "/api/v1/admin/roles":
+    get:
+      security:
+      - adminSession: []
+      responses:
+        '200':
+          description: Role list
+    post:
+      security:
+      - adminSession: []
+      responses:
+        '200':
+          description: Role created
+  "/api/v1/admin/users":
+    get:
+      security:
+      - adminSession: []
+      responses:
+        '200':
+          description: Admin user list
+    post:
+      security:
+      - adminSession: []
+      responses:
+        '200':
+          description: Admin user created with one-time temporary password
+  "/api/v1/admin/users/{id}/status":
+    post:
+      security:
+      - adminSession: []
+      parameters:
+      - "$ref": "#/components/parameters/Id"
+      - name: X-CSRF-Token
+        in: header
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Admin user status updated
+  "/api/v1/admin/audit-logs":
+    get:
+      security:
+      - adminSession: []
+      responses:
+        '200':
+          description: Audit log list
+  "/actuator/health":
+    get:
+      responses:
+        '200':
+          description: Healthy
+  "/api/v1/public/ping":
+    get:
+      responses:
+        '200':
+          description: Pong
+  "/api/v1/catalog/categories":
+    get:
+      responses:
+        '200':
+          description: Published services grouped by category
+  "/api/v1/catalog/services":
+    get:
+      parameters:
+      - name: keyword
+        in: query
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                - "$ref": "#/components/schemas/ApiResponse"
+                - type: object
+                  properties:
+                    data:
+                      type: array
+                      items:
+                        "$ref": "#/components/schemas/ServiceSummary"
+                      minItems: 0
+                      maxItems: 10000
+  "/api/v1/catalog/services/{id}":
+    get:
+      parameters:
+      - "$ref": "#/components/parameters/Id"
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                - "$ref": "#/components/schemas/ApiResponse"
+                - type: object
+                  properties:
+                    data:
+                      "$ref": "#/components/schemas/ServiceDetail"
+  "/api/v1/admin/catalog/categories":
+    get:
+      security:
+      - adminBasic: []
+      responses:
+        '200':
+          description: Categories
+    post:
+      security:
+      - adminBasic: []
+      responses:
+        '200':
+          description: Category created
+  "/api/v1/admin/catalog/skus":
+    get:
+      security:
+      - adminSession: []
+      responses:
+        '200':
+          description: SKU page
+    post:
+      security:
+      - adminSession: []
+      responses:
+        '200':
+          description: OK
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/SkuWrite"
+  "/api/v1/admin/media/images":
+    post:
+      security:
+      - adminBasic: []
+      responses:
+        '200':
+          description: SKU image uploaded
+  "/api/v1/mini/cart":
+    get:
+      security:
+      - miniBearer: []
+      responses:
+        '200':
+          description: Cart items include available (current publication status);
+            totalAmount excludes unavailable items
+          content:
+            application/json:
+              schema:
+                allOf:
+                - "$ref": "#/components/schemas/ApiResponse"
+                - properties:
+                    data:
+                      "$ref": "#/components/schemas/CartView"
+  "/api/v1/mini/cart/items":
+    post:
+      security:
+      - miniBearer: []
+      responses:
+        '200':
+          description: OK
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [contactName, contactMobile, serviceAddress, appointmentDate, appointmentSlot]
+              additionalProperties: false
               properties:
-                contactName: {type: string}
-                contactMobile: {type: string}
-                serviceAddress: {type: string}
-                appointmentDate: {type: string, format: date}
-                appointmentSlot: {type: string}
-                cartItemIds: {type: array, minItems: 1, items: {type: string}}
+                skuId:
+                  type: string
+                  minLength: 1
+                  maxLength: 150
+                quantity:
+                  type: integer
+                  minimum: 1
+                  maximum: 9999
+              required:
+              - skuId
+              - quantity
+  "/api/v1/mini/media/demand":
+    post:
+      security:
+      - miniBearer: []
+      responses:
+        '200':
+          description: Customer demand evidence uploaded; max 6 images and 2 videos
+            per order item; scope is unchanged.
+  "/api/v1/mini/orders":
+    post:
+      security:
+      - miniBearer: []
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          maxLength: 128
+      description: '使用 cartItemIds 结算购物车选中项，或使用 directItem 立即下单。两者不能同时传递；立即下单不会修改购物车，价格由服务端已发布版本确定。下架服务禁止下单，返回
+        SKU_NOT_AVAILABLE（409）。 Quantity follows per-SKU min/max/step. demandDescription/mediaIds
+        are required only by the published demandCollection rules. Content or demand
+        rule changes require confirmation. Errors: SKU_QUANTITY_INVALID, ORDER_DEMAND_REQUIRED,
+        CART_SKU_CHANGED. Orders retain detailProfile snapshots.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - contactName
+              - contactMobile
+              - serviceAddress
+              - appointmentDate
+              - appointmentSlot
+              properties:
+                contactName:
+                  type: string
+                contactMobile:
+                  type: string
+                serviceAddress:
+                  type: string
+                appointmentDate:
+                  type: string
+                  format: date
+                appointmentSlot:
+                  type: string
+                cartItemIds:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: string
                 directItem:
                   type: object
-                  required: [skuId, skuVersion, quantity]
+                  required:
+                  - skuId
+                  - skuVersion
+                  - quantity
                   properties:
-                    skuId: {type: string}
-                    skuVersion: {type: integer, minimum: 1}
-                    quantity: {type: integer, minimum: 1, maximum: 99}
-      responses: {'200': {description: Order created or replayed}}
-  /api/v1/mini/orders/{id}:
-    get: {security: [{miniBearer: []}], parameters: [{$ref: '#/components/parameters/Id'}], responses: {'200': {description: Customer order detail and work order progress}}}
-  /api/v1/mini/work-orders/{id}:
-    get: {security: [{miniBearer: []}], parameters: [{$ref: '#/components/parameters/Id'}], responses: {'200': {description: Customer work order detail}}}
-  /api/v1/mini/work-orders/{id}/acceptance:
-    post: {security: [{miniBearer: []}], parameters: [{$ref: '#/components/parameters/Id'}, {name: Idempotency-Key, in: header, required: true, schema: {type: string}}], responses: {'200': {description: Customer acceptance recorded}}}
-  /api/v1/admin/orders/{id}/confirm:
+                    skuId:
+                      type: string
+                    skuVersion:
+                      type: integer
+                      minimum: 1
+                    quantity:
+                      type: integer
+                      minimum: 1
+                      maximum: 9999
+                    demandDescription:
+                      type: string
+                      maxLength: 500
+                    mediaIds:
+                      type: array
+                      items:
+                        type: string
+                        minLength: 1
+                        maxLength: 150
+                      minItems: 0
+                      maxItems: 8
+      responses:
+        '200':
+          description: Order created or replayed
+  "/api/v1/mini/orders/{id}":
+    get:
+      security:
+      - miniBearer: []
+      parameters:
+      - "$ref": "#/components/parameters/Id"
+      responses:
+        '200':
+          description: Customer order detail and work order progress
+  "/api/v1/mini/work-orders/{id}":
+    get:
+      security:
+      - miniBearer: []
+      parameters:
+      - "$ref": "#/components/parameters/Id"
+      responses:
+        '200':
+          description: Customer work order detail
+  "/api/v1/mini/work-orders/{id}/acceptance":
     post:
-      security: [{adminBasic: []}]
-      parameters: [{$ref: '#/components/parameters/Id'}, {name: Idempotency-Key, in: header, required: true, schema: {type: string}}]
-      responses: {'200': {description: Order confirmed and work orders created}}
-  /api/v1/admin/workers:
-    get: {security: [{adminBasic: []}], responses: {'200': {description: Worker list with filters}}}
-    post: {security: [{adminBasic: []}], responses: {'200': {description: Worker draft created or activated}}}
-  /api/v1/admin/workers/{id}:
-    get: {security: [{adminBasic: []}], parameters: [{$ref: '#/components/parameters/Id'}], responses: {'200': {description: Worker detail}}}
-    put: {security: [{adminBasic: []}], parameters: [{$ref: '#/components/parameters/Id'}], responses: {'200': {description: Worker updated}}}
-  /api/v1/admin/workers/{id}/activate:
-    post: {security: [{adminBasic: []}], parameters: [{$ref: '#/components/parameters/Id'}], responses: {'200': {description: Worker activated}}}
-  /api/v1/admin/workers/{id}/disable:
-    post: {security: [{adminBasic: []}], parameters: [{$ref: '#/components/parameters/Id'}], responses: {'200': {description: Worker disabled and optional not-started work orders returned}}}
-  /api/v1/admin/workers/{id}/reset-password:
-    post: {security: [{adminSession: []}], parameters: [{$ref: '#/components/parameters/Id'}], responses: {'200': {description: Worker password reset with one-time temporary password}}}
-  /api/v1/admin/workers/candidates:
-    get: {security: [{adminBasic: []}], parameters: [{name: workOrderId, in: query, required: true, schema: {type: string}}], responses: {'200': {description: Skill-matched worker candidates}}}
-  /api/v1/admin/worker-trades:
-    get: {security: [{adminBasic: []}], responses: {'200': {description: Worker trade dictionary}}}
-    post: {security: [{adminBasic: []}], responses: {'200': {description: Worker trade created}}}
-  /api/v1/admin/worker-trades/{id}:
-    put: {security: [{adminBasic: []}], parameters: [{$ref: '#/components/parameters/Id'}], responses: {'200': {description: Worker trade updated}}}
-    delete: {security: [{adminBasic: []}], parameters: [{$ref: '#/components/parameters/Id'}], responses: {'200': {description: Worker trade deleted when it has no skills}}}
-  /api/v1/admin/worker-trades/{id}/status:
-    post: {security: [{adminBasic: []}], parameters: [{$ref: '#/components/parameters/Id'}], responses: {'200': {description: Worker trade status updated}}}
-  /api/v1/admin/worker-skills:
-    get: {security: [{adminBasic: []}], responses: {'200': {description: Worker skill dictionary}}}
-    post: {security: [{adminBasic: []}], responses: {'200': {description: Worker skill created}}}
-  /api/v1/admin/worker-skills/{id}:
-    put: {security: [{adminBasic: []}], parameters: [{$ref: '#/components/parameters/Id'}], responses: {'200': {description: Worker skill updated}}}
-    delete: {security: [{adminBasic: []}], parameters: [{$ref: '#/components/parameters/Id'}], responses: {'200': {description: Worker skill deleted when it is unused}}}
-  /api/v1/admin/worker-skills/{id}/status:
-    post: {security: [{adminBasic: []}], parameters: [{$ref: '#/components/parameters/Id'}], responses: {'200': {description: Worker skill status updated}}}
-  /api/v1/admin/workers/{id}/status:
-    post: {security: [{adminBasic: []}], parameters: [{$ref: '#/components/parameters/Id'}], responses: {'200': {description: Worker status updated}}}
-  /api/v1/admin/work-orders:
-    get: {security: [{adminBasic: []}], responses: {'200': {description: Work order page}}}
-  /api/v1/admin/work-orders/{id}:
-    get: {security: [{adminBasic: []}], parameters: [{$ref: '#/components/parameters/Id'}], responses: {'200': {description: Work order detail with completion evidence}}}
-  /api/v1/admin/work-orders/{id}/assign:
-    post: {security: [{adminBasic: []}], parameters: [{$ref: '#/components/parameters/Id'}, {name: Idempotency-Key, in: header, required: true, schema: {type: string}}], responses: {'200': {description: Work order assigned}}}
-  /api/v1/admin/work-orders/{id}/reassign:
-    post: {security: [{adminBasic: []}], parameters: [{$ref: '#/components/parameters/Id'}, {name: Idempotency-Key, in: header, required: true, schema: {type: string}}], responses: {'200': {description: Work order reassigned}}}
-  /api/v1/admin/work-orders/{id}/reschedule:
-    post: {security: [{adminBasic: []}], parameters: [{$ref: '#/components/parameters/Id'}], responses: {'200': {description: Appointment updated}}}
-  /api/v1/admin/work-orders/{id}/completion-review:
-    post: {security: [{adminBasic: []}], parameters: [{$ref: '#/components/parameters/Id'}, {name: Idempotency-Key, in: header, required: true, schema: {type: string}}], responses: {'200': {description: Completion reviewed}}}
-  /api/v1/worker/work-orders:
-    get: {security: [{miniBearer: []}], responses: {'200': {description: Assigned worker work order page}}}
-  /api/v1/worker/auth/login:
-    post: {responses: {'200': {description: Worker access token created}, '401': {description: Mobile or password invalid}}}
-  /api/v1/worker/auth/me:
-    get: {security: [{miniBearer: []}], responses: {'200': {description: Current worker profile and password state}}}
-  /api/v1/worker/auth/logout:
-    post: {security: [{miniBearer: []}], responses: {'200': {description: Worker session revoked}}}
-  /api/v1/worker/auth/password:
-    post: {security: [{miniBearer: []}], responses: {'200': {description: Worker password changed}, '423': {description: Password change required}}}
-  /api/v1/worker/work-orders/{id}:
-    get: {security: [{miniBearer: []}], parameters: [{$ref: '#/components/parameters/Id'}], responses: {'200': {description: Assigned worker work order detail}}}
-  /api/v1/worker/work-orders/{id}/{command}:
-    post: {security: [{miniBearer: []}], parameters: [{$ref: '#/components/parameters/Id'}], responses: {'200': {description: Worker command applied}}}
-  /api/v1/worker/work-orders/{id}/media/images:
-    post: {security: [{miniBearer: []}], parameters: [{$ref: '#/components/parameters/Id'}], responses: {'200': {description: Work order image or video evidence uploaded}}}
-  /api/v1/worker/media/{id}/content:
-    get: {security: [{miniBearer: []}], parameters: [{$ref: '#/components/parameters/Id'}], responses: {'200': {description: Assigned worker evidence content}}}
-  /api/v1/worker/work-orders/{id}/evidence:
-    post: {security: [{miniBearer: []}], parameters: [{$ref: '#/components/parameters/Id'}], responses: {'200': {description: Uploaded media bound to evidence stage}}}
-  /api/v1/worker/work-orders/{id}/submit-completion:
-    post: {security: [{miniBearer: []}], parameters: [{$ref: '#/components/parameters/Id'}], responses: {'200': {description: Completion submitted}}}
-
-  /api/v1/mini/auth/phone/login:
+      security:
+      - miniBearer: []
+      parameters:
+      - "$ref": "#/components/parameters/Id"
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Customer acceptance recorded
+  "/api/v1/admin/orders/{id}/confirm":
+    post:
+      security:
+      - adminBasic: []
+      parameters:
+      - "$ref": "#/components/parameters/Id"
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Order confirmed and work orders created
+  "/api/v1/admin/workers":
+    get:
+      security:
+      - adminBasic: []
+      responses:
+        '200':
+          description: Worker list with filters
+    post:
+      security:
+      - adminBasic: []
+      responses:
+        '200':
+          description: Worker draft created or activated
+  "/api/v1/admin/workers/{id}":
+    get:
+      security:
+      - adminBasic: []
+      parameters:
+      - "$ref": "#/components/parameters/Id"
+      responses:
+        '200':
+          description: Worker detail
+    put:
+      security:
+      - adminBasic: []
+      parameters:
+      - "$ref": "#/components/parameters/Id"
+      responses:
+        '200':
+          description: Worker updated
+  "/api/v1/admin/workers/{id}/activate":
+    post:
+      security:
+      - adminBasic: []
+      parameters:
+      - "$ref": "#/components/parameters/Id"
+      responses:
+        '200':
+          description: Worker activated
+  "/api/v1/admin/workers/{id}/disable":
+    post:
+      security:
+      - adminBasic: []
+      parameters:
+      - "$ref": "#/components/parameters/Id"
+      responses:
+        '200':
+          description: Worker disabled and optional not-started work orders returned
+  "/api/v1/admin/workers/{id}/reset-password":
+    post:
+      security:
+      - adminSession: []
+      parameters:
+      - "$ref": "#/components/parameters/Id"
+      responses:
+        '200':
+          description: Worker password reset with one-time temporary password
+  "/api/v1/admin/workers/candidates":
+    get:
+      security:
+      - adminBasic: []
+      parameters:
+      - name: workOrderId
+        in: query
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Skill-matched worker candidates
+  "/api/v1/admin/worker-trades":
+    get:
+      security:
+      - adminBasic: []
+      responses:
+        '200':
+          description: Worker trade dictionary
+    post:
+      security:
+      - adminBasic: []
+      responses:
+        '200':
+          description: Worker trade created
+  "/api/v1/admin/worker-trades/{id}":
+    put:
+      security:
+      - adminBasic: []
+      parameters:
+      - "$ref": "#/components/parameters/Id"
+      responses:
+        '200':
+          description: Worker trade updated
+    delete:
+      security:
+      - adminBasic: []
+      parameters:
+      - "$ref": "#/components/parameters/Id"
+      responses:
+        '200':
+          description: Worker trade deleted when it has no skills
+  "/api/v1/admin/worker-trades/{id}/status":
+    post:
+      security:
+      - adminBasic: []
+      parameters:
+      - "$ref": "#/components/parameters/Id"
+      responses:
+        '200':
+          description: Worker trade status updated
+  "/api/v1/admin/worker-skills":
+    get:
+      security:
+      - adminBasic: []
+      responses:
+        '200':
+          description: Worker skill dictionary
+    post:
+      security:
+      - adminBasic: []
+      responses:
+        '200':
+          description: Worker skill created
+  "/api/v1/admin/worker-skills/{id}":
+    put:
+      security:
+      - adminBasic: []
+      parameters:
+      - "$ref": "#/components/parameters/Id"
+      responses:
+        '200':
+          description: Worker skill updated
+    delete:
+      security:
+      - adminBasic: []
+      parameters:
+      - "$ref": "#/components/parameters/Id"
+      responses:
+        '200':
+          description: Worker skill deleted when it is unused
+  "/api/v1/admin/worker-skills/{id}/status":
+    post:
+      security:
+      - adminBasic: []
+      parameters:
+      - "$ref": "#/components/parameters/Id"
+      responses:
+        '200':
+          description: Worker skill status updated
+  "/api/v1/admin/workers/{id}/status":
+    post:
+      security:
+      - adminBasic: []
+      parameters:
+      - "$ref": "#/components/parameters/Id"
+      responses:
+        '200':
+          description: Worker status updated
+  "/api/v1/admin/work-orders":
+    get:
+      security:
+      - adminBasic: []
+      responses:
+        '200':
+          description: Work order page
+  "/api/v1/admin/work-orders/{id}":
+    get:
+      security:
+      - adminBasic: []
+      parameters:
+      - "$ref": "#/components/parameters/Id"
+      responses:
+        '200':
+          description: Work order detail with completion evidence
+  "/api/v1/admin/work-orders/{id}/assign":
+    post:
+      security:
+      - adminBasic: []
+      parameters:
+      - "$ref": "#/components/parameters/Id"
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Work order assigned
+  "/api/v1/admin/work-orders/{id}/reassign":
+    post:
+      security:
+      - adminBasic: []
+      parameters:
+      - "$ref": "#/components/parameters/Id"
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Work order reassigned
+  "/api/v1/admin/work-orders/{id}/reschedule":
+    post:
+      security:
+      - adminBasic: []
+      parameters:
+      - "$ref": "#/components/parameters/Id"
+      responses:
+        '200':
+          description: Appointment updated
+  "/api/v1/admin/work-orders/{id}/completion-review":
+    post:
+      security:
+      - adminBasic: []
+      parameters:
+      - "$ref": "#/components/parameters/Id"
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Completion reviewed
+  "/api/v1/worker/work-orders":
+    get:
+      security:
+      - miniBearer: []
+      responses:
+        '200':
+          description: Assigned worker work order page
+  "/api/v1/worker/auth/login":
+    post:
+      responses:
+        '200':
+          description: Worker access token created
+        '401':
+          description: Mobile or password invalid
+  "/api/v1/worker/auth/me":
+    get:
+      security:
+      - miniBearer: []
+      responses:
+        '200':
+          description: Current worker profile and password state
+  "/api/v1/worker/auth/logout":
+    post:
+      security:
+      - miniBearer: []
+      responses:
+        '200':
+          description: Worker session revoked
+  "/api/v1/worker/auth/password":
+    post:
+      security:
+      - miniBearer: []
+      responses:
+        '200':
+          description: Worker password changed
+        '423':
+          description: Password change required
+  "/api/v1/worker/work-orders/{id}":
+    get:
+      security:
+      - miniBearer: []
+      parameters:
+      - "$ref": "#/components/parameters/Id"
+      responses:
+        '200':
+          description: Assigned worker work order detail
+      description: 'Items include immutable detailProfile and purchased quantity.
+        Evidence pairs follow the frozen aggregation: one per independent object,
+        one per cumulative service item. No inference from unit text.'
+  "/api/v1/worker/work-orders/{id}/{command}":
+    post:
+      security:
+      - miniBearer: []
+      parameters:
+      - "$ref": "#/components/parameters/Id"
+      responses:
+        '200':
+          description: Worker command applied
+  "/api/v1/worker/work-orders/{id}/media/images":
+    post:
+      security:
+      - miniBearer: []
+      parameters:
+      - "$ref": "#/components/parameters/Id"
+      responses:
+        '200':
+          description: Work order image or video evidence uploaded
+  "/api/v1/worker/media/{id}/content":
+    get:
+      security:
+      - miniBearer: []
+      parameters:
+      - "$ref": "#/components/parameters/Id"
+      responses:
+        '200':
+          description: Assigned worker evidence content
+  "/api/v1/worker/work-orders/{id}/evidence":
+    post:
+      security:
+      - miniBearer: []
+      parameters:
+      - "$ref": "#/components/parameters/Id"
+      responses:
+        '200':
+          description: Uploaded media bound to evidence stage
+  "/api/v1/worker/work-orders/{id}/submit-completion":
+    post:
+      security:
+      - miniBearer: []
+      parameters:
+      - "$ref": "#/components/parameters/Id"
+      responses:
+        '200':
+          description: Completion submitted
+  "/api/v1/mini/auth/phone/login":
     post:
       summary: Phone authorization login or signup; independent wx.login Code required.
       requestBody:
@@ -202,26 +1870,38 @@ paths:
             schema:
               type: object
               additionalProperties: false
-              required: [phoneCode, loginCode]
+              required:
+              - phoneCode
+              - loginCode
               properties:
-                phoneCode: {type: string}
-                loginCode: {type: string}
-      responses: {'200': {description: 'accessToken, expiresAt, isNewCustomer, customer'}, '401': {description: Authorization expired}, '403': {description: Account unavailable}, '429': {description: Rate limited}, '503': {description: WeChat or customer initialization unavailable}}
-  /api/v1/mini/auth/me:
-    get: {security: [{miniBearer: []}], responses: {'200': {description: 'customer, expiresAt; phone is masked'}, '401': {description: Invalid customer session}}}
-  /api/v1/mini/auth/session/verify:
+                phoneCode:
+                  type: string
+                loginCode:
+                  type: string
+      responses:
+        '200':
+          description: accessToken, expiresAt, isNewCustomer, customer
+        '401':
+          description: Authorization expired
+        '403':
+          description: Account unavailable
+        '429':
+          description: Rate limited
+        '503':
+          description: WeChat or customer initialization unavailable
+  "/api/v1/mini/auth/me":
+    get:
+      security:
+      - miniBearer: []
+      responses:
+        '200':
+          description: customer, expiresAt; phone is masked
+        '401':
+          description: Invalid customer session
+  "/api/v1/mini/auth/session/verify":
     post:
-      security: [{miniBearer: []}]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: {type: object, additionalProperties: false, required: [loginCode], properties: {loginCode: {type: string}}}
-      responses: {'200': {description: Current WeChat context verified without renewing session}, '401': {description: Invalid session or changed WeChat context}}
-  /api/v1/mini/profile:
-    get: {security: [{miniBearer: []}], responses: {'200': {description: Current profile with version and protected avatar URL}}}
-    put:
-      security: [{miniBearer: []}]
+      security:
+      - miniBearer: []
       requestBody:
         required: true
         content:
@@ -229,50 +1909,329 @@ paths:
             schema:
               type: object
               additionalProperties: false
-              required: [displayName, avatarMediaId, version]
+              required:
+              - loginCode
               properties:
-                displayName: {type: string, minLength: 1, maxLength: 32}
-                avatarMediaId: {type: [string, 'null']}
-                version: {type: integer, minimum: 0}
-      responses: {'200': {description: Atomically updated current profile}, '409': {description: Profile version conflict}, '404': {description: Avatar unavailable}, '503': {description: Content check unavailable}}
-  /api/v1/mini/media/avatar:
+                loginCode:
+                  type: string
+      responses:
+        '200':
+          description: Current WeChat context verified without renewing session
+        '401':
+          description: Invalid session or changed WeChat context
+  "/api/v1/mini/profile":
+    get:
+      security:
+      - miniBearer: []
+      responses:
+        '200':
+          description: Current profile with version and protected avatar URL
+    put:
+      security:
+      - miniBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+              - displayName
+              - avatarMediaId
+              - version
+              properties:
+                displayName:
+                  type: string
+                  minLength: 1
+                  maxLength: 32
+                avatarMediaId:
+                  type:
+                  - string
+                  - 'null'
+                version:
+                  type: integer
+                  minimum: 0
+      responses:
+        '200':
+          description: Atomically updated current profile
+        '409':
+          description: Profile version conflict
+        '404':
+          description: Avatar unavailable
+        '503':
+          description: Content check unavailable
+  "/api/v1/mini/media/avatar":
     post:
-      security: [{miniBearer: []}]
+      security:
+      - miniBearer: []
       requestBody:
         required: true
         content:
           multipart/form-data:
-            schema: {type: object, required: [file], properties: {file: {type: string, format: binary, description: 'Decodable JPEG/PNG/WebP; maximum 5 MB'}}}
-      responses: {'200': {description: Private CUSTOMER_AVATAR mediaId}, '413': {description: Avatar too large}, '400': {description: Invalid image}}
-  /api/v1/mini/checkout/contact:
-    get: {security: [{miniBearer: []}], responses: {'200': {description: Current customer contactMobile for checkout default only}}}
-  /api/v1/admin/customers/overview:
-    get: {security: [{adminSession: []}], description: 'customer.view; org-scoped totals; Asia/Shanghai day windows; registered includes deleted, activity excludes deleted', responses: {'200': {description: 'registered, newToday, new7Days, activeToday, active7Days, active30Days, asOf, timezone'}, '403': {description: Permission denied}}}
-  /api/v1/admin/customers:
+            schema:
+              type: object
+              required:
+              - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Decodable JPEG/PNG/WebP; maximum 5 MB
+      responses:
+        '200':
+          description: Private CUSTOMER_AVATAR mediaId
+        '413':
+          description: Avatar too large
+        '400':
+          description: Invalid image
+  "/api/v1/mini/checkout/contact":
     get:
-      security: [{adminSession: []}]
-      description: 'customer.view; masked phone; exact mobile lookup via HMAC; no query-string logging'
+      security:
+      - miniBearer: []
+      responses:
+        '200':
+          description: Current customer contactMobile for checkout default only
+  "/api/v1/admin/customers/overview":
+    get:
+      security:
+      - adminSession: []
+      description: customer.view; org-scoped totals; Asia/Shanghai day windows; registered
+        includes deleted, activity excludes deleted
+      responses:
+        '200':
+          description: registered, newToday, new7Days, activeToday, active7Days, active30Days,
+            asOf, timezone
+        '403':
+          description: Permission denied
+  "/api/v1/admin/customers":
+    get:
+      security:
+      - adminSession: []
+      description: customer.view; masked phone; exact mobile lookup via HMAC; no query-string
+        logging
       parameters:
-        - {name: page, in: query, schema: {type: integer, minimum: 1}}
-        - {name: pageSize, in: query, schema: {type: integer, minimum: 1, maximum: 100}}
-        - {name: customerId, in: query, schema: {type: string}}
-        - {name: name, in: query, schema: {type: string}}
-        - {name: mobile, in: query, schema: {type: string}}
-        - {name: status, in: query, schema: {type: string, enum: [ACTIVE, DISABLED, DELETED]}}
-        - {name: registeredFrom, in: query, schema: {type: string, format: date}}
-        - {name: registeredTo, in: query, schema: {type: string, format: date}}
-        - {name: hasOrders, in: query, schema: {type: boolean}}
-        - {name: sort, in: query, schema: {type: string, enum: [registered, active, orders]}}
-      responses: {'200': {description: Paginated customer usage aggregates}, '403': {description: Permission denied}}
-  /api/v1/admin/customers/{id}:
-    get: {security: [{adminSession: []}], parameters: [{$ref: '#/components/parameters/Id'}], description: customer.view, responses: {'200': {description: 'customer, addressCount, cartItemCount'}, '404': {description: Customer outside current organization or missing}}}
-  /api/v1/admin/customers/{id}/orders:
-    get: {security: [{adminSession: []}], parameters: [{$ref: '#/components/parameters/Id'}], description: 'customer.view AND order.view; separate pagination', responses: {'200': {description: Paginated order facts}, '403': {description: Permission denied}, '404': {description: Customer missing}}}
-  /api/v1/admin/customers/{id}/avatar/content:
-    get: {security: [{adminSession: []}], parameters: [{$ref: '#/components/parameters/Id'}], description: 'customer.view; current customer avatar reference only; no-store', responses: {'200': {description: Private avatar bytes}, '404': {description: Avatar missing or outside current organization}}}
-
-# Diagnostic contract (SPEC-012): Every server response includes X-Request-Id,
-# including OPTIONS, 404, 405, auth errors and media responses. CORS exposes it.
-# Accept a single request ID matching [A-Za-z0-9][A-Za-z0-9._-]{0,63}; otherwise
-# generate a new 128-bit ID. JSON requestId remains the existing response field.
-# Network/proxy failures may only have a client reference, not a server ID.
+      - name: page
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+      - name: pageSize
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+      - name: customerId
+        in: query
+        schema:
+          type: string
+      - name: name
+        in: query
+        schema:
+          type: string
+      - name: mobile
+        in: query
+        schema:
+          type: string
+      - name: status
+        in: query
+        schema:
+          type: string
+          enum:
+          - ACTIVE
+          - DISABLED
+          - DELETED
+      - name: registeredFrom
+        in: query
+        schema:
+          type: string
+          format: date
+      - name: registeredTo
+        in: query
+        schema:
+          type: string
+          format: date
+      - name: hasOrders
+        in: query
+        schema:
+          type: boolean
+      - name: sort
+        in: query
+        schema:
+          type: string
+          enum:
+          - registered
+          - active
+          - orders
+      responses:
+        '200':
+          description: Paginated customer usage aggregates
+        '403':
+          description: Permission denied
+  "/api/v1/admin/customers/{id}":
+    get:
+      security:
+      - adminSession: []
+      parameters:
+      - "$ref": "#/components/parameters/Id"
+      description: customer.view
+      responses:
+        '200':
+          description: customer, addressCount, cartItemCount
+        '404':
+          description: Customer outside current organization or missing
+  "/api/v1/admin/customers/{id}/orders":
+    get:
+      security:
+      - adminSession: []
+      parameters:
+      - "$ref": "#/components/parameters/Id"
+      description: customer.view AND order.view; separate pagination
+      responses:
+        '200':
+          description: Paginated order facts
+        '403':
+          description: Permission denied
+        '404':
+          description: Customer missing
+  "/api/v1/admin/customers/{id}/avatar/content":
+    get:
+      security:
+      - adminSession: []
+      parameters:
+      - "$ref": "#/components/parameters/Id"
+      description: customer.view; current customer avatar reference only; no-store
+      responses:
+        '200':
+          description: Private avatar bytes
+        '404':
+          description: Avatar missing or outside current organization
+  "/api/v1/admin/catalog/sku-detail-templates":
+    get:
+      security:
+      - adminSession: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                - "$ref": "#/components/schemas/ApiResponse"
+                - type: object
+                  properties:
+                    data:
+                      type: array
+                      items:
+                        "$ref": "#/components/schemas/SkuTemplate"
+                      minItems: 0
+                      maxItems: 100
+  "/api/v1/admin/catalog/skus/{id}":
+    parameters:
+    - "$ref": "#/components/parameters/Id"
+    get:
+      security:
+      - adminSession: []
+      responses:
+        '200':
+          description: OK
+    put:
+      security:
+      - adminSession: []
+      responses:
+        '200':
+          description: OK
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/SkuWrite"
+  "/api/v1/admin/catalog/skus/{id}/publish":
+    parameters:
+    - "$ref": "#/components/parameters/Id"
+    post:
+      security:
+      - adminSession: []
+      responses:
+        '200':
+          description: OK
+  "/api/v1/admin/catalog/skus/{id}/off-shelf":
+    parameters:
+    - "$ref": "#/components/parameters/Id"
+    post:
+      security:
+      - adminSession: []
+      responses:
+        '200':
+          description: OK
+  "/api/v1/mini/cart/items/{id}/demand":
+    parameters:
+    - "$ref": "#/components/parameters/Id"
+    put:
+      security:
+      - miniBearer: []
+      responses:
+        '200':
+          description: OK
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/CartDemandWrite"
+  "/api/v1/mini/cart/items/{id}/confirm":
+    parameters:
+    - "$ref": "#/components/parameters/Id"
+    post:
+      security:
+      - miniBearer: []
+      responses:
+        '200':
+          description: OK
+      description: Explicitly confirm current published content after reviewing service
+        details; retains customer demand and validates quantity. May return SKU_QUANTITY_INVALID
+        or CART_SKU_CHANGED.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+              - skuVersion
+              properties:
+                skuVersion:
+                  type: integer
+                  minimum: 1
+  "/api/v1/mini/cart/items/{id}":
+    parameters:
+    - "$ref": "#/components/parameters/Id"
+    patch:
+      security:
+      - miniBearer: []
+      responses:
+        '200':
+          description: OK
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                quantity:
+                  type: integer
+                  minimum: 1
+                  maximum: 9999
+              required:
+              - quantity
+    delete:
+      security:
+      - miniBearer: []
+      responses:
+        '200':
+          description: OK

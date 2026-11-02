@@ -14,6 +14,7 @@
     <button wx:if="{{order.status === 'CANCELLED' && order.cancelReason}}" class="reorder-button" loading="{{reordering}}" disabled="{{reordering}}" bindtap="reorder">重新下单</button>
   </view>
 
+  <view class="card" wx:for="{{order.items}}" wx:key="id"><view class="section-title">{{item.name}} × {{item.quantity}}{{item.unit}}</view><view class="muted">{{item.demandDescription}}</view><service-profile profile="{{item.detailProfile}}"/></view>
   <view wx:for="{{order.workOrders}}" wx:key="id" class="card fulfillment-card">
     <view class="section-header"><text class="section-title">履约详情</text><text class="work-order-no">{{item.workOrderNo}}</text></view>
     <view class="steps">

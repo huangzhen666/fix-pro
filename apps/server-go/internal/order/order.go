@@ -28,9 +28,11 @@ type Service struct{ db *sql.DB }
 func New(db *sql.DB) *Service { return &Service{db} }
 
 type DirectItem struct {
-	SKUID      string `json:"skuId"`
-	SKUVersion int    `json:"skuVersion"`
-	Quantity   int    `json:"quantity"`
+	SKUID             string   `json:"skuId"`
+	SKUVersion        int      `json:"skuVersion"`
+	Quantity          int      `json:"quantity"`
+	DemandDescription string   `json:"demandDescription"`
+	MediaIDs          []string `json:"mediaIds"`
 }
 
 type Write struct {
@@ -90,20 +92,18 @@ type Media struct {
 	URL       string `json:"url"`
 }
 type ItemView struct {
-	ID                  string  `json:"id"`
-	SKUCode             string  `json:"skuCode"`
-	SKUName             string  `json:"skuName"`
-	SKUVersion          int     `json:"skuVersion"`
-	Unit                string  `json:"unit"`
-	ServiceScope        string  `json:"serviceScope"`
-	Exclusions          string  `json:"exclusions"`
-	WarrantyDescription string  `json:"warrantyDescription"`
-	CoverImageURL       string  `json:"coverImageUrl"`
-	FaultDescription    string  `json:"faultDescription"`
-	UnitPrice           int64   `json:"unitPrice"`
-	Quantity            int     `json:"quantity"`
-	Subtotal            int64   `json:"subtotal"`
-	FaultMedia          []Media `json:"faultMedia"`
+	DetailProfile     catalog.Profile `json:"detailProfile"`
+	ID                string          `json:"id"`
+	SKUCode           string          `json:"skuCode"`
+	SKUName           string          `json:"skuName"`
+	SKUVersion        int             `json:"skuVersion"`
+	Unit              string          `json:"unit"`
+	CoverImageURL     string          `json:"coverImageUrl"`
+	DemandDescription string          `json:"demandDescription"`
+	UnitPrice         int64           `json:"unitPrice"`
+	Quantity          int             `json:"quantity"`
+	Subtotal          int64           `json:"subtotal"`
+	DemandMedia       []Media         `json:"demandMedia"`
 }
 type Detail struct {
 	Order Base       `json:"order"`
@@ -189,7 +189,7 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, key string, w Wr
 	}
 	var directSKU int64
 	if w.DirectItem != nil {
-		if w.CartItemIDs != nil || w.DirectItem.Quantity < 1 || w.DirectItem.Quantity > 99 || w.DirectItem.SKUVersion < 1 {
+		if w.CartItemIDs != nil || w.DirectItem.Quantity < 1 || w.DirectItem.Quantity > 9999 || w.DirectItem.SKUVersion < 1 {
 			return Result{}, httpx.E("VALIDATION_ERROR", "立即下单参数无效", 400)
 		}
 		var parseErr error
@@ -241,6 +241,7 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, key string, w Wr
 		var x checkout
 		var raw []byte
 		x.sku, x.quantity = directSKU, w.DirectItem.Quantity
+		x.fault = w.DirectItem.DemandDescription
 		e = tx.QueryRowContext(ctx, `SELECT s.status,s.current_published_version,v.snapshot_json FROM service_sku s JOIN service_sku_version v ON v.org_id=s.org_id AND v.sku_id=s.id AND v.version_no=s.current_published_version WHERE s.org_id=$1 AND s.id=$2 FOR SHARE OF s,v`, p.OrgID, directSKU).Scan(&x.status, &x.current, &raw)
 		if e == sql.ErrNoRows {
 			return Result{}, httpx.E("SKU_NOT_AVAILABLE", "服务不可购买", 404)
@@ -267,7 +268,7 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, key string, w Wr
 		if e != nil {
 			return Result{}, e
 		}
-		rows, e := tx.QueryContext(ctx, `SELECT ci.id,ci.sku_id,ci.sku_version,ci.quantity,ci.unit_price,COALESCE(ci.fault_description,''),v.snapshot_json,s.status,s.current_published_version,cv.snapshot_json FROM shopping_cart_item ci JOIN service_sku_version v ON v.org_id=ci.org_id AND v.sku_id=ci.sku_id AND v.version_no=ci.sku_version JOIN service_sku s ON s.id=ci.sku_id AND s.org_id=ci.org_id LEFT JOIN service_sku_version cv ON cv.org_id=s.org_id AND cv.sku_id=s.id AND cv.version_no=s.current_published_version WHERE ci.org_id=$1 AND ci.cart_id=$2 FOR UPDATE OF ci, v, s`, p.OrgID, cart)
+		rows, e := tx.QueryContext(ctx, `SELECT ci.id,ci.sku_id,ci.sku_version,ci.quantity,ci.unit_price,COALESCE(ci.demand_description,''),v.snapshot_json,s.status,s.current_published_version,cv.snapshot_json FROM shopping_cart_item ci JOIN service_sku_version v ON v.org_id=ci.org_id AND v.sku_id=ci.sku_id AND v.version_no=ci.sku_version JOIN service_sku s ON s.id=ci.sku_id AND s.org_id=ci.org_id LEFT JOIN service_sku_version cv ON cv.org_id=s.org_id AND cv.sku_id=s.id AND cv.version_no=s.current_published_version WHERE ci.org_id=$1 AND ci.cart_id=$2 FOR UPDATE OF ci, v, s`, p.OrgID, cart)
 		if e != nil {
 			return Result{}, e
 		}
@@ -332,6 +333,18 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, key string, w Wr
 			x.snap = x.currentSnap
 			x.price = x.currentSnap.Price
 		}
+		if e = x.snap.DetailProfile.Validate(true); e != nil {
+			return Result{}, httpx.E("SKU_DETAIL_PROFILE_INVALID", "服务发布内容不完整，请联系客服", 409)
+		}
+		if e = x.snap.DetailProfile.CheckQuantity(x.quantity); e != nil {
+			return Result{}, e
+		}
+		if w.DirectItem != nil {
+			media = len(w.DirectItem.MediaIDs)
+		}
+		if e = x.snap.DetailProfile.CheckDemand(x.fault, media); e != nil {
+			return Result{}, e
+		}
 		if x.quantity <= 0 || x.price > math.MaxInt64/int64(x.quantity) {
 			return Result{}, httpx.E("VALIDATION_ERROR", "订单金额超出范围", 400)
 		}
@@ -344,7 +357,7 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, key string, w Wr
 	}
 	orderNo := fmt.Sprintf("FP%s%06d", time.Now().UTC().Format("20060102150405"), time.Now().UnixNano()%1000000)
 	var orderID int64
-	e = tx.QueryRowContext(ctx, `INSERT INTO customer_order(org_id,order_no,customer_id,contact_name,contact_mobile,service_address,order_type,status,total_amount,paid_amount,item_count,appointment_at,appointment_slot) VALUES($1,$2,$3,$4,$5,$6,'REPAIR',$7,$8,0,$9,$10,$11) RETURNING id`, p.OrgID, orderNo, p.SubjectID, strings.TrimSpace(w.ContactName), w.ContactMobile, strings.TrimSpace(w.ServiceAddress), fulfillment.OrderPendingConfirmation, total, count, appointmentAt, w.AppointmentSlot).Scan(&orderID)
+	e = tx.QueryRowContext(ctx, `INSERT INTO customer_order(org_id,order_no,customer_id,contact_name,contact_mobile,service_address,order_type,status,total_amount,paid_amount,item_count,appointment_at,appointment_slot) VALUES($1,$2,$3,$4,$5,$6,'SERVICE',$7,$8,0,$9,$10,$11) RETURNING id`, p.OrgID, orderNo, p.SubjectID, strings.TrimSpace(w.ContactName), w.ContactMobile, strings.TrimSpace(w.ServiceAddress), fulfillment.OrderPendingConfirmation, total, count, appointmentAt, w.AppointmentSlot).Scan(&orderID)
 	if e != nil {
 		return Result{}, e
 	}
@@ -352,11 +365,37 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, key string, w Wr
 		cover := int64(0)
 		fmt.Sscan(x.snap.CoverImageURL[strings.LastIndex(x.snap.CoverImageURL, "/")+1:], &cover)
 		var itemID int64
-		e = tx.QueryRowContext(ctx, `INSERT INTO order_item(org_id,order_id,sku_id,sku_version,sku_code_snapshot,sku_name_snapshot,unit_snapshot,service_scope_snapshot,exclusions_snapshot,warranty_snapshot,sku_cover_media_id_snapshot,fault_description,unit_price,quantity,subtotal_amount) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING id`, p.OrgID, orderID, x.sku, x.version, x.snap.SKUCode, x.snap.Name, x.snap.Unit, x.snap.ServiceScope, x.snap.Exclusions, x.snap.WarrantyDescription, cover, strings.TrimSpace(x.fault), x.price, x.quantity, x.price*int64(x.quantity)).Scan(&itemID)
+		e = tx.QueryRowContext(ctx, `INSERT INTO order_item(org_id,order_id,sku_id,sku_version,sku_code_snapshot,sku_name_snapshot,unit_snapshot,detail_profile_snapshot,sku_cover_media_id_snapshot,demand_description,unit_price,quantity,subtotal_amount) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id`, p.OrgID, orderID, x.sku, x.version, x.snap.SKUCode, x.snap.Name, x.snap.Unit, x.snap.DetailProfile, cover, strings.TrimSpace(x.fault), x.price, x.quantity, x.price*int64(x.quantity)).Scan(&itemID)
 		if e != nil {
 			return Result{}, e
 		}
-		if w.DirectItem == nil {
+		if w.DirectItem != nil {
+			seen := map[string]bool{}
+			images, videos := 0, 0
+			for i, mid := range w.DirectItem.MediaIDs {
+				if seen[mid] {
+					return Result{}, httpx.E("VALIDATION_ERROR", "资料重复", 400)
+				}
+				seen[mid] = true
+				var kind string
+				if e = tx.QueryRowContext(ctx, `SELECT media_type FROM media_asset WHERE id=$1 AND org_id=$2 AND owner_type='CUSTOMER' AND owner_id=$3 AND purpose='DEMAND_EVIDENCE' AND status='READY'`, mid, p.OrgID, p.SubjectID).Scan(&kind); e != nil {
+					return Result{}, httpx.E("MEDIA_ACCESS_DENIED", "需求媒体不可用", 403)
+				}
+				if kind == "IMAGE" {
+					images++
+				} else if kind == "VIDEO" {
+					videos++
+				} else {
+					return Result{}, httpx.E("MEDIA_ACCESS_DENIED", "需求媒体类型不合法", 403)
+				}
+				if images > 6 || videos > 2 {
+					return Result{}, httpx.E("MEDIA_COUNT_EXCEEDED", "最多6张图片和2个视频", 400)
+				}
+				if _, e = tx.ExecContext(ctx, `INSERT INTO order_item_media(org_id,order_item_id,media_id,media_type,sort_order) VALUES($1,$2,$3,$4,$5)`, p.OrgID, itemID, mid, kind, i); e != nil {
+					return Result{}, e
+				}
+			}
+		} else {
 			if _, e = tx.ExecContext(ctx, `INSERT INTO order_item_media(org_id,order_item_id,media_id,media_type,sort_order) SELECT cim.org_id,$1,cim.media_id,m.media_type,cim.sort_order FROM shopping_cart_item_media cim JOIN media_asset m ON m.id=cim.media_id AND m.org_id=cim.org_id WHERE cim.org_id=$2 AND cim.cart_item_id=$3`, itemID, p.OrgID, x.id); e != nil {
 				return Result{}, e
 			}
@@ -428,7 +467,7 @@ func (s *Service) Repeat(ctx context.Context, p auth.Principal, orderID int64) (
 		return RepeatResult{}, httpx.E("ORDER_STATUS_CONFLICT", "只有商家打回的订单可以重新下单", 409)
 	}
 
-	rows, e := tx.QueryContext(ctx, `SELECT oi.id,oi.sku_id,oi.quantity,COALESCE(oi.fault_description,''),s.status,s.current_published_version,cv.snapshot_json FROM order_item oi JOIN service_sku s ON s.org_id=oi.org_id AND s.id=oi.sku_id LEFT JOIN service_sku_version cv ON cv.org_id=s.org_id AND cv.sku_id=s.id AND cv.version_no=s.current_published_version WHERE oi.org_id=$1 AND oi.order_id=$2 ORDER BY oi.id`, p.OrgID, orderID)
+	rows, e := tx.QueryContext(ctx, `SELECT oi.id,oi.sku_id,oi.quantity,COALESCE(oi.demand_description,''),s.status,s.current_published_version,cv.snapshot_json FROM order_item oi JOIN service_sku s ON s.org_id=oi.org_id AND s.id=oi.sku_id LEFT JOIN service_sku_version cv ON cv.org_id=s.org_id AND cv.sku_id=s.id AND cv.version_no=s.current_published_version WHERE oi.org_id=$1 AND oi.order_id=$2 ORDER BY oi.id`, p.OrgID, orderID)
 	if e != nil {
 		return RepeatResult{}, e
 	}
@@ -440,7 +479,7 @@ func (s *Service) Repeat(ctx context.Context, p auth.Principal, orderID int64) (
 			rows.Close()
 			return RepeatResult{}, e
 		}
-		if item.quantity < 1 || item.quantity > 99 {
+		if item.quantity < 1 || item.quantity > 9999 {
 			rows.Close()
 			return RepeatResult{}, httpx.E("VALIDATION_ERROR", "订单服务数量不合法", 400)
 		}
@@ -455,6 +494,10 @@ func (s *Service) Repeat(ctx context.Context, p auth.Principal, orderID int64) (
 		if item.snap.ID == "" {
 			rows.Close()
 			return RepeatResult{}, httpx.E("SKU_NOT_AVAILABLE", "原订单中的服务已下架，暂时不能重新下单", 409)
+		}
+		if e = item.snap.DetailProfile.CheckQuantity(item.quantity); e != nil {
+			rows.Close()
+			return RepeatResult{}, e
 		}
 		items = append(items, item)
 	}
@@ -473,9 +516,9 @@ func (s *Service) Repeat(ctx context.Context, p auth.Principal, orderID int64) (
 	}
 	for _, item := range items {
 		var cartItemID int64
-		e = tx.QueryRowContext(ctx, `INSERT INTO shopping_cart_item(org_id,cart_id,sku_id,sku_version,quantity,unit_price,fault_description) VALUES($1,$2,$3,$4,$5,$6,NULLIF($7,'')) ON CONFLICT (org_id,cart_id,sku_id,sku_version) DO UPDATE SET quantity=shopping_cart_item.quantity+EXCLUDED.quantity,fault_description=CASE WHEN NULLIF(BTRIM(shopping_cart_item.fault_description),'') IS NULL THEN EXCLUDED.fault_description ELSE shopping_cart_item.fault_description END,updated_at=CURRENT_TIMESTAMP(3) WHERE shopping_cart_item.quantity+EXCLUDED.quantity<=99 RETURNING id`, p.OrgID, cartID, item.skuID, item.currentVersion.Int64, item.quantity, item.snap.Price, strings.TrimSpace(item.fault)).Scan(&cartItemID)
+		e = tx.QueryRowContext(ctx, `INSERT INTO shopping_cart_item(org_id,cart_id,sku_id,sku_version,quantity,unit_price,demand_description) VALUES($1,$2,$3,$4,$5,$6,NULLIF($7,'')) ON CONFLICT (org_id,cart_id,sku_id,sku_version) DO UPDATE SET quantity=shopping_cart_item.quantity+EXCLUDED.quantity,demand_description=CASE WHEN NULLIF(BTRIM(shopping_cart_item.demand_description),'') IS NULL THEN EXCLUDED.demand_description ELSE shopping_cart_item.demand_description END,updated_at=CURRENT_TIMESTAMP(3) WHERE shopping_cart_item.quantity+EXCLUDED.quantity BETWEEN $8 AND $9 AND (shopping_cart_item.quantity+EXCLUDED.quantity-$8)%$10=0 RETURNING id`, p.OrgID, cartID, item.skuID, item.currentVersion.Int64, item.quantity, item.snap.Price, strings.TrimSpace(item.fault), item.snap.DetailProfile.Billing.Quantity.Min, item.snap.DetailProfile.Billing.Quantity.Max, item.snap.DetailProfile.Billing.Quantity.Step).Scan(&cartItemID)
 		if e == sql.ErrNoRows {
-			return RepeatResult{}, httpx.E("CART_QUANTITY_EXCEEDED", "购物车数量不能超过99", 400)
+			return RepeatResult{}, httpx.E("SKU_QUANTITY_INVALID", "合并后的数量不符合服务规则", 400)
 		}
 		if e != nil {
 			return RepeatResult{}, e
@@ -556,7 +599,7 @@ func (s *Service) Detail(ctx context.Context, n, org int64) (Detail, error) {
 		return out, e
 	}
 	out.Order.ID, out.Order.CustomerID = fmt.Sprint(id), fmt.Sprint(customer)
-	rows, e := s.db.QueryContext(ctx, `SELECT id,sku_code_snapshot,sku_name_snapshot,sku_version,unit_snapshot,service_scope_snapshot,exclusions_snapshot,warranty_snapshot,sku_cover_media_id_snapshot,fault_description,unit_price,quantity,subtotal_amount FROM order_item WHERE org_id=$2 AND order_id=$1 ORDER BY id`, n, org)
+	rows, e := s.db.QueryContext(ctx, `SELECT id,sku_code_snapshot,sku_name_snapshot,sku_version,unit_snapshot,detail_profile_snapshot,sku_cover_media_id_snapshot,demand_description,unit_price,quantity,subtotal_amount FROM order_item WHERE org_id=$2 AND order_id=$1 ORDER BY id`, n, org)
 	if e != nil {
 		return out, e
 	}
@@ -565,12 +608,12 @@ func (s *Service) Detail(ctx context.Context, n, org int64) (Detail, error) {
 	for rows.Next() {
 		var x ItemView
 		var item, cover int64
-		if e = rows.Scan(&item, &x.SKUCode, &x.SKUName, &x.SKUVersion, &x.Unit, &x.ServiceScope, &x.Exclusions, &x.WarrantyDescription, &cover, &x.FaultDescription, &x.UnitPrice, &x.Quantity, &x.Subtotal); e != nil {
+		if e = rows.Scan(&item, &x.SKUCode, &x.SKUName, &x.SKUVersion, &x.Unit, &x.DetailProfile, &cover, &x.DemandDescription, &x.UnitPrice, &x.Quantity, &x.Subtotal); e != nil {
 			return out, e
 		}
 		x.ID = fmt.Sprint(item)
 		x.CoverImageURL = "/api/v1/public/media/" + fmt.Sprint(cover)
-		x.FaultMedia, e = s.media(ctx, org, item)
+		x.DemandMedia, e = s.media(ctx, org, item)
 		if e != nil {
 			return out, e
 		}

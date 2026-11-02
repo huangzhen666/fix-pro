@@ -44,7 +44,7 @@ func TestAllCustomerRoutesRejectLegacyIdentity(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	for _, route := range []string{"POST auth/session/verify", "GET auth/me", "GET profile", "PUT profile", "GET checkout/contact", "POST media/avatar", "POST media/fault", "GET media/1/content", "DELETE media/1", "GET cart", "POST cart/items", "PATCH cart/items/1", "PUT cart/items/1/fault", "DELETE cart/items/1", "POST orders", "POST orders/1/repeat", "GET addresses", "POST addresses", "PUT addresses/1", "POST addresses/1/default", "DELETE addresses/1", "GET orders", "GET orders/1", "GET work-orders/1", "POST work-orders/1/acceptance", "POST work-orders/1/rating", "GET work-orders/1/timeline"} {
+	for _, route := range []string{"POST auth/session/verify", "GET auth/me", "GET profile", "PUT profile", "GET checkout/contact", "POST media/avatar", "POST media/demand", "GET media/1/content", "DELETE media/1", "GET cart", "POST cart/items", "PATCH cart/items/1", "PUT cart/items/1/demand", "DELETE cart/items/1", "POST orders", "POST orders/1/repeat", "GET addresses", "POST addresses", "PUT addresses/1", "POST addresses/1/default", "DELETE addresses/1", "GET orders", "GET orders/1", "GET work-orders/1", "POST work-orders/1/acceptance", "POST work-orders/1/rating", "GET work-orders/1/timeline"} {
 		method, path, _ := strings.Cut(route, " ")
 		r := httptest.NewRequest(method, "/api/v1/mini/"+path, nil)
 		r.Header.Set("Authorization", "Bearer local-customer-1")

@@ -49,14 +49,14 @@ func TestDirectOrderAndCartIsolation(t *testing.T) {
 		db.Exec(`DELETE FROM customer WHERE id=$1`, customer)
 	})
 	var sku int64
-	if err = db.QueryRow(`INSERT INTO service_sku(org_id,category_id,sku_code,name,service_scope,exclusions,warranty_description,price_mode,base_price,unit,current_published_version,status) VALUES(1,1001,$1,'测试维修','测试范围','无','测试质保','FIXED',11800,'次',1,'PUBLISHED') RETURNING id`, stamp).Scan(&sku); err != nil {
+	if err = db.QueryRow(`INSERT INTO service_sku(org_id,category_id,sku_code,name,detail_profile,price_mode,base_price,unit,current_published_version,status) VALUES(1,1001,$1,'测试维修','{"schemaVersion":1,"serviceTarget":"约定对象的基础服务","billing":{"unitDefinition":"每份对应一次约定服务","quantity":{"min":1,"max":99,"step":1,"aggregation":"INDEPENDENT"},"quantityExplanation":"每份对应独立服务对象","visitFeeMode":"INCLUDED","feeDescription":"本服务价格已经包含上门费用"},"includedItems":[{"title":"基础服务","description":"完成双方约定的基础服务"}],"acceptanceCriteria":["完成服务后逐项现场确认"],"afterSales":{"type":"SUPPORT","summary":"请联系客服核查服务问题","coverage":"提供约定服务相关的问题咨询","contactDescription":"联系客服提供订单号和问题说明"},"demandCollection":{"description":{"mode":"OPTIONAL","label":"服务需求","hint":"可填写特别需要注意的情况"},"media":{"mode":"OPTIONAL","label":"现场资料","hint":"可上传现场照片辅助了解"}}}','FIXED',11800,'次',1,'PUBLISHED') RETURNING id`, stamp).Scan(&sku); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
 		db.Exec(`DELETE FROM service_sku_version WHERE sku_id=$1`, sku)
 		db.Exec(`DELETE FROM service_sku WHERE id=$1`, sku)
 	})
-	snapshot, _ := json.Marshal(catalog.PublishedSKU{ID: fmt.Sprint(sku), SKUCode: stamp, Name: "测试维修", ServiceScope: "测试范围", Exclusions: "无", WarrantyDescription: "测试质保", PriceMode: "FIXED", Price: 11800, Unit: "次", CoverImageURL: "/api/v1/media/1", PublishedVersion: 1})
+	snapshot, _ := json.Marshal(catalog.PublishedSKU{ID: fmt.Sprint(sku), SKUCode: stamp, Name: "测试维修", DetailProfile: testServiceProfile(), PriceMode: "FIXED", Price: 11800, Unit: "次", CoverImageURL: "/api/v1/media/1", PublishedVersion: 1})
 	if _, err = db.Exec(`INSERT INTO service_sku_version(org_id,sku_id,version_no,snapshot_json,published_by) VALUES(1,$1,1,$2,'TEST')`, sku, snapshot); err != nil {
 		t.Fatal(err)
 	}
@@ -124,7 +124,7 @@ func TestDirectOrderAndCartIsolation(t *testing.T) {
 
 func TestDirectOrderRejectsInvalidParameters(t *testing.T) {
 	base := Write{ContactName: "测试客户", ContactMobile: "13800138000", ServiceAddress: "汉川市测试路6号楼203室", AppointmentDate: time.Now().AddDate(0, 0, 1).Format("2006-01-02"), AppointmentSlot: "08:00"}
-	for _, item := range []DirectItem{{SKUID: "1", SKUVersion: 1, Quantity: 0}, {SKUID: "1", SKUVersion: 1, Quantity: 100}, {SKUID: "bad", SKUVersion: 1, Quantity: 1}, {SKUID: "1", SKUVersion: 0, Quantity: 1}} {
+	for _, item := range []DirectItem{{SKUID: "1", SKUVersion: 1, Quantity: 0}, {SKUID: "1", SKUVersion: 1, Quantity: 10000}, {SKUID: "bad", SKUVersion: 1, Quantity: 1}, {SKUID: "1", SKUVersion: 0, Quantity: 1}} {
 		w := base
 		w.DirectItem = &item
 		if _, err := New(nil).Create(context.Background(), auth.Principal{}, "invalid", w); err == nil {

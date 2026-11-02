@@ -2,7 +2,9 @@ package catalog
 
 import (
 	"context"
+	"crypto/rand"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,7 +13,7 @@ import (
 	"go.uber.org/zap"
 	"net/http"
 	"reflect"
-	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -38,65 +40,43 @@ type CategoryWrite struct {
 	SortOrder int     `json:"sortOrder"`
 }
 type CategoryGroup struct {
-	ID       string         `json:"id"`
-	Name     string         `json:"name"`
-	Services []PublishedSKU `json:"services"`
+	ID       string           `json:"id"`
+	Name     string           `json:"name"`
+	Services []ServiceSummary `json:"services"`
 }
 type SKUWrite struct {
-	CategoryID, SKUCode, Name, Description, ServiceScope, Exclusions, WarrantyDescription, PriceMode, Unit, CoverMediaID string
-	BasePrice                                                                                                            int64
-	GalleryMediaIDs                                                                                                      []string
-	Version                                                                                                              int
-	RequiredSkillIDs                                                                                                     []string
+	CategoryID       string   `json:"categoryId"`
+	Name             string   `json:"name"`
+	Description      string   `json:"description"`
+	DetailProfile    Profile  `json:"detailProfile"`
+	PriceMode        string   `json:"priceMode"`
+	Unit             string   `json:"unit"`
+	CoverMediaID     string   `json:"coverMediaId"`
+	BasePrice        int64    `json:"basePrice"`
+	GalleryMediaIDs  []string `json:"galleryMediaIds"`
+	Version          int      `json:"version"`
+	RequiredSkillIDs []string `json:"requiredSkillIds"`
 }
-
-func (s *SKUWrite) UnmarshalJSON(b []byte) error {
-	type raw struct {
-		CategoryID          string   `json:"categoryId"`
-		SKUCode             string   `json:"skuCode"`
-		Name                string   `json:"name"`
-		Description         string   `json:"description"`
-		ServiceScope        string   `json:"serviceScope"`
-		Exclusions          string   `json:"exclusions"`
-		WarrantyDescription string   `json:"warrantyDescription"`
-		PriceMode           string   `json:"priceMode"`
-		BasePrice           int64    `json:"basePrice"`
-		Unit                string   `json:"unit"`
-		CoverMediaID        string   `json:"coverMediaId"`
-		GalleryMediaIDs     []string `json:"galleryMediaIds"`
-		Version             int      `json:"version"`
-		RequiredSkillIDs    []string `json:"requiredSkillIds"`
-	}
-	var v raw
-	if err := json.Unmarshal(b, &v); err != nil {
-		return err
-	}
-	*s = SKUWrite{CategoryID: v.CategoryID, SKUCode: v.SKUCode, Name: v.Name, Description: v.Description, ServiceScope: v.ServiceScope, Exclusions: v.Exclusions, WarrantyDescription: v.WarrantyDescription, PriceMode: v.PriceMode, Unit: v.Unit, CoverMediaID: v.CoverMediaID, BasePrice: v.BasePrice, GalleryMediaIDs: v.GalleryMediaIDs, Version: v.Version, RequiredSkillIDs: v.RequiredSkillIDs}
-	return nil
-}
-
 type SKUDetail struct {
-	ID                  string    `json:"id"`
-	CategoryID          string    `json:"categoryId"`
-	SKUCode             string    `json:"skuCode"`
-	Name                string    `json:"name"`
-	Description         string    `json:"description"`
-	ServiceScope        string    `json:"serviceScope"`
-	Exclusions          string    `json:"exclusions"`
-	WarrantyDescription string    `json:"warrantyDescription"`
-	PriceMode           string    `json:"priceMode"`
-	BasePrice           int64     `json:"basePrice"`
-	Unit                string    `json:"unit"`
-	CoverMediaID        *string   `json:"coverMediaId"`
-	GalleryMediaIDs     []string  `json:"galleryMediaIds"`
-	Status              string    `json:"status"`
-	Version             int       `json:"version"`
-	PublishedVersion    *int      `json:"publishedVersion"`
-	RequiredSkillIDs    []string  `json:"requiredSkillIds"`
-	CreatedBy           string    `json:"createdBy"`
-	CreatedAt           time.Time `json:"createdAt"`
-	UpdatedBy           string    `json:"updatedBy"`
-	UpdatedAt           time.Time `json:"updatedAt"`
+	ID               string    `json:"id"`
+	CategoryID       string    `json:"categoryId"`
+	SKUCode          string    `json:"skuCode"`
+	Name             string    `json:"name"`
+	Description      string    `json:"description"`
+	DetailProfile    Profile   `json:"detailProfile"`
+	PriceMode        string    `json:"priceMode"`
+	BasePrice        int64     `json:"basePrice"`
+	Unit             string    `json:"unit"`
+	CoverMediaID     *string   `json:"coverMediaId"`
+	GalleryMediaIDs  []string  `json:"galleryMediaIds"`
+	Status           string    `json:"status"`
+	Version          int       `json:"version"`
+	PublishedVersion *int      `json:"publishedVersion"`
+	RequiredSkillIDs []string  `json:"requiredSkillIds"`
+	CreatedBy        string    `json:"createdBy"`
+	CreatedAt        time.Time `json:"createdAt"`
+	UpdatedBy        string    `json:"updatedBy"`
+	UpdatedAt        time.Time `json:"updatedAt"`
 }
 type SKUAdmin struct {
 	ID               string    `json:"id"`
@@ -119,20 +99,37 @@ type Page[T any] struct {
 	PageSize int   `json:"pageSize"`
 }
 type PublishedSKU struct {
-	ID                  string   `json:"id"`
-	SKUCode             string   `json:"skuCode"`
-	Name                string   `json:"name"`
-	Description         string   `json:"description"`
-	ServiceScope        string   `json:"serviceScope"`
-	Exclusions          string   `json:"exclusions"`
-	WarrantyDescription string   `json:"warrantyDescription"`
-	PriceMode           string   `json:"priceMode"`
-	Price               int64    `json:"price"`
-	Unit                string   `json:"unit"`
-	CoverImageURL       string   `json:"coverImageUrl"`
-	GalleryImageURLs    []string `json:"galleryImageUrls"`
-	PublishedVersion    int      `json:"publishedVersion"`
+	DetailProfile    Profile  `json:"detailProfile"`
+	ID               string   `json:"id"`
+	SKUCode          string   `json:"skuCode"`
+	Name             string   `json:"name"`
+	Description      string   `json:"description"`
+	PriceMode        string   `json:"priceMode"`
+	Price            int64    `json:"price"`
+	Unit             string   `json:"unit"`
+	CoverImageURL    string   `json:"coverImageUrl"`
+	GalleryImageURLs []string `json:"galleryImageUrls"`
+	PublishedVersion int      `json:"publishedVersion"`
 }
+type ServiceSummary struct {
+	ID               string       `json:"id"`
+	SKUCode          string       `json:"skuCode"`
+	Name             string       `json:"name"`
+	Description      string       `json:"description"`
+	PriceMode        string       `json:"priceMode"`
+	Price            int64        `json:"price"`
+	Unit             string       `json:"unit"`
+	CoverImageURL    string       `json:"coverImageUrl"`
+	GalleryImageURLs []string     `json:"galleryImageUrls"`
+	PublishedVersion int          `json:"publishedVersion"`
+	UnitDefinition   string       `json:"unitDefinition"`
+	QuantityRule     QuantityRule `json:"quantityRule"`
+}
+
+func summary(x PublishedSKU) ServiceSummary {
+	return ServiceSummary{x.ID, x.SKUCode, x.Name, x.Description, x.PriceMode, x.Price, x.Unit, x.CoverImageURL, x.GalleryImageURLs, x.PublishedVersion, x.DetailProfile.Billing.UnitDefinition, x.DetailProfile.Billing.Quantity}
+}
+
 type PublishResult struct {
 	SKUID            string    `json:"skuId"`
 	Status           string    `json:"status"`
@@ -141,14 +138,15 @@ type PublishResult struct {
 }
 
 func samePublishedSKU(a, b PublishedSKU) bool {
+	a.DetailProfile = NormalizeProfile(a.DetailProfile)
+	b.DetailProfile = NormalizeProfile(b.DetailProfile)
 	a.PublishedVersion = 0
 	b.PublishedVersion = 0
 	return reflect.DeepEqual(a, b)
 }
 
 func id(v string) (int64, error) {
-	var n int64
-	_, e := fmt.Sscan(v, &n)
+	n, e := strconv.ParseInt(strings.TrimSpace(v), 10, 64)
 	if e != nil || n <= 0 {
 		return 0, httpx.E("VALIDATION_ERROR", "ID 格式错误", 400)
 	}
@@ -311,7 +309,7 @@ func (s *Service) Detail(ctx context.Context, n int64) (SKUDetail, error) {
 	var x SKUDetail
 	var rawID, cat int64
 	var cover, pv sql.NullInt64
-	e := s.db.QueryRowContext(ctx, `SELECT id,category_id,sku_code,name,COALESCE(description,''),service_scope,exclusions,warranty_description,price_mode,base_price,unit,cover_media_id,status,version,current_published_version,created_by,created_at,updated_by,updated_at FROM service_sku WHERE org_id=1 AND id=$1`, n).Scan(&rawID, &cat, &x.SKUCode, &x.Name, &x.Description, &x.ServiceScope, &x.Exclusions, &x.WarrantyDescription, &x.PriceMode, &x.BasePrice, &x.Unit, &cover, &x.Status, &x.Version, &pv, &x.CreatedBy, &x.CreatedAt, &x.UpdatedBy, &x.UpdatedAt)
+	e := s.db.QueryRowContext(ctx, `SELECT id,category_id,sku_code,name,COALESCE(description,''),detail_profile,price_mode,base_price,unit,cover_media_id,status,version,current_published_version,created_by,created_at,updated_by,updated_at FROM service_sku WHERE org_id=1 AND id=$1`, n).Scan(&rawID, &cat, &x.SKUCode, &x.Name, &x.Description, &x.DetailProfile, &x.PriceMode, &x.BasePrice, &x.Unit, &cover, &x.Status, &x.Version, &pv, &x.CreatedBy, &x.CreatedAt, &x.UpdatedBy, &x.UpdatedAt)
 	if e == sql.ErrNoRows {
 		return x, httpx.E("SKU_NOT_FOUND", "SKU 不存在", 404)
 	}
@@ -352,8 +350,6 @@ func (s *Service) Detail(ctx context.Context, n int64) (SKUDetail, error) {
 	return x, rows.Err()
 }
 
-var codeRE = regexp.MustCompile(`^[A-Z0-9-]{2,64}$`)
-
 func (s *Service) validateWrite(ctx context.Context, w SKUWrite) error {
 	cat, e := id(w.CategoryID)
 	if e != nil {
@@ -366,9 +362,20 @@ func (s *Service) validateWrite(ctx context.Context, w SKUWrite) error {
 	if c == 0 {
 		return httpx.E("CATEGORY_NOT_FOUND", "分类不存在", 404)
 	}
-	w.SKUCode = strings.ToUpper(w.SKUCode)
-	if !codeRE.MatchString(w.SKUCode) || len([]rune(strings.TrimSpace(w.Name))) < 2 || len([]rune(w.Name)) > 128 || w.BasePrice < 1 || w.BasePrice > 99999999 {
-		return httpx.E("VALIDATION_ERROR", "SKU 编码、名称或价格不合法", 400)
+	if len([]rune(strings.TrimSpace(w.Name))) < 2 || len([]rune(w.Name)) > 128 || w.BasePrice < 0 || w.BasePrice > 99999999 {
+		return httpx.E("VALIDATION_ERROR", "SKU 名称或价格不合法", 400)
+	}
+	if e := w.DetailProfile.Validate(false); e != nil {
+		return e
+	}
+	if len([]rune(w.Unit)) < 1 || len([]rune(w.Unit)) > 8 {
+		return httpx.E("VALIDATION_ERROR", "单位需为1–8字", 400)
+	}
+	if len([]rune(w.Description)) > 500 {
+		return httpx.E("VALIDATION_ERROR", "简述最多500字", 400)
+	}
+	if w.PriceMode != "FIXED" {
+		return httpx.E("SKU_PRICE_MODE_NOT_SUPPORTED", "仅支持固定价", 400)
 	}
 	if len(w.GalleryMediaIDs) > 8 {
 		return httpx.E("MEDIA_COUNT_EXCEEDED", "轮播图最多 8 张", 400)
@@ -380,17 +387,17 @@ func (s *Service) validMedia(ctx context.Context, q interface {
 	QueryRowContext(context.Context, string, ...any) *sql.Row
 }, n int64) bool {
 	var c int
-	return q.QueryRowContext(ctx, `SELECT COUNT(*) FROM media_asset WHERE id=$1 AND org_id=1 AND purpose='SKU_IMAGE' AND status='READY'`, n).Scan(&c) == nil && c > 0
+	return q.QueryRowContext(ctx, `SELECT COUNT(*) FROM media_asset WHERE id=$1 AND org_id=1 AND purpose='SKU_IMAGE' AND media_type='IMAGE' AND status='READY'`, n).Scan(&c) == nil && c > 0
 }
 func (s *Service) bind(ctx context.Context, tx *sql.Tx, n int64, w SKUWrite) error {
 	cover, e := id(w.CoverMediaID)
-	if e != nil || !s.validMedia(ctx, tx, cover) {
+	if w.CoverMediaID != "" && (e != nil || !s.validMedia(ctx, tx, cover)) {
 		return httpx.E("SKU_COVER_REQUIRED", "封面图不可用", 400)
 	}
 	if _, e = tx.ExecContext(ctx, `DELETE FROM service_sku_media WHERE org_id=1 AND sku_id=$1`, n); e != nil {
 		return e
 	}
-	if _, e = tx.ExecContext(ctx, `INSERT INTO service_sku_media(org_id,sku_id,media_id,media_role,sort_order) VALUES(1,$1,$2,'COVER',0)`, n, cover); e != nil {
+	if _, e = tx.ExecContext(ctx, `INSERT INTO service_sku_media(org_id,sku_id,media_id,media_role,sort_order) SELECT 1,$1,$2,'COVER',0 WHERE $2::bigint>0`, n, cover); e != nil {
 		return e
 	}
 	sort := 1
@@ -406,6 +413,19 @@ func (s *Service) bind(ctx context.Context, tx *sql.Tx, n int64, w SKUWrite) err
 			}
 			sort++
 			seen[m] = true
+		}
+	}
+	for _, raw := range w.DetailProfile.MediaIDs() {
+		m, err := id(raw)
+		if err != nil || !s.validMedia(ctx, tx, m) {
+			return httpx.E("SKU_DETAIL_MEDIA_INVALID", "detailProfile: 图片不可用", 400)
+		}
+		if !seen[m] {
+			if _, e = tx.ExecContext(ctx, `INSERT INTO service_sku_media(org_id,sku_id,media_id,media_role,sort_order) VALUES(1,$1,$2,'DETAIL',$3)`, n, m, sort); e != nil {
+				return e
+			}
+			seen[m] = true
+			sort++
 		}
 	}
 	if _, e = tx.ExecContext(ctx, `DELETE FROM service_sku_skill_requirement WHERE org_id=1 AND sku_id=$1`, n); e != nil {
@@ -435,6 +455,7 @@ func (s *Service) bind(ctx context.Context, tx *sql.Tx, n int64, w SKUWrite) err
 	return nil
 }
 func (s *Service) Create(ctx context.Context, w SKUWrite, actor string) (SKUDetail, error) {
+	w.DetailProfile = NormalizeProfile(w.DetailProfile)
 	if e := s.validateWrite(ctx, w); e != nil {
 		return SKUDetail{}, e
 	}
@@ -446,7 +467,12 @@ func (s *Service) Create(ctx context.Context, w SKUWrite, actor string) (SKUDeta
 	}
 	defer tx.Rollback()
 	var n int64
-	e = tx.QueryRowContext(ctx, `INSERT INTO service_sku(org_id,category_id,sku_code,name,description,service_scope,exclusions,warranty_description,price_mode,base_price,unit,cover_media_id,status,created_by,updated_by) VALUES(1,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'DRAFT',$12,$12) RETURNING id`, cat, strings.ToUpper(w.SKUCode), w.Name, w.Description, w.ServiceScope, w.Exclusions, w.WarrantyDescription, w.PriceMode, w.BasePrice, w.Unit, cover, actor).Scan(&n)
+	codeBytes := make([]byte, 12)
+	if _, e = rand.Read(codeBytes); e != nil {
+		return SKUDetail{}, e
+	}
+	code := "SVC-" + strings.ToUpper(hex.EncodeToString(codeBytes))
+	e = tx.QueryRowContext(ctx, `INSERT INTO service_sku(org_id,category_id,sku_code,name,description,detail_profile,price_mode,base_price,unit,cover_media_id,status,created_by,updated_by) VALUES(1,$1,$2,$3,$4,$5,$6,$7,$8,NULLIF($9,0),'DRAFT',$10,$10) RETURNING id`, cat, code, w.Name, w.Description, w.DetailProfile, w.PriceMode, w.BasePrice, w.Unit, cover, actor).Scan(&n)
 	if duplicate(e) {
 		return SKUDetail{}, httpx.E("SKU_CODE_DUPLICATED", "SKU 编码已存在", 409)
 	}
@@ -462,6 +488,7 @@ func (s *Service) Create(ctx context.Context, w SKUWrite, actor string) (SKUDeta
 	return s.Detail(ctx, n)
 }
 func (s *Service) Update(ctx context.Context, n int64, w SKUWrite, actor string) (SKUDetail, error) {
+	w.DetailProfile = NormalizeProfile(w.DetailProfile)
 	if e := s.validateWrite(ctx, w); e != nil {
 		return SKUDetail{}, e
 	}
@@ -479,7 +506,7 @@ func (s *Service) Update(ctx context.Context, n int64, w SKUWrite, actor string)
 		return SKUDetail{}, e
 	}
 	defer tx.Rollback()
-	r, e := tx.ExecContext(ctx, `UPDATE service_sku SET category_id=$1,name=$2,description=$3,service_scope=$4,exclusions=$5,warranty_description=$6,price_mode=$7,base_price=$8,unit=$9,cover_media_id=$10,updated_by=$11,version=version+1 WHERE org_id=1 AND id=$12 AND version=$13`, cat, w.Name, w.Description, w.ServiceScope, w.Exclusions, w.WarrantyDescription, w.PriceMode, w.BasePrice, w.Unit, cover, actor, n, w.Version)
+	r, e := tx.ExecContext(ctx, `UPDATE service_sku SET category_id=$1,name=$2,description=$3,detail_profile=$4,price_mode=$5,base_price=$6,unit=$7,cover_media_id=NULLIF($8,0),updated_by=$9,version=version+1 WHERE org_id=1 AND id=$10 AND version=$11`, cat, w.Name, w.Description, w.DetailProfile, w.PriceMode, w.BasePrice, w.Unit, cover, actor, n, w.Version)
 	if e != nil {
 		return SKUDetail{}, e
 	}
@@ -496,16 +523,33 @@ func (s *Service) Update(ctx context.Context, n int64, w SKUWrite, actor string)
 	return s.Detail(ctx, n)
 }
 func (s *Service) Publish(ctx context.Context, n int64, user string) (PublishResult, error) {
+	tx, e := database.BeginTx(ctx, s.db)
+	if e != nil {
+		return PublishResult{}, e
+	}
+	defer tx.Rollback()
+	var locked int64
+	if e = tx.QueryRowContext(ctx, `SELECT id FROM service_sku WHERE org_id=1 AND id=$1 FOR UPDATE`, n).Scan(&locked); e != nil {
+		if e == sql.ErrNoRows {
+			return PublishResult{}, httpx.E("SKU_NOT_FOUND", "SKU不存在", 404)
+		}
+		return PublishResult{}, e
+	}
+
 	x, e := s.Detail(ctx, n)
 	if e != nil {
 		return PublishResult{}, e
 	}
+	if x.BasePrice < 1 {
+		return PublishResult{}, httpx.E("VALIDATION_ERROR", "发布前请填写有效价格", 400)
+	}
 	if x.PriceMode != "FIXED" {
 		return PublishResult{}, httpx.E("SKU_PRICE_MODE_NOT_SUPPORTED", "本期仅支持固定价发布", 400)
 	}
-	if len([]rune(strings.TrimSpace(x.ServiceScope))) < 10 || len([]rune(strings.TrimSpace(x.Exclusions))) < 5 || len([]rune(strings.TrimSpace(x.WarrantyDescription))) < 5 {
-		return PublishResult{}, httpx.E("SKU_SERVICE_TERMS_REQUIRED", "请完整填写服务范围、除外项和售后/质保说明", 400)
+	if e = x.DetailProfile.Validate(true); e != nil {
+		return PublishResult{}, e
 	}
+
 	if x.CoverMediaID == nil {
 		return PublishResult{}, httpx.E("SKU_COVER_REQUIRED", "请上传有效封面图", 400)
 	}
@@ -521,7 +565,13 @@ func (s *Service) Publish(ctx context.Context, n int64, user string) (PublishRes
 	for _, m := range x.GalleryMediaIDs {
 		urls = append(urls, "/api/v1/public/media/"+m)
 	}
-	snap := PublishedSKU{x.ID, x.SKUCode, x.Name, x.Description, x.ServiceScope, x.Exclusions, x.WarrantyDescription, x.PriceMode, x.BasePrice, x.Unit, urls[0], urls, next}
+	for _, raw := range append(x.GalleryMediaIDs, x.DetailProfile.MediaIDs()...) {
+		m, err := id(raw)
+		if err != nil || !s.validMedia(ctx, s.db, m) {
+			return PublishResult{}, httpx.E("SKU_DETAIL_MEDIA_INVALID", "服务图片不可用", 400)
+		}
+	}
+	snap := PublishedSKU{ID: x.ID, SKUCode: x.SKUCode, Name: x.Name, Description: x.Description, DetailProfile: x.DetailProfile, PriceMode: x.PriceMode, Price: x.BasePrice, Unit: x.Unit, CoverImageURL: urls[0], GalleryImageURLs: urls, PublishedVersion: next}
 	if x.PublishedVersion != nil {
 		var currentRaw []byte
 		var publishedAt time.Time
@@ -533,7 +583,10 @@ func (s *Service) Publish(ctx context.Context, n int64, user string) (PublishRes
 			var current PublishedSKU
 			if json.Unmarshal(currentRaw, &current) == nil && samePublishedSKU(current, snap) {
 				// Reuse the snapshot, but restore availability after an off-shelf action.
-				if _, e = s.db.ExecContext(ctx, `UPDATE service_sku SET status='PUBLISHED' WHERE org_id=1 AND id=$1 AND status<>'PUBLISHED'`, n); e != nil {
+				if _, e = tx.ExecContext(ctx, `UPDATE service_sku SET status='PUBLISHED' WHERE org_id=1 AND id=$1 AND status<>'PUBLISHED'`, n); e != nil {
+					return PublishResult{}, e
+				}
+				if e = tx.Commit(); e != nil {
 					return PublishResult{}, e
 				}
 				return PublishResult{x.ID, "PUBLISHED", *x.PublishedVersion, publishedAt}, nil
@@ -542,13 +595,16 @@ func (s *Service) Publish(ctx context.Context, n int64, user string) (PublishRes
 	}
 	raw, _ := json.Marshal(snap)
 	now := time.Now().UTC()
-	tx, e := database.BeginTx(ctx, s.db)
-	if e != nil {
-		return PublishResult{}, e
-	}
-	defer tx.Rollback()
+
 	if _, e = tx.ExecContext(ctx, `INSERT INTO service_sku_version(org_id,sku_id,version_no,snapshot_json,published_by,published_at) VALUES(1,$1,$2,$3,$4,$5)`, n, next, raw, user, now); e != nil {
 		return PublishResult{}, e
+	}
+	mids := append([]string{*x.CoverMediaID}, x.GalleryMediaIDs...)
+	mids = append(mids, x.DetailProfile.MediaIDs()...)
+	for _, m := range mids {
+		if _, e = tx.ExecContext(ctx, `INSERT INTO sku_snapshot_media(org_id,sku_id,version_no,media_id) VALUES(1,$1,$2,$3) ON CONFLICT DO NOTHING`, n, next, m); e != nil {
+			return PublishResult{}, e
+		}
 	}
 	if _, e = tx.ExecContext(ctx, `UPDATE service_sku SET status='PUBLISHED',current_published_version=$1,published_at=$2 WHERE org_id=1 AND id=$3`, next, now, n); e != nil {
 		return PublishResult{}, e
@@ -573,13 +629,13 @@ func (s *Service) OffShelf(ctx context.Context, n int64) error {
 	logging.Event(ctx, "catalog", "sku.off_shelf")
 	return nil
 }
-func (s *Service) PublicList(ctx context.Context, key string) ([]PublishedSKU, error) {
+func (s *Service) PublicList(ctx context.Context, key string) ([]ServiceSummary, error) {
 	rows, e := s.db.QueryContext(ctx, `SELECT v.snapshot_json FROM service_sku s JOIN service_sku_version v ON v.org_id=s.org_id AND v.sku_id=s.id AND v.version_no=s.current_published_version WHERE s.org_id=1 AND s.status='PUBLISHED' ORDER BY s.published_at DESC`)
 	if e != nil {
 		return nil, e
 	}
 	defer rows.Close()
-	out := []PublishedSKU{}
+	out := []ServiceSummary{}
 	key = strings.ToLower(strings.TrimSpace(key))
 	for rows.Next() {
 		var raw []byte
@@ -591,7 +647,7 @@ func (s *Service) PublicList(ctx context.Context, key string) ([]PublishedSKU, e
 			return nil, e
 		}
 		if key == "" || strings.Contains(strings.ToLower(x.Name), key) || strings.Contains(strings.ToLower(x.Description), key) {
-			out = append(out, x)
+			out = append(out, summary(x))
 		}
 	}
 	return out, rows.Err()
@@ -620,7 +676,7 @@ func (s *Service) PublicGroups(ctx context.Context) ([]CategoryGroup, error) {
 		if e != nil {
 			return nil, e
 		}
-		g := CategoryGroup{c.ID, c.Name, []PublishedSKU{}}
+		g := CategoryGroup{c.ID, c.Name, []ServiceSummary{}}
 		for rows.Next() {
 			var raw []byte
 			var x PublishedSKU
@@ -632,7 +688,7 @@ func (s *Service) PublicGroups(ctx context.Context) ([]CategoryGroup, error) {
 				rows.Close()
 				return nil, e
 			}
-			g.Services = append(g.Services, x)
+			g.Services = append(g.Services, summary(x))
 		}
 		rows.Close()
 		out = append(out, g)

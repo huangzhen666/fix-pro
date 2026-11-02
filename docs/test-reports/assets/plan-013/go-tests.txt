@@ -1,0 +1,24 @@
+?   	github.com/fixpro/server/cmd/backfill-worker-auth	[no test files]
+ok  	github.com/fixpro/server/cmd/bootstrap-admin	0.680s
+?   	github.com/fixpro/server/cmd/init-customer-auth	[no test files]
+?   	github.com/fixpro/server/cmd/migrate	[no test files]
+?   	github.com/fixpro/server/cmd/seed-service-skus	[no test files]
+?   	github.com/fixpro/server/cmd/server	[no test files]
+ok  	github.com/fixpro/server/internal/address	0.502s
+ok  	github.com/fixpro/server/internal/admin	0.563s
+ok  	github.com/fixpro/server/internal/app	0.568s
+ok  	github.com/fixpro/server/internal/authorization	0.506s
+?   	github.com/fixpro/server/internal/cart	[no test files]
+ok  	github.com/fixpro/server/internal/catalog	0.736s
+ok  	github.com/fixpro/server/internal/customer	0.567s
+ok  	github.com/fixpro/server/internal/fulfillment	0.743s
+ok  	github.com/fixpro/server/internal/media	0.529s
+ok  	github.com/fixpro/server/internal/order	0.785s
+ok  	github.com/fixpro/server/internal/platform/auth	0.799s
+ok  	github.com/fixpro/server/internal/platform/config	0.487s
+ok  	github.com/fixpro/server/internal/platform/database	0.528s
+ok  	github.com/fixpro/server/internal/platform/httpx	0.506s
+ok  	github.com/fixpro/server/internal/platform/logging	0.507s
+ok  	github.com/fixpro/server/internal/platform/wechat	0.625s
+ok  	github.com/fixpro/server/internal/workforce	0.530s
+ok  	github.com/fixpro/server/test/integration	0.743s

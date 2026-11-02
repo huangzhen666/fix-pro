@@ -1,6 +1,6 @@
 import { protectedPage } from '../../services/guard'
 import { getApiBaseUrl } from '../../config/env'
-import { getCart, removeItem, saveFault, updateQuantity, uploadFault, type Cart, type CartItem } from '../../services/cart'
+import { getCart, confirmCartItem, removeItem, saveDemand, updateQuantity, uploadDemand, type Cart, type CartItem } from '../../services/cart'
 import { download } from '../../services/request'
 import { onSessionReset } from '../../services/session'
 
@@ -31,7 +31,7 @@ protectedPage({
   applyCart(cart: Cart) {
     const previous = new Map(this.data.cart.items.map(item => [item.id, item]))
     const items = cart.items.map(item => ({ ...item, coverImageUrl: `${getApiBaseUrl()}${item.coverImageUrl}`, subtotalText: (item.subtotal / 100).toFixed(2), selected: item.available && (selectedByItemID[item.id] ?? true),
-      faultMedia: item.faultMedia.map(media => ({ ...media, localUrl: (previous.get(item.id)?.faultMedia.find(old => old.id === media.id) as any)?.localUrl || '' })),
+      demandMedia: item.demandMedia.map(media => ({ ...media, localUrl: (previous.get(item.id)?.demandMedia.find(old => old.id === media.id) as any)?.localUrl || '' })),
     }))
     this.setData({ cart: { ...cart, items }, ...summary(items), swipeId: '', swipeOffset: 0, dragging: false })
     this.loadPrivateMedia(items)
@@ -43,13 +43,13 @@ protectedPage({
     finally { this.setData({ loading: false }) }
   },
   loadPrivateMedia(items: CartItem[]) {
-    items.forEach(item => item.faultMedia.forEach(async media => {
+    items.forEach(item => item.demandMedia.forEach(async media => {
       if ((media as any).localUrl || !media.url) return
       try {
         const localUrl = await download(media.url)
         const index = this.data.cart.items.findIndex(entry => entry.id === item.id)
-        const mediaIndex = this.data.cart.items[index]?.faultMedia.findIndex(entry => entry.id === media.id) ?? -1
-        if (index >= 0 && mediaIndex >= 0) this.setData({ [`cart.items[${index}].faultMedia[${mediaIndex}].localUrl`]: localUrl })
+        const mediaIndex = this.data.cart.items[index]?.demandMedia.findIndex(entry => entry.id === media.id) ?? -1
+        if (index >= 0 && mediaIndex >= 0) this.setData({ [`cart.items[${index}].demandMedia[${mediaIndex}].localUrl`]: localUrl })
       } catch { /* Keep the service card available if media cannot be loaded. */ }
     }))
   },
@@ -98,15 +98,17 @@ protectedPage({
     const id = String(e.currentTarget.dataset.id)
     this.setData({ expandedId: this.data.expandedId === id ? '' : id, swipeId: '', swipeOffset: 0 })
   },
-  inputFault(e: any) { this.setData({ [`cart.items[${Number(e.currentTarget.dataset.index)}].faultDescription`]: e.detail.value }) },
-  async blurFault(e: any) { await this.persist(Number(e.currentTarget.dataset.index)) },
+  async confirmVersion(e:any) {const id=String(e.currentTarget.dataset.id);try{const result=await wx.showModal({title:'确认新版服务',content:'请先查看当前服务详情，确认价格、服务范围和资料要求。确认后将采用新版规则。'});if(result.confirm){const cart=await confirmCartItem(id,this.data.cart.items.find(v=>v.id===id)!.currentVersion);this.applyCart(cart)}}catch(err){wx.showToast({title:err instanceof Error?err.message:'确认失败',icon:'none'})}},
+  inputDemand(e: any) { this.setData({ [`cart.items[${Number(e.currentTarget.dataset.index)}].demandDescription`]: e.detail.value }) },
+  async blurDemand(e: any) { await this.persist(Number(e.currentTarget.dataset.index)) },
   async change(e: any) {
     if (this.data.updatingId || this.data.savingId || this.data.checkoutLoading) return
     const item = this.data.cart.items[Number(e.currentTarget.dataset.index)]
     if (!item) return
     if (!item.available) return
-    const quantity = item.quantity + Number(e.currentTarget.dataset.delta)
-    if (quantity < 1 || quantity > 99) return
+    const rule=item.detailProfile.billing.quantity
+    const quantity = item.quantity + Number(e.currentTarget.dataset.delta)*rule.step
+    if (quantity < rule.min || quantity > rule.max) return
     this.setData({ updatingId: item.id })
     try { this.applyCart(await updateQuantity(item.id, quantity)) }
     catch (err) { wx.showToast({ title: err instanceof Error ? err.message : '修改失败', icon: 'none' }) }
@@ -120,9 +122,9 @@ protectedPage({
       const chosen = await wx.chooseMedia({ count: 1, mediaType: ['image', 'video'], sourceType: ['album', 'camera'] })
       if (!chosen.tempFiles.length) return
       wx.showLoading({ title: '上传中' })
-      const uploaded = await uploadFault(chosen.tempFiles[0].tempFilePath)
-      const faultMedia = [...item.faultMedia, { id: String(uploaded.id), mediaType: uploaded.mediaType, name: '新上传文件', url: '', localUrl: chosen.tempFiles[0].tempFilePath }]
-      this.setData({ [`cart.items[${index}].faultMedia`]: faultMedia })
+      const uploaded = await uploadDemand(chosen.tempFiles[0].tempFilePath)
+      const demandMedia = [...item.demandMedia, { id: String(uploaded.id), mediaType: uploaded.mediaType, name: '新上传文件', url: '', localUrl: chosen.tempFiles[0].tempFilePath }]
+      this.setData({ [`cart.items[${index}].demandMedia`]: demandMedia })
       await this.persist(index)
     } catch (err) { wx.showToast({ title: err instanceof Error ? err.message : '上传失败', icon: 'none' }) }
     finally { wx.hideLoading() }
@@ -132,14 +134,14 @@ protectedPage({
     const index = Number(e.currentTarget.dataset.index), mediaIndex = Number(e.currentTarget.dataset.mediaIndex)
     const item = this.data.cart.items[index]
     if (!item) return
-    const list = [...item.faultMedia]; list.splice(mediaIndex, 1)
-    this.setData({ [`cart.items[${index}].faultMedia`]: list }); await this.persist(index)
+    const list = [...item.demandMedia]; list.splice(mediaIndex, 1)
+    this.setData({ [`cart.items[${index}].demandMedia`]: list }); await this.persist(index)
   },
   async persist(index: number): Promise<boolean> {
     const item = this.data.cart.items[index]
     if (!item) return true
     this.setData({ savingId: item.id })
-    try { await saveFault(item.id, item.faultDescription || '', item.faultMedia.map(media => media.id)); return true }
+    try { await saveDemand(item.id, item.demandDescription || '', item.demandMedia.map(media => media.id)); return true }
     catch (err) { wx.showToast({ title: err instanceof Error ? err.message : '补充信息同步失败', icon: 'none' }); return false }
     finally { this.setData({ savingId: '' }) }
   },

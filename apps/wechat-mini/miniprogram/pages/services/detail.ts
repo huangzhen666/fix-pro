@@ -4,7 +4,7 @@ import { addCart, getCart } from '../../services/cart'
 import { ensureReady, hasSession, openLogin, onSessionReset } from '../../services/session'
 
 Page({
-  data: { loading: true, error: '', service: null as any, quantity: 1, adding: false, ordering: false, cartCount: 0 },
+  data: { galleryErrors:{} as Record<string,boolean>, loading: true, error: '', service: null as any, quantity: 1, subtotalText:'0.00', adding: false, ordering: false, cartCount: 0 },
   onLoad(options) { this.load(String(options.id || '')) },
   onShow() { this.refreshCart() },
   async refreshCart() {
@@ -14,14 +14,17 @@ Page({
   async load(id: string) {
     try {
       const s = await getService(id)
-      this.setData({ service: { ...s, priceText: (s.price / 100).toFixed(2), galleryImageUrls: [s.coverImageUrl, ...s.galleryImageUrls.filter(x => x !== s.coverImageUrl)].map(x => `${getApiBaseUrl()}${x}`) } })
+      this.setData({subtotalText:(s.price*s.detailProfile.billing.quantity.min/100).toFixed(2),quantity:s.detailProfile.billing.quantity.min, service: { ...s, priceText: (s.price / 100).toFixed(2), galleryImageUrls: [s.coverImageUrl, ...s.galleryImageUrls.filter(x => x !== s.coverImageUrl)].map(x => `${getApiBaseUrl()}${x}`) } })
     } catch (e) { this.setData({ error: e instanceof Error ? e.message : '加载失败' }) }
     finally { this.setData({ loading: false }) }
   },
   changeQuantity(e: WechatMiniprogram.BaseEvent) {
     if (this.data.adding || this.data.ordering) return
-    const delta = Number(e.currentTarget.dataset.delta)
-    this.setData({ quantity: Math.max(1, Math.min(99, this.data.quantity + delta)) })
+    const q=this.data.service.detailProfile.billing.quantity
+    const delta = Number(e.currentTarget.dataset.delta)*q.step
+    const quantity=this.data.quantity+delta
+    if(quantity<q.min||quantity>q.max)return
+    this.setData({quantity,subtotalText:(this.data.service.price*quantity/100).toFixed(2)})
   },
   async add() {
     if (!this.data.service || this.data.adding || this.data.ordering) return
@@ -34,6 +37,7 @@ Page({
     } catch (e) { wx.showToast({ title: e instanceof Error ? e.message : '加购失败', icon: 'none' }) }
     finally { this.setData({ adding: false }) }
   },
+  galleryError(e:any){this.setData({[`galleryErrors.${Number(e.currentTarget.dataset.index)}`]:true})},
   openCart() { wx.navigateTo({ url: '/pages/cart/index' }) },
   async orderNow() {
     if (!this.data.service || this.data.adding || this.data.ordering) return

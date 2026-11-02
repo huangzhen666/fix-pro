@@ -1,19 +1,22 @@
 // Run from the repository root. All requests use fixtures; no live orders are submitted.
 const fs = require('fs'), vm = require('vm'), ts = require('typescript'), assert = require('node:assert/strict');
-function loadPage(path, modules, wx = {}) { let page; const code = ts.transpileModule(fs.readFileSync(path, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText; vm.runInNewContext(code, { exports: {}, Page: o => page = o, require: p => p.endsWith('/guard') ? { protectedPage: o => page = o } : modules[p.split('/').at(-1)] || {}, wx, getCurrentPages: () => [], setTimeout() { }, console }); page.setData = function (update) { for (const [k, v] of Object.entries(update)) {
+function loadPage(path, modules, wx = {}) { let page; const code = ts.transpileModule(fs.readFileSync(path, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText; vm.runInNewContext(code, { exports: {}, Page: o => page = o, require: p => p.endsWith('/serviceProfile') ? {validQuantity} : p.endsWith('/guard') ? { protectedPage: o => page = o } : modules[p.split('/').at(-1)] || {}, wx, getCurrentPages: () => [], setTimeout() { }, console }); page.setData = function (update) { for (const [k, v] of Object.entries(update)) {
     const parts = k.replace(/\[(\d+)\]/g, '.$1').split('.');
     let obj = this.data;
     for (const p of parts.slice(0, -1))
         obj = obj[p];
     obj[parts.at(-1)] = v;
 } }; return page; }
-const item = (id, quantity = 1) => ({ id, skuId: id, skuVersion: 1, name: '测试维修', coverImageUrl: '/cover', unitPrice: 11800, unit: '次', quantity, subtotal: 11800 * quantity, faultMedia: [], faultComplete: false, available: true });
+const profile={schemaVersion:1,serviceTarget:'约定服务对象',billing:{unitDefinition:'每份对应约定范围的一次服务',quantity:{min:1,max:99,step:1,aggregation:'INDEPENDENT'},quantityExplanation:'每份为独立服务对象',feeDescription:'已经包含上门费用'},includedItems:[],acceptanceCriteria:['按约定服务范围检查'],afterSales:{type:'SUPPORT'},demandCollection:{description:{mode:'OPTIONAL',label:'服务需求',hint:'补充服务要求'},media:{mode:'OPTIONAL',label:'现场资料',hint:'选填照片'}}};
+const validQuantity=(p,n)=>Number.isInteger(n)&&n>=p.billing.quantity.min&&n<=p.billing.quantity.max&&(n-p.billing.quantity.min)%p.billing.quantity.step===0;
+const item = (id, quantity = 1) => ({ detailProfile:structuredClone(profile),needsConfirmation:false,id, skuId: id, skuVersion: 1, name: '测试维修', coverImageUrl: '/cover', unitPrice: 11800, unit: '次', quantity, subtotal: 11800 * quantity, demandMedia: [], demandComplete: false, available: true });
 const cart = items => ({ items, itemCount: items.reduce((n, i) => n + i.quantity, 0), totalAmount: items.reduce((n, i) => n + i.subtotal, 0) });
 (async () => {
     let added = 0, navigated = [], toasts = [];
     const session = { hasSession: () => true, ensureReady: async () => { }, onSessionReset() { } };
     const detail = loadPage('apps/wechat-mini/miniprogram/pages/services/detail.ts', { session, cart: { addCart: async (_, q) => { added++; return cart([item('1', q)]); } }, env: { getApiBaseUrl: () => '' } }, { showToast: o => toasts.push(o), navigateTo: o => { navigated.push(o.url); o.complete?.(); } });
-    detail.data.service = { id: '1', publishedVersion: 1 };
+    detail.data.service = { id: '1', publishedVersion: 1,detailProfile:structuredClone(profile) };
+    detail.data.service.detailProfile.billing.quantity={min:2,max:8,step:2,aggregation:'ADDITIVE'};detail.data.quantity=2;detail.changeQuantity({currentTarget:{dataset:{delta:1}}});assert.equal(detail.data.quantity,4);detail.changeQuantity({currentTarget:{dataset:{delta:-1}}});assert.equal(detail.data.quantity,2);
     detail.data.quantity = 2;
     await detail.add();
     assert.equal(added, 1);
@@ -27,7 +30,7 @@ const cart = items => ({ items, itemCount: items.reduce((n, i) => n + i.quantity
     let removed = 0, updated = 0, confirm = true, failDelete = false;
     const state = cart([item('1'), item('2', 2)]);
     const page = loadPage('apps/wechat-mini/miniprogram/pages/cart/index.ts', { session, env: { getApiBaseUrl: () => '' }, request: { download: async () => '' }, cart: { getCart: async () => state, removeItem: async (id) => { if (failDelete)
-                throw Error('删除失败'); removed++; return cart(state.items.filter(i => i.id !== id)); }, updateQuantity: async () => { updated++; return state; }, saveFault: async () => state } }, { getWindowInfo: () => ({ windowWidth: 375 }), showModal: async () => ({ confirm }), showToast: o => toasts.push(o), setStorageSync() { }, navigateTo: o => { navigated.push(o.url); o.complete?.(); } });
+                throw Error('删除失败'); removed++; return cart(state.items.filter(i => i.id !== id)); }, updateQuantity: async () => { updated++; return state; }, saveDemand: async () => state } }, { getWindowInfo: () => ({ windowWidth: 375 }), showModal: async () => ({ confirm }), showToast: o => toasts.push(o), setStorageSync() { }, navigateTo: o => { navigated.push(o.url); o.complete?.(); } });
     page.onLoad();
     await page.load();
     assert.equal(page.data.totalText, '354.00');
@@ -70,7 +73,7 @@ const cart = items => ({ items, itemCount: items.reduce((n, i) => n + i.quantity
     assert.equal(removed, 1);
     assert.equal(page.data.cart.items.length, 1);
     let cartReads = 0, orderPayload;
-    const service = { id: '1', name: '测试维修', publishedVersion: 1, price: 11800, unit: '次', coverImageUrl: '/cover' };
+    const service = { id: '1', name: '测试维修', publishedVersion: 1, price: 11800, unit: '次', coverImageUrl: '/cover',detailProfile:structuredClone(profile) };
     const checkout = loadPage('apps/wechat-mini/miniprogram/pages/checkout/index.ts', { catalog: { getService: async () => service }, cart: { getCart: async () => { cartReads++; return state; } }, addresses: { listAddresses: async () => [{ id: 'a', city: '汉川市', detailAddress: '测试路', buildingDoor: '203室', contactName: '张三', contactMobile: '13800138000', isDefault: true }], formatAddress: a => a.city + a.detailAddress + a.buildingDoor }, request: { request: async () => ({ contactMobile: '13800138000' }), ApiError: Error }, orders: { createOrder: async (data) => { orderPayload = data; return { orderNo: 'test', status: 'PENDING_CONFIRMATION', totalAmount: 23600 }; } } }, { getStorageSync: () => '', removeStorageSync() { }, redirectTo() { }, showToast: o => toasts.push(o) });
     await checkout.onLoad({ skuId: '1', quantity: '2', skuVersion: '1' });
     assert.equal(cartReads, 0);
@@ -82,5 +85,7 @@ const cart = items => ({ items, itemCount: items.reduce((n, i) => n + i.quantity
     assert.equal(orderPayload.directItem.quantity, 2);
     assert.equal(orderPayload.directItem.skuId, '1');
     assert.equal(orderPayload.cartItemIds, undefined);
+    checkout.data.cart.items[0].detailProfile.demandCollection.media.mode='REQUIRED';orderPayload=undefined;await checkout.submit();assert.equal(orderPayload,undefined,'missing required evidence submitted');checkout.data.cart.items[0].detailProfile.demandCollection.media.mode='OPTIONAL';
+    console.log('新服务规则：步长计数、需求资料条件必填已验证。');
     console.log('交互验证通过：加购不跳转、角标更新、立即下单独立数量、勾选合计、左右滑动、纵向滚动、取消滑动、删除取消/失败/成功和独立结算传值。');
 })().catch(e => { console.error(e); process.exitCode = 1; });

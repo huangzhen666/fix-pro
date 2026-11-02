@@ -8,7 +8,7 @@ const { Header, Sider, Content } = Layout
 
 const items = [
   { key: '/', label: '经营概览', permission: 'dashboard.view' },
-  { key: '/catalog/skus', label: '维修 SKU', permission: 'catalog.sku.view' },
+  { key: '/catalog/skus', label: '服务 SKU', permission: 'catalog.sku.view' },
   { key: '/catalog/categories', label: '服务分类', permission: 'catalog.category.view' },
   { key: '/orders', label: '订单中心', permission: 'order.view' },
   { key: '/work-orders', label: '履约调度', permission: 'fulfillment.view' },

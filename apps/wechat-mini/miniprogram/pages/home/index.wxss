@@ -1,7 +1,7 @@
 .home{min-height:100vh;padding-bottom:calc(96px + env(safe-area-inset-bottom));background:var(--color-page)}
 .brand-row{height:60px;max-height:70px;box-sizing:border-box;padding:0 16px;display:flex;align-items:center;gap:10px;background:var(--color-surface)}
 .brand-logo{width:36px;height:36px;flex:none;border-radius:9px}
-.brand-slogan{flex:1;min-width:0;font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.brand-slogan{flex:1;min-width:0;color:var(--color-text-secondary);font-size:13px;font-weight:400;line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .service-city{flex:none;margin-left:auto;display:flex;align-items:center;gap:4px;white-space:nowrap;font-size:12px;color:var(--color-text-secondary)}
 .service-city image{width:14px;height:14px}
 .search-sticky{position:sticky;top:0;z-index:30;padding:6px 16px 12px;background:var(--color-surface);border-bottom:1px solid var(--color-border)}

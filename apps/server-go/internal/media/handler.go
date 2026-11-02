@@ -25,8 +25,8 @@ func (h *Handler) UploadWorker(w http.ResponseWriter, r *http.Request) {
 		httpx.Failure(w, r, httpx.E("MEDIA_PURPOSE_INVALID", "师傅资料类型不合法", 400))
 	}
 }
-func (h *Handler) UploadFault(w http.ResponseWriter, r *http.Request) {
-	h.upload(w, r, "FAULT_EVIDENCE", false)
+func (h *Handler) UploadDemand(w http.ResponseWriter, r *http.Request) {
+	h.upload(w, r, "DEMAND_EVIDENCE", false)
 }
 func (h *Handler) upload(w http.ResponseWriter, r *http.Request, purpose string, imageOnly bool) {
 	p, _ := auth.From(r.Context())

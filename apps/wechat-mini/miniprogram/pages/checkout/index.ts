@@ -1,7 +1,8 @@
+import { validQuantity } from '../../services/serviceProfile'
 import { showApiError } from '../../services/request'
 import { protectedPage } from '../../services/guard'
 import { getService } from '../../services/catalog'
-import { getCart, type Cart } from '../../services/cart'
+import { getCart, saveDemand, uploadDemand, type Cart } from '../../services/cart'
 import { createOrder } from '../../services/orders'
 import { formatAddress, listAddresses, type CustomerAddress } from '../../services/addresses'
 import { request, ApiError } from '../../services/request'
@@ -75,6 +76,8 @@ protectedPage({
     appointmentSlots: buildAppointmentSlots(),
     showAppointmentPicker: false,
     submitting: false,
+    uploading:false,
+    expandedId:'',
   },
   async onLoad(options: Record<string, string>) {
     const storedItemIDs = wx.getStorageSync<unknown>(checkoutItemsStorageKey)
@@ -85,11 +88,12 @@ protectedPage({
     if (options.skuId) {
       const quantity = Number(options.quantity)
       const skuVersion = Number(options.skuVersion)
-      if (!Number.isInteger(quantity) || quantity < 1 || quantity > 99 || !Number.isInteger(skuVersion) || skuVersion < 1) throw new Error('下单参数无效，请返回服务详情重新选择')
+      if (!Number.isInteger(quantity) || quantity < 1 || quantity > 9999 || !Number.isInteger(skuVersion) || skuVersion < 1) throw new Error('下单参数无效，请返回服务详情重新选择')
       const service = await getService(options.skuId)
+      if (!validQuantity(service.detailProfile,quantity)) throw new Error('购买数量不符合服务规则，请返回重新选择')
       if (service.publishedVersion !== skuVersion) throw new Error('服务信息已更新，请返回详情确认后重新下单')
       directItem = { skuId: service.id, skuVersion, quantity }
-      cart = { items: [{ id: 'direct', skuId: service.id, skuVersion, name: service.name, coverImageUrl: service.coverImageUrl, unitPrice: service.price, unit: service.unit, quantity, subtotal: service.price * quantity, faultMedia: [], faultComplete: false, available: true }], itemCount: quantity, totalAmount: service.price * quantity }
+      cart = { items: [{ id: 'direct', skuId: service.id, skuVersion, name: service.name, coverImageUrl: service.coverImageUrl, unitPrice: service.price, unit: service.unit, quantity, subtotal: service.price * quantity, detailProfile:service.detailProfile,demandMedia: [], demandComplete: false, available: true,needsConfirmation:false,currentVersion:skuVersion }], itemCount: quantity, totalAmount: service.price * quantity }
     } else {
       cart = selectedCart(await getCart(), itemIDs)
     }
@@ -144,17 +148,24 @@ protectedPage({
     const appointmentSlotLabel = slot?.label || this.data.pickerSlot
     this.setData({ showAppointmentPicker: false, appointmentDate: this.data.pickerDate, appointmentDateLabel, appointmentSlot: this.data.pickerSlot, appointmentSlotLabel, appointmentDisplayText: `${appointmentDateLabel} · ${appointmentSlotLabel}` })
   },
+  toggleTerms(e:any){const id=String(e.currentTarget.dataset.id);this.setData({expandedId:this.data.expandedId===id?'':id})},
+  demandInput(e:any){this.setData({[`cart.items[${Number(e.currentTarget.dataset.index)}].demandDescription`]:e.detail.value})},
+  async demandUpload(e:any){if(this.data.uploading)return;const index=Number(e.currentTarget.dataset.index);try{const chosen=await wx.chooseMedia({count:1,mediaType:['image','video']});if(!chosen.tempFiles.length)return;this.setData({uploading:true});const result=await uploadDemand(chosen.tempFiles[0].tempFilePath);const item=this.data.cart.items[index];this.setData({[`cart.items[${index}].demandMedia`]:[...item.demandMedia,{id:String(result.id),name:'现场资料',mediaType:result.mediaType,url:'',localUrl:chosen.tempFiles[0].tempFilePath}]})}catch(e){showApiError(e)}finally{this.setData({uploading:false})}},
+  removeDemandMedia(e:any){const index=Number(e.currentTarget.dataset.index),m=Number(e.currentTarget.dataset.media);const rows=[...this.data.cart.items[index].demandMedia];rows.splice(m,1);this.setData({[`cart.items[${index}].demandMedia`]:rows})},
   async submit() {
-    if (this.data.submitting) return
+    if (this.data.submitting || this.data.uploading) return
     const { contactName, contactMobile, serviceAddress, appointmentDate, appointmentSlot } = this.data
     if (contactName.trim().length < 2 || !/^1\d{10}$/.test(contactMobile) || serviceAddress.trim().length < 5 || !appointmentDate || !appointmentSlot) {
       wx.showToast({ title: '请完善联系人、地址和预约时间段', icon: 'none' })
       return
     }
+    for(const item of this.data.cart.items){const rule=item.detailProfile.demandCollection;if((rule.description.mode==='REQUIRED'&&(item.demandDescription||'').trim().length<5)||(rule.media.mode==='REQUIRED'&&!item.demandMedia.length)){wx.showToast({title:`请完善${item.name}的需求资料`,icon:'none'});return}}
     this.setData({ submitting: true })
     const key = `${Date.now()}-${Math.random().toString(16).slice(2)}`
     try {
-      const result = await createOrder({ contactName, contactMobile, serviceAddress, appointmentDate, appointmentSlot, ...(this.data.directItem ? { directItem: this.data.directItem } : { cartItemIds: this.data.cart.items.map(item => item.id) }) }, key)
+      if(!this.data.directItem){for(const item of this.data.cart.items)await saveDemand(item.id,item.demandDescription||'',item.demandMedia.map(v=>v.id))}
+      const directDemand=this.data.cart.items[0]
+      const result = await createOrder({ contactName, contactMobile, serviceAddress, appointmentDate, appointmentSlot, ...(this.data.directItem ? { directItem: {...this.data.directItem,demandDescription:directDemand.demandDescription||'',mediaIds:directDemand.demandMedia.map(v=>v.id)} } : { cartItemIds: this.data.cart.items.map(item => item.id) }) }, key)
       wx.redirectTo({ url: `/pages/checkout/result?orderNo=${result.orderNo}&status=${result.status}&amount=${result.totalAmount}` })
     } catch (e: any) {
       if (e instanceof ApiError && e.code === 'SKU_NOT_AVAILABLE') {

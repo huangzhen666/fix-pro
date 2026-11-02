@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/fixpro/server/internal/media"
+	"github.com/fixpro/server/internal/platform/auth"
 	"os"
 	"strings"
 	"testing"
@@ -36,10 +38,12 @@ func TestPublishAfterOffShelf(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { db.Exec(`DELETE FROM media_asset WHERE id=$1`, mediaID) })
-	if err = db.QueryRow(`INSERT INTO service_sku(org_id,category_id,sku_code,name,service_scope,exclusions,warranty_description,price_mode,base_price,unit,cover_media_id,status) VALUES(1,1001,$1,'测试维修','维修检测服务范围覆盖十个字以上','不包含额外材料','提供售后质保服务','FIXED',11800,'次',$2,'DRAFT') RETURNING id`, stamp, mediaID).Scan(&skuID); err != nil {
+	if err = db.QueryRow(`INSERT INTO service_sku(org_id,category_id,sku_code,name,detail_profile,price_mode,base_price,unit,cover_media_id,status) VALUES(1,1001,$1,'测试维修','{"schemaVersion":1,"serviceTarget":"约定对象的基础服务","billing":{"unitDefinition":"每份对应一次约定服务","quantity":{"min":1,"max":99,"step":1,"aggregation":"INDEPENDENT"},"quantityExplanation":"每份对应独立服务对象","visitFeeMode":"INCLUDED","feeDescription":"本服务价格已经包含上门费用"},"includedItems":[{"title":"基础服务","description":"完成双方约定的基础服务"}],"acceptanceCriteria":["完成服务后逐项现场确认"],"afterSales":{"type":"SUPPORT","summary":"请联系客服核查服务问题","coverage":"提供约定服务相关的问题咨询","contactDescription":"联系客服提供订单号和问题说明"},"demandCollection":{"description":{"mode":"OPTIONAL","label":"服务需求","hint":"可填写特别需要注意的情况"},"media":{"mode":"OPTIONAL","label":"现场资料","hint":"可上传现场照片辅助了解"}}}','FIXED',11800,'次',$2,'DRAFT') RETURNING id`, stamp, mediaID).Scan(&skuID); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
+		db.Exec(`DELETE FROM sku_snapshot_media WHERE sku_id=$1`, skuID)
+		db.Exec(`DELETE FROM service_sku_media WHERE sku_id=$1`, skuID)
 		db.Exec(`DELETE FROM service_sku_version WHERE sku_id=$1`, skuID)
 		db.Exec(`DELETE FROM service_sku WHERE id=$1`, skuID)
 	})
@@ -77,6 +81,23 @@ func TestPublishAfterOffShelf(t *testing.T) {
 		}
 	}
 	first := assertPublished(1, 11800)
+	// Only the immutable publication references the image while the draft is being edited.
+	if _, err = db.Exec(`UPDATE service_sku SET cover_media_id=NULL WHERE id=$1`, skuID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = db.Exec(`DELETE FROM service_sku_media WHERE sku_id=$1`, skuID); err != nil {
+		t.Fatal(err)
+	}
+	mediaService, err := media.New(db, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = mediaService.Delete(ctx, mediaID, auth.Principal{OrgID: 1, SubjectID: 1, Role: "ADMIN"}); err == nil {
+		t.Fatal("published image was deleted after draft edit")
+	}
+	if _, err = db.Exec(`UPDATE service_sku SET cover_media_id=$1 WHERE id=$2`, mediaID, skuID); err != nil {
+		t.Fatal(err)
+	}
 	assertOffShelf()
 	republished := assertPublished(1, 11800)
 	if !first.PublishedAt.Round(time.Millisecond).Equal(republished.PublishedAt) {

@@ -133,7 +133,7 @@ func (s *Service) Read(ctx context.Context, id int64, p *auth.Principal, public 
 	}
 	if public {
 		var n int
-		err = s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM service_sku s LEFT JOIN service_sku_media sm ON sm.sku_id=s.id AND sm.org_id=s.org_id WHERE s.org_id=$1 AND s.status='PUBLISHED' AND (s.cover_media_id=$2 OR sm.media_id=$3)`, a.OrgID, id, id).Scan(&n)
+		err = s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM sku_snapshot_media WHERE org_id=$1 AND media_id=$2 AND media_id=$3`, a.OrgID, id, id).Scan(&n)
 		if err != nil {
 			return asset{}, nil, err
 		}
@@ -155,7 +155,7 @@ func (s *Service) Read(ctx context.Context, id int64, p *auth.Principal, public 
 			return asset{}, nil, httpx.E("MEDIA_NOT_FOUND", "媒体不存在", 404)
 		}
 	} else if p != nil && p.Role == "WORKER" {
-		allowed := a.OrgID == p.OrgID && ((a.OwnerType == "WORK_ORDER" && a.Purpose == "WORK_ORDER_EVIDENCE") || (a.OwnerType == "CUSTOMER" && a.Purpose == "FAULT_EVIDENCE"))
+		allowed := a.OrgID == p.OrgID && ((a.OwnerType == "WORK_ORDER" && a.Purpose == "WORK_ORDER_EVIDENCE") || (a.OwnerType == "CUSTOMER" && a.Purpose == "DEMAND_EVIDENCE"))
 		if allowed {
 			var count int
 			if err = s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM work_order w WHERE w.org_id=$1 AND w.assignee_id=$2 AND ((w.id=$3 AND EXISTS (SELECT 1 FROM work_order_evidence e WHERE e.org_id=w.org_id AND e.work_order_id=w.id AND e.media_id=$4)) OR (EXISTS (SELECT 1 FROM work_order_item wi JOIN order_item_media om ON om.org_id=wi.org_id AND om.order_item_id=wi.order_item_id WHERE wi.org_id=w.org_id AND wi.work_order_id=w.id AND om.media_id=$4)))`, p.OrgID, p.SubjectID, a.OwnerID, a.ID).Scan(&count); err != nil {
@@ -203,7 +203,7 @@ func (s *Service) Delete(ctx context.Context, id int64, p auth.Principal) error 
 		return httpx.E("MEDIA_NOT_FOUND", "媒体不存在", 404)
 	}
 	var refs int
-	e = tx.QueryRowContext(ctx, `SELECT (SELECT count(*) FROM service_sku WHERE cover_media_id=$1)+(SELECT count(*) FROM service_sku_media WHERE media_id=$1)+(SELECT count(*) FROM shopping_cart_item_media WHERE media_id=$1)+(SELECT count(*) FROM order_item_media WHERE media_id=$1)+(SELECT count(*) FROM employee_account WHERE avatar_media_id=$1)+(SELECT count(*) FROM worker_certificate_media WHERE media_id=$1)+(SELECT count(*) FROM work_order_evidence WHERE media_id=$1)+(SELECT count(*) FROM customer WHERE avatar_media_id=$1)`, id).Scan(&refs)
+	e = tx.QueryRowContext(ctx, `SELECT (SELECT count(*) FROM sku_snapshot_media WHERE media_id=$1)+(SELECT count(*) FROM service_sku WHERE cover_media_id=$1)+(SELECT count(*) FROM service_sku_media WHERE media_id=$1)+(SELECT count(*) FROM shopping_cart_item_media WHERE media_id=$1)+(SELECT count(*) FROM order_item_media WHERE media_id=$1)+(SELECT count(*) FROM employee_account WHERE avatar_media_id=$1)+(SELECT count(*) FROM worker_certificate_media WHERE media_id=$1)+(SELECT count(*) FROM work_order_evidence WHERE media_id=$1)+(SELECT count(*) FROM customer WHERE avatar_media_id=$1)`, id).Scan(&refs)
 	if e != nil {
 		return e
 	}

@@ -1,3 +1,4 @@
+import type { ServiceProfile } from './serviceProfile'
 import { request } from './request'
 
 export interface ServiceSummary {
@@ -5,9 +6,8 @@ export interface ServiceSummary {
   skuCode: string
   name: string
   description?: string
-  serviceScope: string
-  exclusions: string
-  warrantyDescription: string
+  unitDefinition: string
+  quantityRule: ServiceProfile["billing"]["quantity"]
   priceMode: 'FIXED'
   price: number
   unit: string
@@ -29,6 +29,7 @@ export function listCategoryGroups(): Promise<CategoryGroup[]> {
   return request<CategoryGroup[]>({ url: '/api/v1/catalog/categories', method: 'GET' })
 }
 
-export function getService(id: string): Promise<ServiceSummary> {
-  return request<ServiceSummary>({ url: `/api/v1/catalog/services/${id}`, method: 'GET' })
+export interface ServiceDetail extends Omit<ServiceSummary, "unitDefinition" | "quantityRule"> { detailProfile: ServiceProfile }
+export function getService(id: string): Promise<ServiceDetail> {
+  return request<ServiceDetail>({ url: `/api/v1/catalog/services/${id}`, method: 'GET' })
 }

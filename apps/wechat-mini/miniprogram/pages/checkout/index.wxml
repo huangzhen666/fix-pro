@@ -1,9 +1,12 @@
 <block wx:if="{{sessionReady}}"><view class="page">
   <view class="card">
     <view class="section-title">服务信息</view>
-    <view class="line" wx:for="{{cart.items}}" wx:key="id">
-      <view><view>{{item.name}} × {{item.quantity}}{{item.unit}}</view><view class="muted">{{item.faultDescription}}</view></view>
-      <view>¥{{item.subtotal/100}}</view>
+    <view wx:for="{{cart.items}}" wx:key="id" wx:for-index="index" style="margin:16px 0">
+      <view class="line"><view>{{item.name}} × {{item.quantity}}{{item.unit}}</view><view>¥{{item.subtotal/100}}</view></view>
+      <view class="muted">{{item.detailProfile.billing.unitDefinition}}</view><view class="muted">{{item.detailProfile.billing.quantityExplanation}}</view><view class="muted">{{item.detailProfile.billing.feeDescription}}</view>
+      <view data-id="{{item.id}}" bindtap="toggleTerms" style="padding:10px 0;color:#204f76">查看完整服务约定 ›</view><service-profile wx:if="{{expandedId===item.id}}" profile="{{item.detailProfile}}"/>
+      <view wx:if="{{item.detailProfile.demandCollection.description.mode!=='HIDDEN'}}"><view>{{item.detailProfile.demandCollection.description.label}}（{{item.detailProfile.demandCollection.description.mode==='REQUIRED'?'必填':'选填'}}）</view><textarea value="{{item.demandDescription}}" data-index="{{index}}" bindinput="demandInput" maxlength="500" placeholder="{{item.detailProfile.demandCollection.description.hint}}" style="width:100%;min-height:80px;box-sizing:border-box;background:#f5f7fa;padding:12px;border-radius:8px"/></view>
+      <view wx:if="{{item.detailProfile.demandCollection.media.mode!=='HIDDEN'}}"><view>{{item.detailProfile.demandCollection.media.label}}（{{item.detailProfile.demandCollection.media.mode==='REQUIRED'?'必填':'选填'}}）</view><view class="muted">{{item.detailProfile.demandCollection.media.hint}}</view><view wx:for="{{item.demandMedia}}" wx:for-item="media" wx:for-index="m" wx:key="id">{{media.name}}<text data-index="{{index}}" data-media="{{m}}" bindtap="removeDemandMedia"> · 移除</text></view><button size="mini" data-index="{{index}}" bindtap="demandUpload" loading="{{uploading}}" disabled="{{submitting || uploading}}">添加现场图片/视频</button></view>
     </view>
   </view>
   <view class="card">

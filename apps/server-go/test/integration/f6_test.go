@@ -56,7 +56,7 @@ func TestF6MigrationAndConcurrentVersion(t *testing.T) {
 	if err := db.QueryRow(`INSERT INTO work_order(org_id,work_order_no,order_id,status,priority) VALUES(1,$1,$2,'PENDING_DISPATCH','NORMAL') RETURNING id`, fmt.Sprintf("F6-WO-%d", suffix), orderID).Scan(&workID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec(`INSERT INTO order_item(org_id,order_id,sku_id,sku_version,sku_code_snapshot,sku_name_snapshot,unit_snapshot,service_scope_snapshot,exclusions_snapshot,warranty_snapshot,fault_description,unit_price,quantity,subtotal_amount) VALUES(1,$1,1001,1,'F6','F6','次','scope','none','none','description',100,1,100)`, orderID); err != nil {
+	if _, err := db.Exec(`INSERT INTO order_item(org_id,order_id,sku_id,sku_version,sku_code_snapshot,sku_name_snapshot,unit_snapshot,detail_profile_snapshot,demand_description,unit_price,quantity,subtotal_amount) VALUES(1,$1,1001,1,'F6','F6','次','{"schemaVersion": 1}','description',100,1,100)`, orderID); err != nil {
 		t.Fatal(err)
 	}
 	var wg sync.WaitGroup

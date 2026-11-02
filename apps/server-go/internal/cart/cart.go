@@ -10,6 +10,7 @@ import (
 	"github.com/fixpro/server/internal/platform/database"
 	"github.com/fixpro/server/internal/platform/httpx"
 	"net/http"
+	"strconv"
 	"strings"
 )
 
@@ -17,40 +18,42 @@ type Service struct{ db *sql.DB }
 
 func New(db *sql.DB) *Service { return &Service{db} }
 
-type FaultMedia struct {
+type DemandMedia struct {
 	ID        string `json:"id"`
 	MediaType string `json:"mediaType"`
 	Name      string `json:"name"`
 	URL       string `json:"url"`
 }
 type Item struct {
-	ID               string       `json:"id"`
-	SKUID            string       `json:"skuId"`
-	SKUVersion       int          `json:"skuVersion"`
-	Name             string       `json:"name"`
-	CoverImageURL    string       `json:"coverImageUrl"`
-	UnitPrice        int64        `json:"unitPrice"`
-	Unit             string       `json:"unit"`
-	Quantity         int          `json:"quantity"`
-	Subtotal         int64        `json:"subtotal"`
-	FaultDescription *string      `json:"faultDescription"`
-	FaultMedia       []FaultMedia `json:"faultMedia"`
-	FaultComplete    bool         `json:"faultComplete"`
-	Available        bool         `json:"available"`
+	CurrentVersion    int             `json:"currentVersion"`
+	NeedsConfirmation bool            `json:"needsConfirmation"`
+	DetailProfile     catalog.Profile `json:"detailProfile"`
+	ID                string          `json:"id"`
+	SKUID             string          `json:"skuId"`
+	SKUVersion        int             `json:"skuVersion"`
+	Name              string          `json:"name"`
+	CoverImageURL     string          `json:"coverImageUrl"`
+	UnitPrice         int64           `json:"unitPrice"`
+	Unit              string          `json:"unit"`
+	Quantity          int             `json:"quantity"`
+	Subtotal          int64           `json:"subtotal"`
+	DemandDescription *string         `json:"demandDescription"`
+	DemandMedia       []DemandMedia   `json:"demandMedia"`
+	DemandComplete    bool            `json:"demandComplete"`
+	Available         bool            `json:"available"`
 }
 type View struct {
 	Items       []Item `json:"items"`
 	ItemCount   int    `json:"itemCount"`
 	TotalAmount int64  `json:"totalAmount"`
 }
-type FaultWrite struct {
-	FaultDescription string   `json:"faultDescription"`
-	MediaIDs         []string `json:"mediaIds"`
+type DemandWrite struct {
+	DemandDescription string   `json:"demandDescription"`
+	MediaIDs          []string `json:"mediaIds"`
 }
 
 func parse(v string) (int64, error) {
-	var n int64
-	_, e := fmt.Sscan(v, &n)
+	n, e := strconv.ParseInt(strings.TrimSpace(v), 10, 64)
 	if e != nil || n <= 0 {
 		return 0, httpx.E("VALIDATION_ERROR", "ID 格式错误", 400)
 	}
@@ -61,15 +64,15 @@ func (s *Service) find(ctx context.Context, p auth.Principal) (int64, error) {
 	e := s.db.QueryRowContext(ctx, `SELECT id FROM shopping_cart WHERE org_id=$1 AND customer_id=$2`, p.OrgID, p.SubjectID).Scan(&n)
 	return n, e
 }
-func (s *Service) media(ctx context.Context, org, item int64) ([]FaultMedia, error) {
+func (s *Service) media(ctx context.Context, org, item int64) ([]DemandMedia, error) {
 	rows, e := s.db.QueryContext(ctx, `SELECT m.id,m.media_type,m.original_name FROM shopping_cart_item_media cm JOIN media_asset m ON m.id=cm.media_id AND m.org_id=cm.org_id WHERE cm.org_id=$2 AND cm.cart_item_id=$1 ORDER BY cm.sort_order`, item, org)
 	if e != nil {
 		return nil, e
 	}
 	defer rows.Close()
-	out := []FaultMedia{}
+	out := []DemandMedia{}
 	for rows.Next() {
-		var x FaultMedia
+		var x DemandMedia
 		var n int64
 		if e = rows.Scan(&n, &x.MediaType, &x.Name); e != nil {
 			return nil, e
@@ -88,7 +91,7 @@ func (s *Service) Get(ctx context.Context, p auth.Principal) (View, error) {
 	if e != nil {
 		return View{}, e
 	}
-	rows, e := s.db.QueryContext(ctx, `SELECT ci.id,ci.sku_id,ci.sku_version,ci.quantity,ci.unit_price,ci.fault_description,v.snapshot_json,(s.status='PUBLISHED' AND s.current_published_version IS NOT NULL) FROM shopping_cart_item ci JOIN service_sku s ON s.org_id=ci.org_id AND s.id=ci.sku_id JOIN service_sku_version v ON v.org_id=ci.org_id AND v.sku_id=ci.sku_id AND v.version_no=ci.sku_version WHERE ci.org_id=$1 AND ci.cart_id=$2 ORDER BY ci.created_at`, p.OrgID, cart)
+	rows, e := s.db.QueryContext(ctx, `SELECT ci.id,ci.sku_id,ci.sku_version,ci.quantity,ci.unit_price,ci.demand_description,v.snapshot_json,s.current_published_version,(s.status='PUBLISHED' AND s.current_published_version IS NOT NULL) FROM shopping_cart_item ci JOIN service_sku s ON s.org_id=ci.org_id AND s.id=ci.sku_id JOIN service_sku_version v ON v.org_id=ci.org_id AND v.sku_id=ci.sku_id AND v.version_no=ci.sku_version WHERE ci.org_id=$1 AND ci.cart_id=$2 ORDER BY ci.created_at`, p.OrgID, cart)
 	if e != nil {
 		return View{}, e
 	}
@@ -100,23 +103,27 @@ func (s *Service) Get(ctx context.Context, p auth.Principal) (View, error) {
 		var fault sql.NullString
 		var raw []byte
 		var snap catalog.PublishedSKU
-		if e = rows.Scan(&item, &sku, &x.SKUVersion, &x.Quantity, &x.UnitPrice, &fault, &raw, &x.Available); e != nil {
+		var current sql.NullInt64
+		if e = rows.Scan(&item, &sku, &x.SKUVersion, &x.Quantity, &x.UnitPrice, &fault, &raw, &current, &x.Available); e != nil {
 			return out, e
 		}
 		if e = json.Unmarshal(raw, &snap); e != nil {
 			return out, e
 		}
+		x.CurrentVersion = int(current.Int64)
+		x.NeedsConfirmation = current.Valid && int(current.Int64) != x.SKUVersion
 		x.ID, x.SKUID = fmt.Sprint(item), fmt.Sprint(sku)
 		x.Name, x.CoverImageURL, x.Unit = snap.Name, snap.CoverImageURL, snap.Unit
+		x.DetailProfile = snap.DetailProfile
 		x.Subtotal = x.UnitPrice * int64(x.Quantity)
 		if fault.Valid {
-			x.FaultDescription = &fault.String
+			x.DemandDescription = &fault.String
 		}
-		x.FaultMedia, e = s.media(ctx, p.OrgID, item)
+		x.DemandMedia, e = s.media(ctx, p.OrgID, item)
 		if e != nil {
 			return out, e
 		}
-		x.FaultComplete = fault.Valid && len([]rune(strings.TrimSpace(fault.String))) >= 5 && len(x.FaultMedia) > 0
+		x.DemandComplete = snap.DetailProfile.CheckDemand(fault.String, len(x.DemandMedia)) == nil
 		out.Items = append(out.Items, x)
 		out.ItemCount += x.Quantity
 		if x.Available {
@@ -154,11 +161,14 @@ func (s *Service) ensure(ctx context.Context, p auth.Principal) (int64, error) {
 	return id, e
 }
 func (s *Service) Add(ctx context.Context, p auth.Principal, sku int64, q int) (View, error) {
-	if q < 1 || q > 99 {
-		return View{}, httpx.E("VALIDATION_ERROR", "数量必须为 1-99", 400)
+	if q < 1 || q > 9999 {
+		return View{}, httpx.E("VALIDATION_ERROR", "数量必须为 1-9999", 400)
 	}
 	x, e := s.current(ctx, p.OrgID, sku)
 	if e != nil {
+		return View{}, e
+	}
+	if e = x.DetailProfile.CheckQuantity(q); e != nil {
 		return View{}, e
 	}
 	cart, e := s.ensure(ctx, p)
@@ -166,9 +176,9 @@ func (s *Service) Add(ctx context.Context, p auth.Principal, sku int64, q int) (
 		return View{}, e
 	}
 	var itemID int64
-	e = s.db.QueryRowContext(ctx, `INSERT INTO shopping_cart_item(org_id,cart_id,sku_id,sku_version,quantity,unit_price) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT (org_id,cart_id,sku_id,sku_version) DO UPDATE SET quantity=shopping_cart_item.quantity+EXCLUDED.quantity WHERE shopping_cart_item.quantity+EXCLUDED.quantity<=99 RETURNING id`, p.OrgID, cart, sku, x.PublishedVersion, q, x.Price).Scan(&itemID)
+	e = s.db.QueryRowContext(ctx, `INSERT INTO shopping_cart_item(org_id,cart_id,sku_id,sku_version,quantity,unit_price) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT (org_id,cart_id,sku_id,sku_version) DO UPDATE SET quantity=shopping_cart_item.quantity+EXCLUDED.quantity WHERE shopping_cart_item.quantity+EXCLUDED.quantity BETWEEN $7 AND $8 AND (shopping_cart_item.quantity+EXCLUDED.quantity-$7)%$9=0 RETURNING id`, p.OrgID, cart, sku, x.PublishedVersion, q, x.Price, x.DetailProfile.Billing.Quantity.Min, x.DetailProfile.Billing.Quantity.Max, x.DetailProfile.Billing.Quantity.Step).Scan(&itemID)
 	if e == sql.ErrNoRows {
-		return View{}, httpx.E("VALIDATION_ERROR", "购物车数量不能超过 99", 400)
+		return View{}, httpx.E("SKU_QUANTITY_INVALID", "合并后的数量不符合服务规则", 400)
 	}
 	if e != nil {
 		return View{}, e
@@ -187,10 +197,21 @@ func (s *Service) assert(ctx context.Context, p auth.Principal, item int64) erro
 	return nil
 }
 func (s *Service) Quantity(ctx context.Context, p auth.Principal, item int64, q int) (View, error) {
-	if q < 1 || q > 99 {
-		return View{}, httpx.E("VALIDATION_ERROR", "数量必须为 1-99", 400)
+	if q < 1 || q > 9999 {
+		return View{}, httpx.E("VALIDATION_ERROR", "数量必须为 1-9999", 400)
 	}
 	if e := s.assert(ctx, p, item); e != nil {
+		return View{}, e
+	}
+	var snap catalog.PublishedSKU
+	var raw []byte
+	if e := s.db.QueryRowContext(ctx, `SELECT v.snapshot_json FROM shopping_cart_item c JOIN service_sku_version v ON v.org_id=c.org_id AND v.sku_id=c.sku_id AND v.version_no=c.sku_version WHERE c.id=$1 AND c.org_id=$2`, item, p.OrgID).Scan(&raw); e != nil {
+		return View{}, e
+	}
+	if e := json.Unmarshal(raw, &snap); e != nil {
+		return View{}, e
+	}
+	if e := snap.DetailProfile.CheckQuantity(q); e != nil {
 		return View{}, e
 	}
 	_, e := s.db.ExecContext(ctx, `UPDATE shopping_cart_item SET quantity=$1 WHERE id=$2 AND org_id=$3`, q, item, p.OrgID)
@@ -199,8 +220,8 @@ func (s *Service) Quantity(ctx context.Context, p auth.Principal, item int64, q 
 	}
 	return s.Get(ctx, p)
 }
-func (s *Service) Fault(ctx context.Context, p auth.Principal, item int64, w FaultWrite) (View, error) {
-	desc := strings.TrimSpace(w.FaultDescription)
+func (s *Service) Demand(ctx context.Context, p auth.Principal, item int64, w DemandWrite) (View, error) {
+	desc := strings.TrimSpace(w.DemandDescription)
 	if len([]rune(desc)) > 500 {
 		return View{}, httpx.E("VALIDATION_ERROR", "补充信息不能超过500字", 400)
 	}
@@ -225,7 +246,7 @@ func (s *Service) Fault(ctx context.Context, p auth.Principal, item int64, w Fau
 	images, videos := 0, 0
 	for _, n := range unique {
 		var kind string
-		e := s.db.QueryRowContext(ctx, `SELECT media_type FROM media_asset WHERE id=$1 AND org_id=$2 AND owner_type='CUSTOMER' AND owner_id=$3 AND purpose='FAULT_EVIDENCE' AND status='READY'`, n, p.OrgID, p.SubjectID).Scan(&kind)
+		e := s.db.QueryRowContext(ctx, `SELECT media_type FROM media_asset WHERE id=$1 AND org_id=$2 AND owner_type='CUSTOMER' AND owner_id=$3 AND purpose='DEMAND_EVIDENCE' AND status='READY'`, n, p.OrgID, p.SubjectID).Scan(&kind)
 		if e == sql.ErrNoRows {
 			return View{}, httpx.E("MEDIA_ACCESS_DENIED", "故障媒体不属于当前客户", 403)
 		}
@@ -246,7 +267,7 @@ func (s *Service) Fault(ctx context.Context, p auth.Principal, item int64, w Fau
 		return View{}, e
 	}
 	defer tx.Rollback()
-	if _, e = tx.ExecContext(ctx, `UPDATE shopping_cart_item SET fault_description=$1 WHERE id=$2 AND org_id=$3`, desc, item, p.OrgID); e != nil {
+	if _, e = tx.ExecContext(ctx, `UPDATE shopping_cart_item SET demand_description=$1 WHERE id=$2 AND org_id=$3`, desc, item, p.OrgID); e != nil {
 		return View{}, e
 	}
 	if _, e = tx.ExecContext(ctx, `DELETE FROM shopping_cart_item_media WHERE org_id=$1 AND cart_item_id=$2`, p.OrgID, item); e != nil {
@@ -326,19 +347,19 @@ func (h *Handler) Quantity(w http.ResponseWriter, r *http.Request) {
 	v, e := h.s.Quantity(r.Context(), p, n, b.Quantity)
 	respond(w, r, v, e)
 }
-func (h *Handler) Fault(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) Demand(w http.ResponseWriter, r *http.Request) {
 	p, _ := auth.From(r.Context())
 	n, e := httpx.PathID(r, "id")
 	if e != nil {
 		httpx.Failure(w, r, e)
 		return
 	}
-	var b FaultWrite
+	var b DemandWrite
 	if e = httpx.DecodeJSON(w, r, &b); e != nil {
 		httpx.Failure(w, r, e)
 		return
 	}
-	v, e := h.s.Fault(r.Context(), p, n, b)
+	v, e := h.s.Demand(r.Context(), p, n, b)
 	respond(w, r, v, e)
 }
 func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
@@ -357,4 +378,59 @@ func respond(w http.ResponseWriter, r *http.Request, v any, e error) {
 	} else {
 		httpx.Success(w, r, v)
 	}
+}
+
+// Confirm replaces only the selected cart item's published contract after explicit customer review.
+func (s *Service) Confirm(ctx context.Context, p auth.Principal, item int64, expectedVersion int) (View, error) {
+	if e := s.assert(ctx, p, item); e != nil {
+		return View{}, e
+	}
+	tx, e := database.BeginTx(ctx, s.db)
+	if e != nil {
+		return View{}, e
+	}
+	defer tx.Rollback()
+	var sku int64
+	var q int
+	if e = tx.QueryRowContext(ctx, `SELECT sku_id,quantity FROM shopping_cart_item WHERE id=$1 AND org_id=$2 FOR UPDATE`, item, p.OrgID).Scan(&sku, &q); e != nil {
+		return View{}, e
+	}
+	var raw []byte
+	var snap catalog.PublishedSKU
+	if e = tx.QueryRowContext(ctx, `SELECT v.snapshot_json FROM service_sku s JOIN service_sku_version v ON v.org_id=s.org_id AND v.sku_id=s.id AND v.version_no=s.current_published_version WHERE s.org_id=$1 AND s.id=$2 AND s.status='PUBLISHED' FOR SHARE OF s`, p.OrgID, sku).Scan(&raw); e != nil {
+		return View{}, httpx.E("SKU_NOT_AVAILABLE", "服务不可用", 409)
+	}
+	if e = json.Unmarshal(raw, &snap); e != nil {
+		return View{}, e
+	}
+	if snap.PublishedVersion != expectedVersion {
+		return View{}, httpx.E("CART_SKU_CHANGED", "服务内容再次更新，请重新查看并确认", 409)
+	}
+	if e = snap.DetailProfile.CheckQuantity(q); e != nil {
+		return View{}, e
+	}
+	if _, e = tx.ExecContext(ctx, `UPDATE shopping_cart_item SET sku_version=$1,unit_price=$2 WHERE id=$3 AND org_id=$4`, snap.PublishedVersion, snap.Price, item, p.OrgID); e != nil {
+		return View{}, httpx.E("CART_SKU_CHANGED", "新版服务已在购物车，请先移除旧项目后调整", 409)
+	}
+	if e = tx.Commit(); e != nil {
+		return View{}, e
+	}
+	return s.Get(ctx, p)
+}
+func (h *Handler) Confirm(w http.ResponseWriter, r *http.Request) {
+	p, _ := auth.From(r.Context())
+	n, e := httpx.PathID(r, "id")
+	if e != nil {
+		respond(w, r, nil, e)
+		return
+	}
+	var b struct {
+		SKUVersion int `json:"skuVersion"`
+	}
+	if e = httpx.DecodeJSON(w, r, &b); e != nil {
+		respond(w, r, nil, e)
+		return
+	}
+	v, e := h.s.Confirm(r.Context(), p, n, b.SKUVersion)
+	respond(w, r, v, e)
 }

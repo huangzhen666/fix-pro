@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/fixpro/server/internal/catalog"
 	"github.com/fixpro/server/internal/platform/database"
 	"strings"
 	"time"
@@ -259,6 +260,7 @@ type WorkerWorkOrderDetail struct {
 }
 
 type WorkerOrderItem struct {
+	DetailProfile catalog.Profile      `json:"detailProfile"`
 	ID            string               `json:"id"`
 	Name          string               `json:"name"`
 	Unit          string               `json:"unit"`
@@ -301,25 +303,26 @@ func (s *Service) WorkerWorkOrder(ctx context.Context, p auth.Principal, id int6
 	out.AppointmentSlotLabel = appointmentSlotText(out.AppointmentSlot)
 	out.ID = fmt.Sprint(wid)
 	out.Items = []WorkerOrderItem{}
-	itemRows, err := s.db.QueryContext(ctx, `SELECT wi.id,oi.id,oi.sku_name_snapshot,oi.unit_snapshot,oi.quantity,COALESCE(oi.fault_description,'') FROM work_order_item wi JOIN order_item oi ON oi.org_id=wi.org_id AND oi.id=wi.order_item_id WHERE wi.org_id=$1 AND wi.work_order_id=$2 ORDER BY oi.id`, p.OrgID, id)
+	itemRows, err := s.db.QueryContext(ctx, `SELECT wi.id,oi.id,oi.sku_name_snapshot,oi.unit_snapshot,oi.quantity,COALESCE(oi.demand_description,''),oi.detail_profile_snapshot,CASE WHEN oi.detail_profile_snapshot#>>'{billing,quantity,aggregation}'='ADDITIVE' THEN 1 ELSE wi.quantity END FROM work_order_item wi JOIN order_item oi ON oi.org_id=wi.org_id AND oi.id=wi.order_item_id WHERE wi.org_id=$1 AND wi.work_order_id=$2 ORDER BY oi.id`, p.OrgID, id)
 	if err != nil {
 		return out, err
 	}
 	type workerItemData struct {
 		workOrderItemID int64
 		orderItemID     int64
+		evidenceCount   int
 		item            WorkerOrderItem
 	}
 	items := []workerItemData{}
 	for itemRows.Next() {
 		var item workerItemData
-		if err = itemRows.Scan(&item.workOrderItemID, &item.orderItemID, &item.item.Name, &item.item.Unit, &item.item.Quantity, &item.item.CustomerNote); err != nil {
+		if err = itemRows.Scan(&item.workOrderItemID, &item.orderItemID, &item.item.Name, &item.item.Unit, &item.item.Quantity, &item.item.CustomerNote, &item.item.DetailProfile, &item.evidenceCount); err != nil {
 			itemRows.Close()
 			return out, err
 		}
 		item.item.ID = fmt.Sprint(item.workOrderItemID)
 		item.item.CustomerMedia = []WorkerOrderMedia{}
-		item.item.EvidencePairs = make([]WorkerEvidencePair, item.item.Quantity)
+		item.item.EvidencePairs = make([]WorkerEvidencePair, item.evidenceCount)
 		for index := range item.item.EvidencePairs {
 			item.item.EvidencePairs[index].UnitNo = index + 1
 		}
@@ -1247,22 +1250,32 @@ type CustomerEvidence struct {
 	URL             string    `json:"url"`
 	CreatedAt       time.Time `json:"createdAt"`
 }
+type CustomerServiceItem struct {
+	ID                string          `json:"id"`
+	Name              string          `json:"name"`
+	Unit              string          `json:"unit"`
+	Quantity          int             `json:"quantity"`
+	Subtotal          int64           `json:"subtotal"`
+	DetailProfile     catalog.Profile `json:"detailProfile"`
+	DemandDescription string          `json:"demandDescription"`
+}
 type CustomerOrderDetail struct {
-	ID                   string              `json:"id"`
-	OrderNo              string              `json:"orderNo"`
-	Status               string              `json:"status"`
-	StatusText           string              `json:"statusText"`
-	CancelReason         string              `json:"cancelReason,omitempty"`
-	ContactName          string              `json:"contactName"`
-	ContactMobile        string              `json:"contactMobile"`
-	ServiceAddress       string              `json:"serviceAddress"`
-	TotalAmount          int64               `json:"totalAmount"`
-	Version              int                 `json:"version"`
-	CreatedAt            time.Time           `json:"createdAt"`
-	AppointmentAt        *time.Time          `json:"appointmentAt,omitempty"`
-	AppointmentSlot      string              `json:"appointmentSlot,omitempty"`
-	AppointmentSlotLabel string              `json:"appointmentSlotLabel,omitempty"`
-	WorkOrders           []CustomerWorkOrder `json:"workOrders"`
+	Items                []CustomerServiceItem `json:"items"`
+	ID                   string                `json:"id"`
+	OrderNo              string                `json:"orderNo"`
+	Status               string                `json:"status"`
+	StatusText           string                `json:"statusText"`
+	CancelReason         string                `json:"cancelReason,omitempty"`
+	ContactName          string                `json:"contactName"`
+	ContactMobile        string                `json:"contactMobile"`
+	ServiceAddress       string                `json:"serviceAddress"`
+	TotalAmount          int64                 `json:"totalAmount"`
+	Version              int                   `json:"version"`
+	CreatedAt            time.Time             `json:"createdAt"`
+	AppointmentAt        *time.Time            `json:"appointmentAt,omitempty"`
+	AppointmentSlot      string                `json:"appointmentSlot,omitempty"`
+	AppointmentSlotLabel string                `json:"appointmentSlotLabel,omitempty"`
+	WorkOrders           []CustomerWorkOrder   `json:"workOrders"`
 }
 
 func (s *Service) CustomerOrders(ctx context.Context, p auth.Principal, status string, page, size int) (CustomerOrderPage, error) {
@@ -1319,6 +1332,27 @@ func (s *Service) CustomerOrder(ctx context.Context, p auth.Principal, id int64)
 		return out, err
 	}
 	out.ID = fmt.Sprint(oid)
+	out.Items = []CustomerServiceItem{}
+	itemRows, itemErr := s.db.QueryContext(ctx, `SELECT id,sku_name_snapshot,unit_snapshot,quantity,subtotal_amount,detail_profile_snapshot,demand_description FROM order_item WHERE org_id=$1 AND order_id=$2 ORDER BY id`, p.OrgID, id)
+	if itemErr != nil {
+		return out, itemErr
+	}
+	for itemRows.Next() {
+		var x CustomerServiceItem
+		var itemID int64
+		if itemErr = itemRows.Scan(&itemID, &x.Name, &x.Unit, &x.Quantity, &x.Subtotal, &x.DetailProfile, &x.DemandDescription); itemErr != nil {
+			itemRows.Close()
+			return out, itemErr
+		}
+		x.ID = fmt.Sprint(itemID)
+		out.Items = append(out.Items, x)
+	}
+	itemErr = itemRows.Err()
+	itemRows.Close()
+	if itemErr != nil {
+		return out, itemErr
+	}
+
 	out.StatusText = statusText(out.Status)
 	if out.Status == OrderCancelled && out.CancelReason != "" {
 		out.StatusText = "商家已打回"
@@ -1502,7 +1536,7 @@ func (s *Service) BindEvidence(ctx context.Context, p auth.Principal, id int64, 
 	}
 	var status string
 	var quantity int
-	if err := s.db.QueryRowContext(ctx, `SELECT w.status,wi.quantity FROM work_order w JOIN work_order_item wi ON wi.org_id=w.org_id AND wi.work_order_id=w.id WHERE w.org_id=$1 AND w.id=$2 AND w.assignee_id=$3 AND wi.id=$4`, p.OrgID, id, p.SubjectID, req.WorkOrderItemID).Scan(&status, &quantity); err == sql.ErrNoRows {
+	if err := s.db.QueryRowContext(ctx, `SELECT w.status,CASE WHEN oi.detail_profile_snapshot#>>'{billing,quantity,aggregation}'='ADDITIVE' THEN 1 ELSE wi.quantity END FROM work_order w JOIN work_order_item wi ON wi.org_id=w.org_id AND wi.work_order_id=w.id JOIN order_item oi ON oi.org_id=wi.org_id AND oi.id=wi.order_item_id WHERE w.org_id=$1 AND w.id=$2 AND w.assignee_id=$3 AND wi.id=$4`, p.OrgID, id, p.SubjectID, req.WorkOrderItemID).Scan(&status, &quantity); err == sql.ErrNoRows {
 		return httpx.E("WORK_ORDER_NOT_ASSIGNED_TO_YOU", "工单不属于当前师傅", 403)
 	} else if err != nil {
 		return err
@@ -1511,14 +1545,14 @@ func (s *Service) BindEvidence(ctx context.Context, p auth.Principal, id int64, 
 		return httpx.E("WORK_ORDER_STATUS_CONFLICT", "当前状态不能绑定证据", 409)
 	}
 	if req.UnitNo > quantity {
-		return httpx.E("EVIDENCE_SLOT_INVALID", "服务数量编号超出客户购买数量", 400)
+		return httpx.E("EVIDENCE_SLOT_INVALID", "凭证对象编号超出本次服务范围", 400)
 	}
 	var bound int
 	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM work_order_evidence WHERE org_id=$1 AND work_order_id=$2 AND work_order_item_id=$3 AND unit_no=$4 AND stage=$5`, p.OrgID, id, req.WorkOrderItemID, req.UnitNo, req.Stage).Scan(&bound); err != nil {
 		return err
 	}
 	if bound > 0 {
-		return httpx.E("EVIDENCE_SLOT_FILLED", "该服务单位的施工前后凭证已上传，请勿重复上传", 409)
+		return httpx.E("EVIDENCE_SLOT_FILLED", "该对象的服务前后凭证已上传，请勿重复上传", 409)
 	}
 	visible := true
 	if req.CustomerVisible != nil {
@@ -1529,7 +1563,7 @@ func (s *Service) BindEvidence(ctx context.Context, p auth.Principal, id int64, 
 		return err
 	}
 	if affected, _ := result.RowsAffected(); affected == 0 {
-		return httpx.E("EVIDENCE_SLOT_FILLED", "该服务单位的施工前后凭证已上传，或图片已被绑定", 409)
+		return httpx.E("EVIDENCE_SLOT_FILLED", "该对象的服务前后凭证已上传，或图片已被绑定", 409)
 	}
 	var exists int
 	if err = s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM work_order_evidence WHERE org_id=$1 AND work_order_id=$2 AND media_id=$3`, p.OrgID, id, req.MediaID).Scan(&exists); err != nil {
@@ -1595,11 +1629,11 @@ func (s *Service) SubmitCompletion(ctx context.Context, p auth.Principal, id int
 		return httpx.E("WORK_ORDER_STATUS_CONFLICT", "当前状态不能提交完工", 409)
 	}
 	var missingPairs int
-	if err = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM work_order_item wi CROSS JOIN LATERAL generate_series(1,wi.quantity) AS unit(unit_no) WHERE wi.org_id=$1 AND wi.work_order_id=$2 AND (NOT EXISTS (SELECT 1 FROM work_order_evidence e WHERE e.org_id=wi.org_id AND e.work_order_id=wi.work_order_id AND e.work_order_item_id=wi.id AND e.unit_no=unit.unit_no AND e.stage='BEFORE') OR NOT EXISTS (SELECT 1 FROM work_order_evidence e WHERE e.org_id=wi.org_id AND e.work_order_id=wi.work_order_id AND e.work_order_item_id=wi.id AND e.unit_no=unit.unit_no AND e.stage='AFTER'))`, p.OrgID, id).Scan(&missingPairs); err != nil {
+	if err = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM work_order_item wi JOIN order_item oi ON oi.org_id=wi.org_id AND oi.id=wi.order_item_id CROSS JOIN LATERAL generate_series(1,CASE WHEN oi.detail_profile_snapshot#>>'{billing,quantity,aggregation}'='ADDITIVE' THEN 1 ELSE wi.quantity END) AS unit(unit_no) WHERE wi.org_id=$1 AND wi.work_order_id=$2 AND (NOT EXISTS (SELECT 1 FROM work_order_evidence e WHERE e.org_id=wi.org_id AND e.work_order_id=wi.work_order_id AND e.work_order_item_id=wi.id AND e.unit_no=unit.unit_no AND e.stage='BEFORE') OR NOT EXISTS (SELECT 1 FROM work_order_evidence e WHERE e.org_id=wi.org_id AND e.work_order_id=wi.work_order_id AND e.work_order_item_id=wi.id AND e.unit_no=unit.unit_no AND e.stage='AFTER'))`, p.OrgID, id).Scan(&missingPairs); err != nil {
 		return err
 	}
 	if missingPairs > 0 {
-		return httpx.E("COMPLETION_EVIDENCE_INCOMPLETE", fmt.Sprintf("施工前后凭证未按客户购买数量配齐，还缺 %d 组", missingPairs), 409)
+		return httpx.E("COMPLETION_EVIDENCE_INCOMPLETE", fmt.Sprintf("服务前后凭证尚未配齐，还缺 %d 组", missingPairs), 409)
 	}
 	if _, err = tx.ExecContext(ctx, `UPDATE work_order SET status=$1,visit_status='COMPLETION_SUBMITTED',customer_acceptance_status='PENDING',internal_review_status='PENDING_QA',closure_status='OPEN',completion_summary=$2,completion_submitted_at=CURRENT_TIMESTAMP(3),completion_submission_at=CURRENT_TIMESTAMP(3),auto_accept_due_at=CURRENT_TIMESTAMP(3)+INTERVAL '7 days',version=version+1 WHERE org_id=$3 AND id=$4 AND version=$5`, WorkOrderWaitingQAAudit, summary, p.OrgID, id, req.Version); err != nil {
 		return err
