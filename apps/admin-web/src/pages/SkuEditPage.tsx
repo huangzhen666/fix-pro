@@ -1,120 +1,78 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { App, Alert, Button, Card, Checkbox, Collapse, Form, Input, InputNumber, Modal, Select, Space, Typography } from 'antd';
-import type { UploadFile } from 'antd';
-import { useQuery } from '@tanstack/react-query';
-import { useNavigate, useParams } from 'react-router';
-import { createSku, getSku, listCategories, listSkuTemplates, publishSku, updateSku, type SkuWrite, type SkuTemplate } from '../api/catalog';
-import type { ServiceItem } from '../api/serviceProfile';
-import { uploadFile } from '../api/http';
-import { listSkills } from '../api/workforce';
-import { SkuImageUpload } from '../components/SkuImageUpload';
-import { ServiceProfileView } from '../components/ServiceProfileView';
-type Values = Omit<SkuWrite, 'basePrice' | 'version'> & {
-    priceYuan?: number;
-};
-const P = 'detailProfile';
-const uploadEntry = (id: string): UploadFile => ({ uid: id, name: '服务图片', status: 'done', url: `/api/v1/admin/media/${id}/content`, response: { id } });
-function ImageField({ value, onChange, id }: {
-    id?: string;
-    value?: string;
-    onChange?: (v: string) => void;
-}) {
-    const { message } = App.useApp();
-    return <div id={id}><SkuImageUpload listType="picture-card" maxCount={1} fileList={value ? [uploadEntry(value)] : []} onRemove={() => { onChange?.(''); return true; }} customRequest={async ({ file, onSuccess, onError }: any) => { try {
-        const v = await uploadFile('/api/v1/admin/media/images', file as File);
-        onChange?.(String(v.id));
-        onSuccess(v);
-    }
-    catch (e) {
-        message.error('图片上传失败');
-        onError(e);
-    } }}>上传图片</SkuImageUpload></div>;
-}
-export default function SkuEditPage() {
-    const { id } = useParams(), navigate = useNavigate(), { message, modal } = App.useApp(), [form] = Form.useForm<Values>();
-    const [openSections, setOpenSections] = useState<string[]>([]), [saving, setSaving] = useState(false), [template, setTemplate] = useState<SkuTemplate>(), [preview, setPreview] = useState(false), [confirming, setConfirming] = useState(false), [saved, setSaved] = useState<{
-        id: string;
-        version: number;
-    }>();
-    const initialized = useRef(false);
-    const loadedDetail = useRef('');
-    const cats = useQuery({ queryKey: ['categories'], queryFn: listCategories }), skills = useQuery({ queryKey: ['worker-skills-active'], queryFn: () => listSkills('', 'ACTIVE') }), templates = useQuery({ queryKey: ['sku-templates'], queryFn: listSkuTemplates }), detail = useQuery({ queryKey: ['sku', id], queryFn: () => getSku(id!), enabled: !!id });
-    const values = Form.useWatch([], { form, preserve: true }) as Values | undefined, p = values?.detailProfile;
-    const apply = useCallback((t: SkuTemplate) => { setTemplate(t); form.setFieldsValue({ unit: t.unit, description: undefined }); form.setFieldValue(P,structuredClone(t.profile)); }, [form]);
-    useEffect(() => { if (detail.data) {
-        const s = detail.data;
-        if(loadedDetail.current!==`${s.id}:${s.version}`){
-        form.resetFields();
-        form.setFieldsValue({ categoryId: s.categoryId, name: s.name, description: s.description, priceMode: 'FIXED', priceYuan: s.basePrice / 100, unit: s.unit, requiredSkillIds: s.requiredSkillIds, coverMediaId: s.coverMediaId || '', galleryMediaIds: s.galleryMediaIds, detailProfile: s.detailProfile });
-        form.setFieldValue('coverMediaId', s.coverMediaId || '');
-        form.setFieldValue('galleryMediaIds', s.galleryMediaIds);
-        setSaved({ id: s.id, version: s.version });
-        loadedDetail.current=`${s.id}:${s.version}`;
-        }
-        setTemplate(templates.data?.find(t => t.key === s.detailProfile.templateKey));
-        initialized.current = true;
-    }
-    else if (!id && templates.data && !initialized.current) {
-        apply(templates.data[0]);
-        initialized.current = true;
-    } }, [detail.data, templates.data, id, form, apply]);
-    const text = (name: any, label: string, required = false, area = false) => <Form.Item key={JSON.stringify(name)} name={name} label={label} rules={required ? [{ required: true, message: `请填写${label}` }] : []}>{area ? <Input.TextArea autoSize={{ minRows: 2, maxRows: 5 }}/> : <Input />}</Form.Item>;
-    const strings = (path: any[], label: string) => <Form.List name={path}>{(fields, { add, remove }) => <div style={{ marginBottom: 16 }}><Typography.Text strong>{label}</Typography.Text>{fields.map(f => <Space key={f.key} align="start" style={{ display: 'flex', marginTop: 8 }}><Form.Item name={f.name} style={{ marginBottom: 8 }}><Input.TextArea autoSize placeholder={label}/></Form.Item><Button onClick={() => remove(f.name)}>移除</Button></Space>)}<Button size="small" onClick={() => add('')}>添加一项</Button></div>}</Form.List>;
-    const items = (path: any[], label: string, photos = false) => <Form.List name={path}>{(fields, { add, remove }) => <div><Typography.Text strong>{label}</Typography.Text>{fields.map(f => <Card size="small" key={f.key} style={{ margin: '10px 0' }} extra={<Button size="small" onClick={() => remove(f.name)}>移除</Button>}>{text([f.name, 'title'], '项目名称')}{text([f.name, 'description'], '项目说明', false, true)}{photos && <Form.Item name={[f.name, 'imageMediaId']} label="项目图片（选填）"><ImageField /></Form.Item>}</Card>)}<Button onClick={() => add({ title: '', description: '' })}>添加{label}</Button></div>}</Form.List>;
-    const objects = (key: string, label: string, cols: {
-        key: string;
-        label: string;
-        image?: boolean;
-        options?: string[];
-    }[]) => <Form.List name={[P, 'enhancements', key]}>{(fields, { add, remove }) => <div><Typography.Text strong>{label}</Typography.Text>{fields.map(f => <Card size="small" key={f.key} style={{ margin: '10px 0' }} extra={<Button size="small" onClick={() => remove(f.name)}>移除</Button>}>{cols.map(c => <Form.Item key={c.key} name={[f.name, c.key]} label={c.label}>{c.image ? <ImageField /> : c.options ? <Select options={c.options.map(v => ({ value: v, label: { PROVIDER: '服务方提供', CUSTOMER: '客户准备', SHARED: '双方准备' }[v] || v }))}/> : <Input.TextArea autoSize/>}</Form.Item>)}</Card>)}<Button onClick={() => add({})}>添加{label}</Button></div>}</Form.List>;
-    async function save(publish: boolean) { setSaving(true); try {
-        if (publish)
-            await form.validateFields();
-        const v = form.getFieldsValue(true);
-        const body: SkuWrite = { categoryId: v.categoryId, name: v.name || '未命名服务', description: v.description || '', priceMode: 'FIXED', unit: v.unit || '份', basePrice: Math.round((v.priceYuan ?? 0) * 100), requiredSkillIds: v.requiredSkillIds || [], coverMediaId: form.getFieldValue('coverMediaId') || '', galleryMediaIds: form.getFieldValue('galleryMediaIds') || [], detailProfile: v.detailProfile, version: saved?.version ?? detail.data?.version ?? 0 };
-        const activeID = saved?.id || id;
-        const result = activeID ? await updateSku(activeID, body) : await createSku(body);
-        setSaved({ id: result.id, version: result.version });
-        if (publish)
-            await publishSku(result.id);
-        message.success(publish ? '已发布' : '草稿已保存');
-        navigate('/catalog/skus');
-    }
-    catch (e: any) {
-        const expandField=(path:(string|number)[])=>{if(path.includes('enhancements'))setOpenSections(keys=>Array.from(new Set([...keys,'enhance'])));else if(path.includes('quantity')||path.includes('demandCollection'))setOpenSections(keys=>Array.from(new Set([...keys,'more'])));};
-        if(e?.errorFields?.length){const path=e.errorFields[0].name;expandField(path);form.scrollToField(path);message.error('请补全标记的配置后再发布');}
-        else {
-            const raw=e instanceof Error?e.message:'保存失败';const colon=raw.indexOf(':');
-            const key=colon>0?raw.slice(0,colon):'';
-            const labels:Record<string,string>={detailProfile:'服务内容',serviceTarget:'服务对象',billing:'计价规则',includedItems:'服务项目',excludedItems:'不包含项目',unsuitableConditions:'不适用情况',purchaseNotices:'购买提示',acceptanceCriteria:'交付检查',afterSales:'售后政策',demandCollection:'需求资料设置',enhancements:'增强内容'};
-            const parts=key.split('.');const label=labels[parts[0]];
-            if(label){const path=parts.map(v=>/^\d+$/.test(v)?Number(v):v);expandField(path);form.setFields([{name:([P,...path] as Parameters<typeof form.setFields>[0][number]['name']),errors:[raw.slice(colon+1).trim()]}]);message.error(label+'：'+raw.slice(colon+1).trim());}
-            else message.error(raw);
-        }
-    }
-    finally {
-        setSaving(false);
-        setConfirming(false);
-    } }
-    const q = p?.billing?.quantity;
-    return <div><Space style={{ marginBottom: 16 }}><Typography.Title level={3}>{id ? '编辑服务' : '新增服务'}</Typography.Title><Button className="sp-preview-toggle" onClick={() => setPreview(!preview)}>{preview ? '收起预览' : '查看手机预览'}</Button></Space>{detail.data && <Typography.Paragraph type="secondary">编码 {detail.data.skuCode} · 编辑版本 {detail.data.version}</Typography.Paragraph>}
- {templates.error && <Alert type="error" message="模板加载失败，请刷新后重试"/>}
- <div className={`sp-editor-layout ${preview ? 'preview-mode' : ''}`}><Card loading={detail.isLoading}><Space style={{ marginBottom: 20 }}><span>服务模板</span><Select style={{ width: 220 }} value={template?.key} placeholder="选择模板" options={templates.data?.map(t => ({ value: t.key, label: t.name }))} onChange={key => { const t = templates.data?.find(x => x.key === key); if (!t)
-        return; modal.confirm({ title: '应用服务模板', content: '将替换服务内容、数量和需求规则、交付与售后建议。名称、分类、价格及素材保留，请在发布前核对。', onOk: () => { const current = form.getFieldsValue(true); apply(t); form.setFieldsValue({ name: current.name, categoryId: current.categoryId, priceYuan: current.priceYuan }); const old = current.detailProfile; if (old) {
-            form.setFieldValue([P, 'enhancements'], old.enhancements);
-            const images = new Map(old.includedItems?.map((v: ServiceItem) => [v.title, v.imageMediaId]));
-            form.setFieldValue([P, 'includedItems'], (t.profile.includedItems || []).map(v => ({ ...v, imageMediaId: images.get(v.title) })));
-        } } }); }}/></Space>
- <Form form={form} layout="vertical" initialValues={{ priceMode: 'FIXED' }}>
- <Typography.Title level={4}>① 服务信息</Typography.Title>{text('name', '服务名称', true)}<Space align="start"><Form.Item name="categoryId" label="分类" rules={[{ required: true }]}><Select style={{ width: 210 }} options={cats.data?.map(c => ({ value: c.id, label: c.name }))}/></Form.Item><Form.Item name="priceYuan" label="价格（元）" rules={[{ required: true, type: 'number', min: 0.01, message: '发布前请填写有效价格' }]}><InputNumber min={0.01} max={999999.99} precision={2}/></Form.Item>{text('unit', '销售单位', true)}</Space>{text('description', '简述（选填）')}
- <Typography.Title level={4}>② 服务内容</Typography.Title>{text([P, 'serviceTarget'], '服务对象与适用范围', true)}{template?.candidates?.length ? <Checkbox.Group style={{ marginBottom: 16 }} value={(p?.includedItems || []).filter(v => template.candidates.some(c => c.title === v.title)).map(v => v.title)} options={template.candidates.map(v => ({ label: v.title, value: v.title }))} onChange={vs => { const custom = (p?.includedItems || []).filter(v => !template.candidates.some(c => c.title === v.title)); form.setFieldValue([P, 'includedItems'], [...template.candidates.filter(v => vs.includes(v.title)).map(v => p?.includedItems?.find(old => old.title === v.title) || v), ...custom]); }}/> : null}{items([P, 'includedItems'], '服务项目', true)}
- <Typography.Title level={4}>③ 计价与边界</Typography.Title>{text([P, 'billing', 'unitDefinition'], '一份服务包含什么', true)}{text([P, 'billing', 'quantityExplanation'], '购买数量说明', true, true)}<Form.Item name={[P, 'billing', 'visitFeeMode']} label="上门费用"><Select options={[{ value: 'INCLUDED', label: '已含上门费' }, { value: 'WAIVED', label: '免收上门费' }, { value: 'NOT_APPLICABLE', label: '不适用' }]}/></Form.Item>{text([P, 'billing', 'feeDescription'], '费用与材料责任说明', true, true)}{items([P, 'excludedItems'], '不包含项目')}{strings([P, 'unsuitableConditions'], '不适用情况（选填）')}{strings([P, 'purchaseNotices'], '购买提示（选填）')}
- <Typography.Title level={4}>④ 交付与售后</Typography.Title>{strings([P, 'acceptanceCriteria'], '交付检查项')}<Form.Item name={[P, 'afterSales', 'type']} label="售后政策"><Select options={[{ value: 'SUPPORT', label: '一般售后支持' }, { value: 'REWORK', label: '复洁或重做政策' }, { value: 'WARRANTY', label: '期限质保' }]}/></Form.Item>{text([P, 'afterSales', 'summary'], '政策摘要', true)}{text([P, 'afterSales', 'coverage'], '具体处理范围', true, true)}{(p?.afterSales?.type === 'WARRANTY' || p?.afterSales?.period) && <><Space><Form.Item name={[P, 'afterSales', 'period', 'value']} label="期限"><InputNumber min={1} max={3650}/></Form.Item><Form.Item name={[P, 'afterSales', 'period', 'unit']} label="时间单位"><Select style={{ width: 100 }} options={[{ value: 'HOUR', label: '小时' }, { value: 'DAY', label: '天' }, { value: 'MONTH', label: '个月' }]}/></Form.Item></Space>{text([P, 'afterSales', 'period', 'startDescription'], '起算方式', p?.afterSales?.type === 'WARRANTY')}<Button onClick={() => form.setFieldValue([P, 'afterSales', 'period'], undefined)}>移除期限</Button></>}{p?.afterSales?.type !== 'WARRANTY' && !p?.afterSales?.period && <Button onClick={() => form.setFieldValue([P, 'afterSales', 'period'], { value: 24, unit: 'HOUR', startDescription: '' })}>添加政策反馈期限（选填）</Button>}{strings([P, 'afterSales', 'exclusions'], '售后不包含（选填）')}{text([P, 'afterSales', 'contactDescription'], '如何联系', true)}
- <Typography.Title level={4}>⑤ 服务主图</Typography.Title><Form.Item name="coverMediaId" label="服务主图" rules={[{ required: true }]}><ImageField /></Form.Item>
- <Alert style={{ margin: '16px 0' }} type="info" message={`当前规则：${q?.min ?? '—'}–${q?.max ?? '—'} ${values?.unit || '份'}，步长 ${q?.step ?? '—'}；${q?.aggregation === 'ADDITIVE' ? '累计额度' : '独立对象'}。需求文字${p?.demandCollection?.description?.mode === 'REQUIRED' ? '必填' : '非必填'}，现场资料${p?.demandCollection?.media?.mode === 'REQUIRED' ? '必填' : '非必填'}`} description="请确认当前规则适合服务；需要调整可展开更多设置。"/>
- <Collapse activeKey={openSections} onChange={keys => setOpenSections(typeof keys === 'string' ? [keys] : keys)} items={[{ key: 'more', label: '更多设置 · 数量、需求资料与技能', forceRender: true, children: <><Space>{(['min', 'max', 'step'] as const).map((k) => <Form.Item key={k} name={[P, 'billing', 'quantity', k]} label={{ min: '最少数量', max: '最多数量', step: '步长' }[k]}><InputNumber min={1} max={9999}/></Form.Item>)}</Space><Form.Item name={[P, 'billing', 'quantity', 'aggregation']} label="数量含义"><Select options={[{ value: 'INDEPENDENT', label: '每单位为独立对象' }, { value: 'ADDITIVE', label: '小时/面积等额度累计' }]}/></Form.Item>{(['description', 'media'] as const).map(k => <div key={k}><Form.Item name={[P, 'demandCollection', k, 'mode']} label={k === 'description' ? '需求文字' : '现场图片/视频'}><Select options={[{ value: 'OPTIONAL', label: '选填' }, { value: 'REQUIRED', label: '必填' }, { value: 'HIDDEN', label: '不收集' }]}/></Form.Item>{p?.demandCollection?.[k]?.mode !== 'HIDDEN' && <>{text([P, 'demandCollection', k, 'label'], '客户看到的名称')}{text([P, 'demandCollection', k, 'hint'], '填写提示')}</>}</div>)}<Form.Item name="requiredSkillIds" label="建议技能"><Select mode="multiple" allowClear options={skills.data?.map(s => ({ value: s.id, label: s.name }))}/></Form.Item></> }, { key: 'enhance', label: '增强内容 · 全部选填', forceRender: true, children: <>{strings([P, 'enhancements', 'tags'], '场景标签')}{objects('facts', '服务参数', [{ key: 'label', label: '参数名' }, { key: 'value', label: '参数值' }])}{objects('resources', '工具材料责任', [{ key: 'name', label: '名称' }, { key: 'provider', label: '提供方', options: ['PROVIDER', 'CUSTOMER', 'SHARED'] }, { key: 'description', label: '责任说明' }])}{strings([P, 'enhancements', 'preparations'], '服务前准备')}{items([P, 'enhancements', 'steps'], '流程步骤')}{objects('gallery', '服务案例', [{ key: 'mediaId', label: '案例图片', image: true }, { key: 'caption', label: '图片说明' }])}{objects('comparisons', '前后对照', [{ key: 'title', label: '标题' }, { key: 'beforeMediaId', label: '服务前', image: true }, { key: 'afterMediaId', label: '服务后', image: true }, { key: 'description', label: '服务说明' }, { key: 'effectNotice', label: '效果适用提示' }])}{objects('faqs', '常见问题', [{ key: 'question', label: '问题' }, { key: 'answer', label: '回答' }])}</> }]}/>
- <Space style={{ marginTop: 24 }}><Button onClick={() => navigate('/catalog/skus')}>取消</Button><Button loading={saving} onClick={() => save(false)}>保存草稿</Button><Button type="primary" loading={saving} onClick={() => setConfirming(true)}>核对并发布</Button></Space>
- </Form></Card><aside className={`sp-preview ${preview ? 'mobile-visible' : ''}`}><small>草稿手机预览 · 未发布</small>{form.getFieldValue('coverMediaId') && <img className="sp-hero" src={`/api/v1/admin/media/${form.getFieldValue('coverMediaId')}/content`} alt="服务主图"/>}<h2>{values?.name || '服务名称'}</h2><p>{values?.description}</p><div className="sp-preview-price">¥{Number(values?.priceYuan || 0).toFixed(2)} / {values?.unit || '份'}</div><p>{p?.billing?.unitDefinition}</p><ServiceProfileView profile={p}/></aside></div>
- <Modal title="核对服务承诺并发布" open={confirming} onCancel={() => setConfirming(false)} onOk={() => save(true)} confirmLoading={saving} okText="确认并发布" width={620}><p>价格 ¥{values?.priceYuan} / {values?.unit}；{q?.min}–{q?.max}，步长{q?.step}</p><p>{p?.billing?.unitDefinition}</p><p>{p?.billing?.quantityExplanation}</p><p>{p?.billing?.feeDescription}</p><p>需求文字：{{ HIDDEN: '不收集', OPTIONAL: '选填', REQUIRED: '必填' }[p?.demandCollection?.description?.mode || 'OPTIONAL']}；现场资料：{{ HIDDEN: '不收集', OPTIONAL: '选填', REQUIRED: '必填' }[p?.demandCollection?.media?.mode || 'OPTIONAL']}</p><ServiceProfileView profile={p}/></Modal>
- </div>;
+import { useEffect, useRef, useState } from 'react'
+import { Alert, AutoComplete, App, Button, Card, Form, Input, Select, Space, Typography } from 'antd'
+import type { UploadFile } from 'antd'
+import { useQuery } from '@tanstack/react-query'
+import { useBeforeUnload, useBlocker, useNavigate, useParams, useSearchParams } from 'react-router'
+import { createSku, getSku, listCategories, publishSku, updateSku, type SkuWrite } from '../api/catalog'
+import { ApiError, apiRequest, uploadFile } from '../api/http'
+import { SkuImageUpload } from '../components/SkuImageUpload'
+import { ServiceContent } from '../components/ServiceContent'
+type Issue = { field:string; message:string }
+const entry=(id:string):UploadFile=>({uid:id,name:'服务图片',status:'done',response:{id}})
+export default function SkuEditPage(){
+ const {id}=useParams(),[params]=useSearchParams(),navigate=useNavigate(),{message,modal}=App.useApp(),[form]=Form.useForm()
+ const [files,setFiles]=useState<UploadFile[]>([]),[issues,setIssues]=useState<Issue[]>([]),[busy,setBusy]=useState(false),[preview,setPreview]=useState(false),[dirty,setDirty]=useState(false)
+ const dirtyRef=useRef(false),saved=useRef<{id:string;version:number}|undefined>(undefined),loaded=useRef('')
+ const categories=useQuery({queryKey:['categories'],queryFn:listCategories}),detail=useQuery({queryKey:['sku',id],queryFn:()=>getSku(id!),enabled:!!id})
+ const published=useQuery({queryKey:['sku-published',id],queryFn:()=>apiRequest<{price:number;unit:string;serviceDescription:string;serviceNotice:string}>(`/api/v1/catalog/services/${id}`),enabled:!!id&&!!detail.data?.publishedVersion,retry:false})
+ const values=Form.useWatch([],{form,preserve:true})||{}
+ const blocker=useBlocker(()=>dirtyRef.current)
+ const change=()=>{dirtyRef.current=true;setDirty(true)}
+ useBeforeUnload(event=>{if(dirtyRef.current){event.preventDefault();event.returnValue=''}})
+ useEffect(()=>{if(blocker.state==='blocked'){const m=modal.confirm({title:'有尚未保存的修改',content:'离开后未保存的内容将丢失。',okText:'离开',cancelText:'继续编辑',onOk:()=>blocker.proceed(),onCancel:()=>blocker.reset()});return()=>m.destroy()}},[blocker,modal])
+ useEffect(()=>{
+  const s=detail.data;if(s&&loaded.current!==`${s.id}:${s.version}`){
+   if(dirtyRef.current)return
+   form.setFieldsValue({...s,priceYuan:s.basePrice?String(s.basePrice/100):''});setFiles([...(s.coverMediaId?[s.coverMediaId]:[]),...s.galleryMediaIds].map(entry));saved.current={id:s.id,version:s.version};loaded.current=`${s.id}:${s.version}`
+  }else if(!id&&!loaded.current){form.setFieldValue('categoryId',params.get('categoryId')||undefined);loaded.current='new'}
+ },[detail.data,form,id,params])
+ function showIssues(next:Issue[]){setIssues(next);form.setFields(next.map(x=>({name:x.field==='basePrice'?'priceYuan':x.field.startsWith('galleryMediaIds')?'coverMediaId':x.field.split('.')[0],errors:[x.message]})))}
+ function validate(publish:boolean):Issue[]{
+  const v=form.getFieldsValue(true),out:Issue[]=[]
+  for(const [field,label,max,required] of [['name','服务名称',60,true],['unit','单位',8,true],['serviceDescription','服务说明',5000,true],['serviceNotice','服务须知',3000,false]] as const){const text=(v[field]||'').trim();if(publish&&required&&!text)out.push({field,message:`请填写${label}`});else if(Array.from(text).length>max)out.push({field,message:`${label}最多${max}字`})}
+  if(publish&&!v.categoryId)out.push({field:'categoryId',message:'请选择服务分类'})
+  const price=String(v.priceYuan||'').trim()
+  if((publish&&!price)||(price&&(!/^\d+(\.\d{1,2})?$/.test(price)||Number(price)>999999.99||(publish&&Number(price)<=0))))out.push({field:'basePrice',message:'价格需为0.01～999999.99元，最多两位小数'})
+  if(publish&&!files.some(f=>f.status==='done'&&f.response?.id))out.push({field:'coverMediaId',message:'请上传服务主图'})
+  if(publish&&files.some(f=>f.status==='uploading'||f.status==='error'))out.push({field:'coverMediaId',message:'请等待图片上传完成，失败图片请重试或移除'})
+  return out
+ }
+ async function save(publish:boolean,confirmed=false){
+  if(busy)return
+  form.setFields(Object.keys(form.getFieldsValue(true)).map(name=>({name,errors:[]})))
+  const found=validate(publish);showIssues(found);if(found.length)return
+  const v=form.getFieldsValue(true),basePrice=Math.round(Number(v.priceYuan||0)*100)
+  if(publish&&detail.data?.publishedVersion&&!confirmed){
+   if(!published.data){message.error('暂时无法读取当前已发布内容，请重试');return}
+   const old=published.data,changes=[]
+   if(old.price!==basePrice)changes.push('价格');if(old.unit!==(v.unit||'').trim())changes.push('单位');if(old.serviceDescription!==(v.serviceDescription||'').trim())changes.push('服务说明');if(old.serviceNotice!==(v.serviceNotice||'').trim())changes.push('服务须知')
+   if(changes.length){modal.confirm({title:'确认发布更新',content:`本次将更新：${changes.join('、')}。已成交订单仍保留原内容。`,okText:'发布更新',onOk:()=>save(true,true)});return}
+  }
+  setBusy(true);let draftSaved=false
+  try{
+   const ids=files.filter(f=>f.status==='done'&&f.response?.id).map(f=>String(f.response.id))
+   const body:SkuWrite={name:(v.name||'').trim(),categoryId:v.categoryId||'',basePrice,unit:(v.unit||'').trim(),serviceDescription:(v.serviceDescription||'').trim(),serviceNotice:(v.serviceNotice||'').trim(),priceMode:'FIXED',coverMediaId:ids[0]||'',galleryMediaIds:ids.slice(1),version:saved.current?.version??0}
+   const result=saved.current?await updateSku(saved.current.id,body):await createSku(body)
+   saved.current={id:result.id,version:result.version};draftSaved=true
+   if(publish)await publishSku(result.id,result.version)
+   dirtyRef.current=false;setDirty(false);message.success(publish?'服务已发布':files.some(f=>f.status!=='done')?'草稿已保存，仅保留上传成功的图片':'草稿已保存');navigate('/catalog/skus')
+  }catch(e){if(e instanceof ApiError&&e.fieldErrors)showIssues(e.fieldErrors);message.error(`${draftSaved?'草稿已保存，发布失败：':''}${e instanceof Error?e.message:'保存失败，请重试'}`)}finally{setBusy(false)}
+ }
+ function move(index:number,delta:number){const next=[...files];[next[index],next[index+delta]]=[next[index+delta],next[index]];setFiles(next);change()}
+ const issueLabel=(field:string)=>({name:'服务名称',categoryId:'服务分类',basePrice:'价格',unit:'单位',coverMediaId:'服务图片',galleryMediaIds:'服务图片',serviceDescription:'服务说明',serviceNotice:'服务须知'}[field.split('.')[0]]||'服务图片')
+ const cover=files.find(f=>f.status==='done'&&f.response?.id)
+ return <><Space style={{marginBottom:16}}><Typography.Title level={3} style={{margin:0}}>{id?'编辑服务':'新增服务'}</Typography.Title><Button className="sku-preview-toggle" onClick={()=>setPreview(!preview)}>{preview?'继续编辑':'预览'}</Button></Space>
+ {detail.error&&<Alert type="error" message="服务加载失败，请刷新重试"/>}
+ {issues.length>0&&<Alert style={{marginBottom:16}} type="error" message={`还有 ${issues.length} 项需要处理`} description={<div className="sku-error-links">{issues.map((x,i)=><Button type="link" key={i} onClick={()=>{setPreview(false);setTimeout(()=>{const field=x.field==='basePrice'?'priceYuan':x.field.split('.')[0];if(field==='coverMediaId'||field==='galleryMediaIds')document.getElementById('sku-images')?.scrollIntoView({block:'center'});else form.scrollToField(field,{block:'center'})},0)}}>{issueLabel(x.field)}：{x.message}</Button>)}</div>}/>}
+ <div className={`sku-editor ${preview?'preview-mode':''}`}><Card className="sku-form-card" loading={detail.isLoading}><Form form={form} layout="vertical" onValuesChange={change} disabled={busy}>
+ <Form.Item label="服务名称" name="name" required><Input placeholder="例如：墙面局部补漆"/></Form.Item>
+ <Form.Item label="服务分类" name="categoryId" required><Select loading={categories.isLoading} placeholder="请选择分类" options={categories.data?.filter(c=>c.status==='ACTIVE').map(c=>({label:c.name,value:c.id}))}/></Form.Item>
+ <Space align="start" wrap><Form.Item label="价格（元）" name="priceYuan" required><Input inputMode="decimal" placeholder="例如：100"/></Form.Item><Form.Item label="单位" name="unit" required><AutoComplete style={{width:160}} options={['次','处','台','小时','㎡','份'].map(value=>({value}))} placeholder="选择或输入单位"/></Form.Item></Space>
+ <div id="sku-images"><Form.Item label="服务图片" name="coverMediaId" required extra="第一张为主图，一张即可发布；最多6张，无需填写图片说明。">
+ <div><SkuImageUpload listType="picture-card" maxCount={6} fileList={files} disabled={busy} onChange={({fileList})=>{setFiles(fileList);change()}} customRequest={async({file,onSuccess,onError})=>{try{const result=await uploadFile('/api/v1/admin/media/images',file as File);onSuccess?.(result)}catch(e){onError?.(e as Error);message.error('图片上传失败，请重试或移除')}}}>{files.length<6?'上传图片':null}</SkuImageUpload>{files.length>1&&files.map((f,i)=><div className="sku-image-order" key={f.uid}><span>{i===0?'主图':`附图${i}`} · {f.name}</span><Button size="small" disabled={i===0||busy} onClick={()=>move(i,-1)}>前移</Button><Button size="small" disabled={i===files.length-1||busy} onClick={()=>move(i,1)}>后移</Button></div>)}</div>
+ </Form.Item></div>
+ <Form.Item label="服务说明" name="serviceDescription" required extra="写清提供什么服务，以及一份服务包含多大范围。支持换行，无需按固定格式填写。"><Input.TextArea autoSize={{minRows:5,maxRows:14}} showCount count={{strategy:value=>Array.from(value.trim()).length,max:5000}} placeholder="例如：提供室内墙面局部补漆，包含保护、表面处理、涂刷和清理。每处面积不超过……"/></Form.Item>
+ <Form.Item label="服务须知（选填）" name="serviceNotice" extra="可填写材料责任、准备事项、额外费用及不适用情况；没有可留空。"><Input.TextArea autoSize={{minRows:3,maxRows:10}} showCount count={{strategy:value=>Array.from(value.trim()).length,max:3000}}/></Form.Item>
+ <div className="sku-actions"><Space><Button onClick={()=>navigate('/catalog/skus')} disabled={busy}>取消</Button><Button loading={busy} onClick={()=>save(false)}>保存草稿</Button><Button type="primary" loading={busy} onClick={()=>save(true)}>{detail.data?.publishedVersion?'发布更新':'发布服务'}</Button>{dirty&&<Typography.Text type="secondary">有未保存修改</Typography.Text>}</Space></div>
+ </Form></Card><aside className="sku-preview"><small>当前编辑预览 · 尚未发布</small>{cover&&<img className="hero" src={`/api/v1/admin/media/${cover.response.id}/content`} alt="服务主图"/>}<h2>{values.name||'服务名称'}</h2><div className="price">¥{values.priceYuan||'—'} / {values.unit||'单位'}</div><ServiceContent serviceDescription={values.serviceDescription} serviceNotice={values.serviceNotice}/></aside></div></>
 }

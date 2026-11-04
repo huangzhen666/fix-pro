@@ -248,7 +248,7 @@ func TestAdminRecallReturnsWorkOrderToPendingDispatch(t *testing.T) {
 	}
 }
 
-func TestSubmitCompletionRequiresEvidencePairForEveryPurchasedUnit(t *testing.T) {
+func TestSubmitCompletionRequiresOneCompletePairPerService(t *testing.T) {
 	db := workerReturnDB(t)
 	ctx := context.Background()
 	suffix := time.Now().UnixNano()
@@ -258,7 +258,7 @@ func TestSubmitCompletionRequiresEvidencePairForEveryPurchasedUnit(t *testing.T)
 	if err := db.QueryRowContext(ctx, `INSERT INTO customer_order(org_id,order_no,customer_id,contact_name,contact_mobile,service_address,order_type,status,total_amount,paid_amount,item_count) VALUES(1,$1,1,'凭证配对测试','13800138000','测试地址','REPAIR','FULFILLING',200,0,2) RETURNING id`, fmt.Sprintf("EPO-%d", suffix)).Scan(&orderID); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.QueryRowContext(ctx, `INSERT INTO order_item(org_id,order_id,sku_id,sku_version,sku_code_snapshot,sku_name_snapshot,unit_snapshot,detail_profile_snapshot,demand_description,unit_price,quantity,subtotal_amount) VALUES(1,$1,1,1,'PAIR','配对服务','次','{"schemaVersion":1,"serviceTarget":"约定对象的基础服务","billing":{"unitDefinition":"每份对应一次约定服务","quantity":{"min":1,"max":99,"step":1,"aggregation":"INDEPENDENT"},"quantityExplanation":"每份对应独立服务对象","visitFeeMode":"INCLUDED","feeDescription":"本服务价格已经包含上门费用"},"includedItems":[{"title":"基础服务","description":"完成双方约定的基础服务"}],"acceptanceCriteria":["完成服务后逐项现场确认"],"afterSales":{"type":"SUPPORT","summary":"请联系客服核查服务问题","coverage":"提供约定服务相关的问题咨询","contactDescription":"联系客服提供订单号和问题说明"},"demandCollection":{"description":{"mode":"OPTIONAL","label":"服务需求","hint":"可填写特别需要注意的情况"},"media":{"mode":"OPTIONAL","label":"现场资料","hint":"可上传现场照片辅助了解"}}}','',100,2,200) RETURNING id`, orderID).Scan(&orderItemID); err != nil {
+	if err := db.QueryRowContext(ctx, `INSERT INTO order_item(org_id,order_id,sku_id,sku_version,sku_code_snapshot,sku_name_snapshot,unit_snapshot,service_description_snapshot,demand_description,unit_price,quantity,subtotal_amount) VALUES(1,$1,1,1,'PAIR','配对服务','次','约定范围内的一次基础服务','',100,2,200) RETURNING id`, orderID).Scan(&orderItemID); err != nil {
 		t.Fatal(err)
 	}
 	if err := db.QueryRowContext(ctx, `INSERT INTO work_order(org_id,work_order_no,order_id,assignee_id,status,priority) VALUES(1,$1,$2,999998,'IN_SERVICE','NORMAL') RETURNING id`, fmt.Sprintf("EPW-%d", suffix), orderID).Scan(&workOrderID); err != nil {
@@ -267,7 +267,7 @@ func TestSubmitCompletionRequiresEvidencePairForEveryPurchasedUnit(t *testing.T)
 	if err := db.QueryRowContext(ctx, `INSERT INTO work_order_item(org_id,work_order_id,order_item_id,quantity) VALUES(1,$1,$2,2) RETURNING id`, workOrderID, orderItemID).Scan(&workOrderItemID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.ExecContext(ctx, `INSERT INTO work_order_evidence(org_id,work_order_id,media_id,stage,work_order_item_id,unit_no,customer_visible,uploaded_by) VALUES(1,$1,$2,'BEFORE',$3,1,TRUE,999998),(1,$1,$4,'AFTER',$3,1,TRUE,999998)`, workOrderID, suffix+1, workOrderItemID, suffix+2); err != nil {
+	if _, err := db.ExecContext(ctx, `INSERT INTO work_order_evidence(org_id,work_order_id,media_id,stage,work_order_item_id,unit_no,customer_visible,uploaded_by) VALUES(1,$1,$2,'BEFORE',$3,1,TRUE,999998)`, workOrderID, suffix+1, workOrderItemID); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
@@ -288,7 +288,7 @@ func TestSubmitCompletionRequiresEvidencePairForEveryPurchasedUnit(t *testing.T)
 	if err == nil || !strings.Contains(err.Error(), "COMPLETION_EVIDENCE_INCOMPLETE") {
 		t.Fatalf("err = %v, want COMPLETION_EVIDENCE_INCOMPLETE", err)
 	}
-	if _, err = db.ExecContext(ctx, `INSERT INTO work_order_evidence(org_id,work_order_id,media_id,stage,work_order_item_id,unit_no,customer_visible,uploaded_by) VALUES(1,$1,$2,'BEFORE',$3,2,TRUE,999998),(1,$1,$4,'AFTER',$3,2,TRUE,999998)`, workOrderID, suffix+3, workOrderItemID, suffix+4); err != nil {
+	if _, err = db.ExecContext(ctx, `INSERT INTO work_order_evidence(org_id,work_order_id,media_id,stage,work_order_item_id,unit_no,customer_visible,uploaded_by) VALUES(1,$1,$2,'AFTER',$3,1,TRUE,999998)`, workOrderID, suffix+3, workOrderItemID); err != nil {
 		t.Fatal(err)
 	}
 	if err = New(db, nil).SubmitCompletion(ctx, worker, workOrderID, CompletionRequest{Version: 0, CompletionSummary: "服务已完成并完成检查"}, key); err != nil {
@@ -315,7 +315,7 @@ func TestWorkerEvidenceBindsUsingDetailProjectID(t *testing.T) {
 	if err := db.QueryRowContext(ctx, `INSERT INTO employee_account(org_id,username,display_name,password_hash,status,role,mobile,must_change_password,password_version) VALUES(1,$1,'上传映射测试师傅','test','ACTIVE','WORKER',$1,FALSE,1) RETURNING id`, fmt.Sprintf("135%08d", suffix%100000000)).Scan(&workerID); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.QueryRowContext(ctx, `INSERT INTO order_item(org_id,order_id,sku_id,sku_version,sku_code_snapshot,sku_name_snapshot,unit_snapshot,detail_profile_snapshot,demand_description,unit_price,quantity,subtotal_amount) VALUES(1,$1,1,1,'MAP','上传映射服务','次','{"schemaVersion":1,"serviceTarget":"约定对象的基础服务","billing":{"unitDefinition":"每份对应一次约定服务","quantity":{"min":1,"max":99,"step":1,"aggregation":"INDEPENDENT"},"quantityExplanation":"每份对应独立服务对象","visitFeeMode":"INCLUDED","feeDescription":"本服务价格已经包含上门费用"},"includedItems":[{"title":"基础服务","description":"完成双方约定的基础服务"}],"acceptanceCriteria":["完成服务后逐项现场确认"],"afterSales":{"type":"SUPPORT","summary":"请联系客服核查服务问题","coverage":"提供约定服务相关的问题咨询","contactDescription":"联系客服提供订单号和问题说明"},"demandCollection":{"description":{"mode":"OPTIONAL","label":"服务需求","hint":"可填写特别需要注意的情况"},"media":{"mode":"OPTIONAL","label":"现场资料","hint":"可上传现场照片辅助了解"}}}','',100,1,100) RETURNING id`, orderID).Scan(&orderItemID); err != nil {
+	if err := db.QueryRowContext(ctx, `INSERT INTO order_item(org_id,order_id,sku_id,sku_version,sku_code_snapshot,sku_name_snapshot,unit_snapshot,service_description_snapshot,demand_description,unit_price,quantity,subtotal_amount) VALUES(1,$1,1,1,'MAP','上传映射服务','次','约定范围内的一次基础服务','',100,1,100) RETURNING id`, orderID).Scan(&orderItemID); err != nil {
 		t.Fatal(err)
 	}
 	if err := db.QueryRowContext(ctx, `INSERT INTO work_order(org_id,work_order_no,order_id,assignee_id,status,priority) VALUES(1,$1,$2,$3,'IN_SERVICE','NORMAL') RETURNING id`, fmt.Sprintf("EMW-%d", suffix), orderID, workerID).Scan(&workOrderID); err != nil {
@@ -520,7 +520,7 @@ func TestExpiredInServiceWorkOrderCannotBeRecalledAndCanComplete(t *testing.T) {
 	if err := db.QueryRowContext(ctx, `INSERT INTO employee_account(org_id,username,display_name,password_hash,status,role,mobile,must_change_password,password_version) VALUES(1,$1,'超时服务测试师傅','test','ACTIVE','WORKER',$1,FALSE,1) RETURNING id`, fmt.Sprintf("134%08d", suffix%100000000)).Scan(&workerID); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.QueryRowContext(ctx, `INSERT INTO order_item(org_id,order_id,sku_id,sku_version,sku_code_snapshot,sku_name_snapshot,unit_snapshot,detail_profile_snapshot,demand_description,unit_price,quantity,subtotal_amount) VALUES(1,$1,1,1,'OVERDUE','超时服务','次','{"schemaVersion":1,"serviceTarget":"约定对象的基础服务","billing":{"unitDefinition":"每份对应一次约定服务","quantity":{"min":1,"max":99,"step":1,"aggregation":"INDEPENDENT"},"quantityExplanation":"每份对应独立服务对象","visitFeeMode":"INCLUDED","feeDescription":"本服务价格已经包含上门费用"},"includedItems":[{"title":"基础服务","description":"完成双方约定的基础服务"}],"acceptanceCriteria":["完成服务后逐项现场确认"],"afterSales":{"type":"SUPPORT","summary":"请联系客服核查服务问题","coverage":"提供约定服务相关的问题咨询","contactDescription":"联系客服提供订单号和问题说明"},"demandCollection":{"description":{"mode":"OPTIONAL","label":"服务需求","hint":"可填写特别需要注意的情况"},"media":{"mode":"OPTIONAL","label":"现场资料","hint":"可上传现场照片辅助了解"}}}','',100,1,100) RETURNING id`, orderID).Scan(&orderItemID); err != nil {
+	if err := db.QueryRowContext(ctx, `INSERT INTO order_item(org_id,order_id,sku_id,sku_version,sku_code_snapshot,sku_name_snapshot,unit_snapshot,service_description_snapshot,demand_description,unit_price,quantity,subtotal_amount) VALUES(1,$1,1,1,'OVERDUE','超时服务','次','约定范围内的一次基础服务','',100,1,100) RETURNING id`, orderID).Scan(&orderItemID); err != nil {
 		t.Fatal(err)
 	}
 	if err := db.QueryRowContext(ctx, `INSERT INTO work_order(org_id,work_order_no,order_id,assignee_id,status,priority,appointment_at,appointment_slot) VALUES(1,$1,$2,$3,'IN_SERVICE','NORMAL',$4,'08:00') RETURNING id`, fmt.Sprintf("EISW-%d", suffix), orderID, workerID, expiredAppointment).Scan(&workOrderID); err != nil {
@@ -642,7 +642,7 @@ func TestFulfillmentDetailsWorkWithSingleConnectionPool(t *testing.T) {
 	if err := db.QueryRowContext(ctx, `INSERT INTO employee_account(org_id,username,display_name,password_hash,status,role,mobile,must_change_password,password_version) VALUES(1,$1,'连接池测试师傅','test','ACTIVE','WORKER',$1,FALSE,1) RETURNING id`, fmt.Sprintf("135%08d", suffix%100000000)).Scan(&workerID); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.QueryRowContext(ctx, `INSERT INTO order_item(org_id,order_id,sku_id,sku_version,sku_code_snapshot,sku_name_snapshot,unit_snapshot,detail_profile_snapshot,demand_description,unit_price,quantity,subtotal_amount) VALUES(1,$1,1,1,'POOL','连接池服务','次','{"schemaVersion":1,"serviceTarget":"约定对象的基础服务","billing":{"unitDefinition":"每份对应一次约定服务","quantity":{"min":1,"max":99,"step":1,"aggregation":"INDEPENDENT"},"quantityExplanation":"每份对应独立服务对象","visitFeeMode":"INCLUDED","feeDescription":"本服务价格已经包含上门费用"},"includedItems":[{"title":"基础服务","description":"完成双方约定的基础服务"}],"acceptanceCriteria":["完成服务后逐项现场确认"],"afterSales":{"type":"SUPPORT","summary":"请联系客服核查服务问题","coverage":"提供约定服务相关的问题咨询","contactDescription":"联系客服提供订单号和问题说明"},"demandCollection":{"description":{"mode":"OPTIONAL","label":"服务需求","hint":"可填写特别需要注意的情况"},"media":{"mode":"OPTIONAL","label":"现场资料","hint":"可上传现场照片辅助了解"}}}','',100,1,100) RETURNING id`, orderID).Scan(&orderItemID); err != nil {
+	if err := db.QueryRowContext(ctx, `INSERT INTO order_item(org_id,order_id,sku_id,sku_version,sku_code_snapshot,sku_name_snapshot,unit_snapshot,service_description_snapshot,demand_description,unit_price,quantity,subtotal_amount) VALUES(1,$1,1,1,'POOL','连接池服务','次','约定范围内的一次基础服务','',100,1,100) RETURNING id`, orderID).Scan(&orderItemID); err != nil {
 		t.Fatal(err)
 	}
 	if err := db.QueryRowContext(ctx, `INSERT INTO work_order(org_id,work_order_no,order_id,assignee_id,status,priority) VALUES(1,$1,$2,$3,'ARRIVED','NORMAL') RETURNING id`, fmt.Sprintf("SPW-%d", suffix), orderID, workerID).Scan(&workOrderID); err != nil {
@@ -731,8 +731,8 @@ func TestCumulativeBillingUsesOneEvidencePair(t *testing.T) {
 	}
 	var oid, oiid, wid, wiid int64
 	must(db.QueryRow(`INSERT INTO customer_order(org_id,order_no,customer_id,contact_name,contact_mobile,service_address,order_type,status,total_amount,paid_amount,item_count) VALUES(1,$1,1,'面积保洁测试','13800138000','测试地址','REPAIR','FULFILLING',48000,0,80) RETURNING id`, "CUM-"+stamp).Scan(&oid))
-	profile := catalog.Examples()[2].Profile
-	must(db.QueryRow(`INSERT INTO order_item(org_id,order_id,sku_id,sku_version,sku_code_snapshot,sku_name_snapshot,unit_snapshot,detail_profile_snapshot,demand_description,unit_price,quantity,subtotal_amount) VALUES(1,$1,1,1,'AREA','开荒保洁','㎡',$2,'',600,80,48000) RETURNING id`, oid, profile).Scan(&oiid))
+	description := catalog.Examples()[2].ServiceDescription
+	must(db.QueryRow(`INSERT INTO order_item(org_id,order_id,sku_id,sku_version,sku_code_snapshot,sku_name_snapshot,unit_snapshot,service_description_snapshot,demand_description,unit_price,quantity,subtotal_amount) VALUES(1,$1,1,1,'AREA','开荒保洁','㎡',$2,'',600,80,48000) RETURNING id`, oid, description).Scan(&oiid))
 	must(db.QueryRow(`INSERT INTO work_order(org_id,work_order_no,order_id,assignee_id,status,priority) VALUES(1,$1,$2,999997,'IN_SERVICE','NORMAL') RETURNING id`, "CUM-W-"+stamp, oid).Scan(&wid))
 	must(db.QueryRow(`INSERT INTO work_order_item(org_id,work_order_id,order_item_id,quantity) VALUES(1,$1,$2,80) RETURNING id`, wid, oiid).Scan(&wiid))
 	t.Cleanup(func() {
@@ -754,13 +754,21 @@ func TestCumulativeBillingUsesOneEvidencePair(t *testing.T) {
 	if len(view.Items) != 1 || view.Items[0].Quantity != 80 || len(view.Items[0].EvidencePairs) != 1 {
 		t.Fatalf("billing quantity expanded evidence slots: %+v", view.Items)
 	}
-	if e = service.BindEvidence(ctx, worker, wid, EvidenceRequest{Stage: "BEFORE", WorkOrderItemID: wiid, UnitNo: 2}); e == nil || !strings.Contains(e.Error(), "EVIDENCE_SLOT_INVALID") {
-		t.Fatal("accepted evidence slot 2 for a cumulative service", e)
+	if e = service.BindEvidence(ctx, worker, wid, EvidenceRequest{Stage: "BEFORE", WorkOrderItemID: wiid, UnitNo: 33}); e == nil || !strings.Contains(e.Error(), "EVIDENCE_SLOT_INVALID") {
+		t.Fatal("accepted excess supplemental evidence slot", e)
 	}
 	for i, stage := range []string{"BEFORE", "AFTER"} {
 		var mid int64
 		must(db.QueryRow(`INSERT INTO media_asset(org_id,owner_type,owner_id,purpose,media_type,original_name,object_key,content_type,size_bytes,status) VALUES(1,'WORK_ORDER',$1,'WORK_ORDER_EVIDENCE','IMAGE','site.png',$2,'image/png',1,'READY') RETURNING id`, wid, fmt.Sprintf("cum-%s-%d", stamp, i)).Scan(&mid))
 		must(service.BindEvidence(ctx, worker, wid, EvidenceRequest{Stage: stage, WorkOrderItemID: wiid, UnitNo: 1, MediaID: mid}))
+	}
+	var extra int64
+	must(db.QueryRow(`INSERT INTO media_asset(org_id,owner_type,owner_id,purpose,media_type,original_name,object_key,content_type,size_bytes,status) VALUES(1,'WORK_ORDER',$1,'WORK_ORDER_EVIDENCE','IMAGE','extra.png',$2,'image/png',1,'READY') RETURNING id`, wid, "extra-"+stamp).Scan(&extra))
+	must(service.BindEvidence(ctx, worker, wid, EvidenceRequest{Stage: "BEFORE", WorkOrderItemID: wiid, UnitNo: 2, MediaID: extra}))
+	view, e = service.WorkerWorkOrder(ctx, worker, wid)
+	must(e)
+	if len(view.Items[0].EvidencePairs) != 2 {
+		t.Fatal("supplemental evidence not visible")
 	}
 	must(service.SubmitCompletion(ctx, worker, wid, CompletionRequest{Version: 0, CompletionSummary: "已按约定区域完成本次清洁并检查"}, key))
 }

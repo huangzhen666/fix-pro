@@ -1,4 +1,4 @@
-import { validQuantity } from '../../services/serviceProfile'
+
 import { showApiError } from '../../services/request'
 import { protectedPage } from '../../services/guard'
 import { getService } from '../../services/catalog'
@@ -90,10 +90,10 @@ protectedPage({
       const skuVersion = Number(options.skuVersion)
       if (!Number.isInteger(quantity) || quantity < 1 || quantity > 9999 || !Number.isInteger(skuVersion) || skuVersion < 1) throw new Error('下单参数无效，请返回服务详情重新选择')
       const service = await getService(options.skuId)
-      if (!validQuantity(service.detailProfile,quantity)) throw new Error('购买数量不符合服务规则，请返回重新选择')
+      if (!Number.isInteger(quantity) || quantity < 1 || quantity > 9999) throw new Error('购买数量不符合服务规则，请返回重新选择')
       if (service.publishedVersion !== skuVersion) throw new Error('服务信息已更新，请返回详情确认后重新下单')
       directItem = { skuId: service.id, skuVersion, quantity }
-      cart = { items: [{ id: 'direct', skuId: service.id, skuVersion, name: service.name, coverImageUrl: service.coverImageUrl, unitPrice: service.price, unit: service.unit, quantity, subtotal: service.price * quantity, detailProfile:service.detailProfile,demandMedia: [], demandComplete: false, available: true,needsConfirmation:false,currentVersion:skuVersion }], itemCount: quantity, totalAmount: service.price * quantity }
+      cart = { items: [{ id: 'direct', skuId: service.id, skuVersion, name: service.name, coverImageUrl: service.coverImageUrl, unitPrice: service.price, unit: service.unit, quantity, subtotal: service.price * quantity, serviceDescription:service.serviceDescription,serviceNotice:service.serviceNotice,demandMedia: [], demandComplete: false, available: true,needsConfirmation:false,currentVersion:skuVersion }], itemCount: quantity, totalAmount: service.price * quantity }
     } else {
       cart = selectedCart(await getCart(), itemIDs)
     }
@@ -159,7 +159,6 @@ protectedPage({
       wx.showToast({ title: '请完善联系人、地址和预约时间段', icon: 'none' })
       return
     }
-    for(const item of this.data.cart.items){const rule=item.detailProfile.demandCollection;if((rule.description.mode==='REQUIRED'&&(item.demandDescription||'').trim().length<5)||(rule.media.mode==='REQUIRED'&&!item.demandMedia.length)){wx.showToast({title:`请完善${item.name}的需求资料`,icon:'none'});return}}
     this.setData({ submitting: true })
     const key = `${Date.now()}-${Math.random().toString(16).slice(2)}`
     try {

@@ -25,22 +25,23 @@ type DemandMedia struct {
 	URL       string `json:"url"`
 }
 type Item struct {
-	CurrentVersion    int             `json:"currentVersion"`
-	NeedsConfirmation bool            `json:"needsConfirmation"`
-	DetailProfile     catalog.Profile `json:"detailProfile"`
-	ID                string          `json:"id"`
-	SKUID             string          `json:"skuId"`
-	SKUVersion        int             `json:"skuVersion"`
-	Name              string          `json:"name"`
-	CoverImageURL     string          `json:"coverImageUrl"`
-	UnitPrice         int64           `json:"unitPrice"`
-	Unit              string          `json:"unit"`
-	Quantity          int             `json:"quantity"`
-	Subtotal          int64           `json:"subtotal"`
-	DemandDescription *string         `json:"demandDescription"`
-	DemandMedia       []DemandMedia   `json:"demandMedia"`
-	DemandComplete    bool            `json:"demandComplete"`
-	Available         bool            `json:"available"`
+	CurrentVersion     int           `json:"currentVersion"`
+	NeedsConfirmation  bool          `json:"needsConfirmation"`
+	ServiceDescription string        `json:"serviceDescription"`
+	ServiceNotice      string        `json:"serviceNotice"`
+	ID                 string        `json:"id"`
+	SKUID              string        `json:"skuId"`
+	SKUVersion         int           `json:"skuVersion"`
+	Name               string        `json:"name"`
+	CoverImageURL      string        `json:"coverImageUrl"`
+	UnitPrice          int64         `json:"unitPrice"`
+	Unit               string        `json:"unit"`
+	Quantity           int           `json:"quantity"`
+	Subtotal           int64         `json:"subtotal"`
+	DemandDescription  *string       `json:"demandDescription"`
+	DemandMedia        []DemandMedia `json:"demandMedia"`
+	DemandComplete     bool          `json:"demandComplete"`
+	Available          bool          `json:"available"`
 }
 type View struct {
 	Items       []Item `json:"items"`
@@ -114,7 +115,8 @@ func (s *Service) Get(ctx context.Context, p auth.Principal) (View, error) {
 		x.NeedsConfirmation = current.Valid && int(current.Int64) != x.SKUVersion
 		x.ID, x.SKUID = fmt.Sprint(item), fmt.Sprint(sku)
 		x.Name, x.CoverImageURL, x.Unit = snap.Name, snap.CoverImageURL, snap.Unit
-		x.DetailProfile = snap.DetailProfile
+		x.ServiceDescription = snap.ServiceDescription
+		x.ServiceNotice = snap.ServiceNotice
 		x.Subtotal = x.UnitPrice * int64(x.Quantity)
 		if fault.Valid {
 			x.DemandDescription = &fault.String
@@ -123,7 +125,7 @@ func (s *Service) Get(ctx context.Context, p auth.Principal) (View, error) {
 		if e != nil {
 			return out, e
 		}
-		x.DemandComplete = snap.DetailProfile.CheckDemand(fault.String, len(x.DemandMedia)) == nil
+		x.DemandComplete = catalog.CheckDemand(fault.String, len(x.DemandMedia)) == nil
 		out.Items = append(out.Items, x)
 		out.ItemCount += x.Quantity
 		if x.Available {
@@ -168,7 +170,7 @@ func (s *Service) Add(ctx context.Context, p auth.Principal, sku int64, q int) (
 	if e != nil {
 		return View{}, e
 	}
-	if e = x.DetailProfile.CheckQuantity(q); e != nil {
+	if e = catalog.CheckQuantity(q); e != nil {
 		return View{}, e
 	}
 	cart, e := s.ensure(ctx, p)
@@ -176,7 +178,7 @@ func (s *Service) Add(ctx context.Context, p auth.Principal, sku int64, q int) (
 		return View{}, e
 	}
 	var itemID int64
-	e = s.db.QueryRowContext(ctx, `INSERT INTO shopping_cart_item(org_id,cart_id,sku_id,sku_version,quantity,unit_price) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT (org_id,cart_id,sku_id,sku_version) DO UPDATE SET quantity=shopping_cart_item.quantity+EXCLUDED.quantity WHERE shopping_cart_item.quantity+EXCLUDED.quantity BETWEEN $7 AND $8 AND (shopping_cart_item.quantity+EXCLUDED.quantity-$7)%$9=0 RETURNING id`, p.OrgID, cart, sku, x.PublishedVersion, q, x.Price, x.DetailProfile.Billing.Quantity.Min, x.DetailProfile.Billing.Quantity.Max, x.DetailProfile.Billing.Quantity.Step).Scan(&itemID)
+	e = s.db.QueryRowContext(ctx, `INSERT INTO shopping_cart_item(org_id,cart_id,sku_id,sku_version,quantity,unit_price) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT (org_id,cart_id,sku_id,sku_version) DO UPDATE SET quantity=shopping_cart_item.quantity+EXCLUDED.quantity WHERE shopping_cart_item.quantity+EXCLUDED.quantity BETWEEN $7 AND $8 AND (shopping_cart_item.quantity+EXCLUDED.quantity-$7)%$9=0 RETURNING id`, p.OrgID, cart, sku, x.PublishedVersion, q, x.Price, 1, 9999, 1).Scan(&itemID)
 	if e == sql.ErrNoRows {
 		return View{}, httpx.E("SKU_QUANTITY_INVALID", "合并后的数量不符合服务规则", 400)
 	}
@@ -211,7 +213,7 @@ func (s *Service) Quantity(ctx context.Context, p auth.Principal, item int64, q 
 	if e := json.Unmarshal(raw, &snap); e != nil {
 		return View{}, e
 	}
-	if e := snap.DetailProfile.CheckQuantity(q); e != nil {
+	if e := catalog.CheckQuantity(q); e != nil {
 		return View{}, e
 	}
 	_, e := s.db.ExecContext(ctx, `UPDATE shopping_cart_item SET quantity=$1 WHERE id=$2 AND org_id=$3`, q, item, p.OrgID)
@@ -406,7 +408,7 @@ func (s *Service) Confirm(ctx context.Context, p auth.Principal, item int64, exp
 	if snap.PublishedVersion != expectedVersion {
 		return View{}, httpx.E("CART_SKU_CHANGED", "服务内容再次更新，请重新查看并确认", 409)
 	}
-	if e = snap.DetailProfile.CheckQuantity(q); e != nil {
+	if e = catalog.CheckQuantity(q); e != nil {
 		return View{}, e
 	}
 	if _, e = tx.ExecContext(ctx, `UPDATE shopping_cart_item SET sku_version=$1,unit_price=$2 WHERE id=$3 AND org_id=$4`, snap.PublishedVersion, snap.Price, item, p.OrgID); e != nil {

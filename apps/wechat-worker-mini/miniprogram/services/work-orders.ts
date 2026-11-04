@@ -1,4 +1,3 @@
-import type { ServiceProfile } from './serviceProfile'
 import { request, upload } from './request'
 
 export interface WorkOrder {
@@ -23,7 +22,7 @@ export interface WorkOrder {
 }
 
 export interface WorkOrderItem {
-  detailProfile:ServiceProfile
+  serviceDescription:string;serviceNotice:string
   id: string
   name: string
   unit: string

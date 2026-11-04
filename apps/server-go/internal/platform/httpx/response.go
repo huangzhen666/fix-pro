@@ -19,6 +19,7 @@ type Error struct {
 	Message string
 	Status  int
 	Cause   error
+	Details any
 }
 
 func (e *Error) Error() string              { return e.Code + ": " + e.Message }
@@ -37,7 +38,7 @@ func Failure(w http.ResponseWriter, r *http.Request, err error) {
 	if e.Status >= 500 {
 		logging.Root(r.Context(), err, e.Code)
 	}
-	write(w, e.Status, Response{Code: e.Code, Message: e.Message, Data: nil, RequestID: RequestID(r.Context())})
+	write(w, e.Status, Response{Code: e.Code, Message: e.Message, Data: e.Details, RequestID: RequestID(r.Context())})
 }
 func DecodeJSON(w http.ResponseWriter, r *http.Request, dst any) error {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)

@@ -52,7 +52,7 @@ func TestServiceContractsAcrossFourServices(t *testing.T) {
 			cat := catalog.New(db)
 			carts := cart.New(db)
 			orders := New(db)
-			w := catalog.SKUWrite{CategoryID: "1001", Name: sample.Name, PriceMode: "FIXED", Unit: sample.Unit, BasePrice: sample.Price, CoverMediaID: fmt.Sprint(cover), DetailProfile: sample.Profile}
+			w := catalog.SKUWrite{CategoryID: "1001", Name: sample.Name, PriceMode: "FIXED", Unit: sample.Unit, BasePrice: sample.Price, CoverMediaID: fmt.Sprint(cover), ServiceDescription: sample.ServiceDescription, ServiceNotice: sample.ServiceNotice}
 			sku, e := cat.Create(ctx, w, "test")
 			must(e)
 			var sid int64
@@ -80,27 +80,18 @@ func TestServiceContractsAcrossFourServices(t *testing.T) {
 			if pubAgain.PublishedVersion != pub.PublishedVersion {
 				t.Fatal("duplicate publish created version")
 			}
-			n := sample.Profile.Billing.Quantity.Min
+			n := 1
 			cv, e := carts.Add(ctx, p, sid, n)
 			must(e)
 			if len(cv.Items) != 1 {
 				t.Fatal(cv)
 			}
 			ci := cv.Items[0]
-			_, e = carts.Quantity(ctx, p, mustID(t, ci.ID), sample.Profile.Billing.Quantity.Max+1)
+			_, e = carts.Quantity(ctx, p, mustID(t, ci.ID), 10000)
 			if e == nil {
 				t.Fatal("excess cart quantity accepted")
 			}
 			direct := Write{ContactName: "测试客户", ContactMobile: "13800138000", ServiceAddress: "汉川市测试路六号", AppointmentDate: time.Now().AddDate(0, 0, 1).Format("2006-01-02"), AppointmentSlot: "08:00", DirectItem: &DirectItem{SKUID: sku.ID, SKUVersion: pub.PublishedVersion, Quantity: n}}
-			if sample.Profile.DemandCollection.Description.Mode == "REQUIRED" {
-				direct.DirectItem.DemandDescription = "约定设备或现场需求说明"
-			}
-			if sample.Profile.DemandCollection.Media.Mode == "REQUIRED" {
-				if _, e = orders.Create(ctx, p, "missing-"+stamp, direct); e == nil {
-					t.Fatal("required evidence not enforced")
-				}
-				direct.DirectItem.MediaIDs = []string{fmt.Sprint(evidence)}
-			}
 			// Invalid media is rejected after item insertion; the entire order/idempotency transaction must roll back.
 			bad := direct
 			badDirect := *direct.DirectItem
@@ -125,7 +116,7 @@ func TestServiceContractsAcrossFourServices(t *testing.T) {
 				t.Fatal("direct order modified cart")
 			}
 			w.Version = sku.Version
-			w.DetailProfile.Billing.FeeDescription = "内容已经更新，请按新版本服务费用约定确认"
+			w.ServiceNotice = "内容已经更新，请按新版本服务费用约定确认"
 			_, e = cat.Update(ctx, sid, w, "test")
 			must(e)
 			pub2, e := cat.Publish(ctx, sid, "test")
@@ -138,12 +129,12 @@ func TestServiceContractsAcrossFourServices(t *testing.T) {
 			}
 			view, e := orders.Detail(ctx, mustID(t, result.ID), 1)
 			must(e)
-			if view.Items[0].DetailProfile.Billing.FeeDescription == w.DetailProfile.Billing.FeeDescription {
+			if view.Items[0].ServiceNotice == w.ServiceNotice {
 				t.Fatal("order snapshot changed")
 			}
 			customerView, e := fulfillment.New(db, nil).CustomerOrder(ctx, p, mustID(t, result.ID))
 			must(e)
-			if len(customerView.Items) != 1 || customerView.Items[0].DetailProfile.Billing.UnitDefinition != sample.Profile.Billing.UnitDefinition {
+			if len(customerView.Items) != 1 || customerView.Items[0].ServiceDescription != sample.ServiceDescription {
 				t.Fatal("customer snapshot unavailable")
 			}
 			cv, e = carts.Get(ctx, p)
@@ -156,42 +147,26 @@ func TestServiceContractsAcrossFourServices(t *testing.T) {
 			}
 			_, e = carts.Confirm(ctx, p, mustID(t, ci.ID), pub2.PublishedVersion)
 			must(e)
-			_, e = carts.Demand(ctx, p, mustID(t, ci.ID), cart.DemandWrite{DemandDescription: direct.DirectItem.DemandDescription, MediaIDs: direct.DirectItem.MediaIDs})
+			_, e = carts.Demand(ctx, p, mustID(t, ci.ID), cart.DemandWrite{DemandDescription: direct.DirectItem.DemandDescription, MediaIDs: []string{fmt.Sprint(evidence)}})
 			must(e)
 			direct.DirectItem = nil
 			direct.CartItemIDs = []string{ci.ID}
 			_, e = orders.Create(ctx, p, "cart-"+stamp, direct)
 			must(e)
-			if sample.Key == "DEMO-CLEAN" {
-				latest, err := cat.Detail(ctx, sid)
+			if sample.Key == "SIMPLE-CLEAN" {
+				merged, err := carts.Add(ctx, p, sid, 4000)
 				must(err)
-				w.Version = latest.Version
-				w.DetailProfile.Billing.Quantity = catalog.QuantityRule{Min: 2, Max: 8, Step: 2, Aggregation: "ADDITIVE"}
-				_, err = cat.Update(ctx, sid, w, "test")
+				merged, err = carts.Add(ctx, p, sid, 4000)
 				must(err)
-				_, err = cat.Publish(ctx, sid, "test")
-				must(err)
-				merged, err := carts.Add(ctx, p, sid, 2)
-				must(err)
-				merged, err = carts.Add(ctx, p, sid, 2)
-				must(err)
-				if merged.Items[0].Quantity != 4 {
-					t.Fatal("merge quantity incorrect")
+				if merged.Items[0].Quantity != 8000 {
+					t.Fatal("merge incorrect")
 				}
-				if _, err = carts.Quantity(ctx, p, mustID(t, merged.Items[0].ID), 3); err == nil {
-					t.Fatal("cart accepted invalid step")
-				}
-				if _, err = carts.Add(ctx, p, sid, 6); err == nil {
-					t.Fatal("merged excess quantity accepted")
-				}
-				check, err := carts.Get(ctx, p)
-				must(err)
-				if check.Items[0].Quantity != 4 {
-					t.Fatal("rejected merge modified cart")
+				if _, err = carts.Add(ctx, p, sid, 3000); err == nil {
+					t.Fatal("merged excess accepted")
 				}
 				results := make(chan error, 3)
 				for i := 0; i < 3; i++ {
-					go func() { _, err := carts.Add(ctx, p, sid, 2); results <- err }()
+					go func() { _, e := carts.Add(ctx, p, sid, 999); results <- e }()
 				}
 				success := 0
 				for i := 0; i < 3; i++ {
@@ -200,14 +175,13 @@ func TestServiceContractsAcrossFourServices(t *testing.T) {
 					}
 				}
 				if success != 2 {
-					t.Fatalf("concurrent add successes=%d, expected 2", success)
+					t.Fatalf("concurrent add successes=%d", success)
 				}
-				check, err = carts.Get(ctx, p)
+				check, err := carts.Get(ctx, p)
 				must(err)
-				if check.Items[0].Quantity != 8 {
-					t.Fatal("concurrent add exceeded max")
+				if check.Items[0].Quantity != 9998 {
+					t.Fatal("concurrent max incorrect")
 				}
-
 			}
 
 		})
@@ -220,11 +194,4 @@ func mustID(t *testing.T, s string) int64 {
 		t.Fatal(e)
 	}
 	return n
-}
-
-func testServiceProfile() catalog.Profile {
-	p := catalog.Examples()[3].Profile
-	p.DemandCollection.Description.Mode = "OPTIONAL"
-	p.Billing.Quantity.Max = 99
-	return p
 }

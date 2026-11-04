@@ -98,7 +98,7 @@ protectedPage({
     const id = String(e.currentTarget.dataset.id)
     this.setData({ expandedId: this.data.expandedId === id ? '' : id, swipeId: '', swipeOffset: 0 })
   },
-  async confirmVersion(e:any) {const id=String(e.currentTarget.dataset.id);try{const result=await wx.showModal({title:'确认新版服务',content:'请先查看当前服务详情，确认价格、服务范围和资料要求。确认后将采用新版规则。'});if(result.confirm){const cart=await confirmCartItem(id,this.data.cart.items.find(v=>v.id===id)!.currentVersion);this.applyCart(cart)}}catch(err){wx.showToast({title:err instanceof Error?err.message:'确认失败',icon:'none'})}},
+  async confirmVersion(e:any) {const id=String(e.currentTarget.dataset.id);try{const result=await wx.showModal({title:'确认新版服务',content:'请先查看当前服务详情，确认价格、服务说明和服务须知。确认后将采用新版内容。'});if(result.confirm){const cart=await confirmCartItem(id,this.data.cart.items.find(v=>v.id===id)!.currentVersion);this.applyCart(cart)}}catch(err){wx.showToast({title:err instanceof Error?err.message:'确认失败',icon:'none'})}},
   inputDemand(e: any) { this.setData({ [`cart.items[${Number(e.currentTarget.dataset.index)}].demandDescription`]: e.detail.value }) },
   async blurDemand(e: any) { await this.persist(Number(e.currentTarget.dataset.index)) },
   async change(e: any) {
@@ -106,9 +106,9 @@ protectedPage({
     const item = this.data.cart.items[Number(e.currentTarget.dataset.index)]
     if (!item) return
     if (!item.available) return
-    const rule=item.detailProfile.billing.quantity
-    const quantity = item.quantity + Number(e.currentTarget.dataset.delta)*rule.step
-    if (quantity < rule.min || quantity > rule.max) return
+
+    const quantity = item.quantity + Number(e.currentTarget.dataset.delta)
+    if (quantity < 1 || quantity > 9999) return
     this.setData({ updatingId: item.id })
     try { this.applyCart(await updateQuantity(item.id, quantity)) }
     catch (err) { wx.showToast({ title: err instanceof Error ? err.message : '修改失败', icon: 'none' }) }

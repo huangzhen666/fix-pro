@@ -1,0 +1,1 @@
+ok  	github.com/fixpro/server/internal/catalog	2.210s

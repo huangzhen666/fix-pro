@@ -1,11 +1,10 @@
-import type { ServiceProfile } from './serviceProfile'
 import { apiRequest } from './http'
 
 export interface PageResult<T> { items: T[]; total: number; page: number; pageSize: number }
 export interface Category { id: string; parentId?: string; name: string; sortOrder: number; status: 'ACTIVE'|'DISABLED'; skuCount: number }
 export interface SkuSummary { id: string; skuCode: string; name: string; categoryName: string; basePrice: number; unit: string; status: string; publishedVersion?: number; createdAt: string; updatedAt: string; createdBy: string; updatedBy: string }
-export interface SkuDetail { id: string; categoryId: string; skuCode: string; name: string; description?: string; detailProfile: ServiceProfile; priceMode: string; basePrice: number; unit: string; coverMediaId?: string; galleryMediaIds: string[]; requiredSkillIds: string[]; status: string; version: number; publishedVersion?: number; createdAt: string; updatedAt: string; createdBy: string; updatedBy: string }
-export interface SkuWrite { categoryId: string; name: string; description?: string; detailProfile: ServiceProfile; priceMode: string; basePrice: number; unit: string; coverMediaId: string; galleryMediaIds: string[]; requiredSkillIds: string[]; version: number }
+export interface SkuDetail { id: string; categoryId: string; skuCode: string; name: string; serviceDescription:string;serviceNotice:string; priceMode: string; basePrice: number; unit: string; coverMediaId?: string; galleryMediaIds: string[]; status: string; version: number; publishedVersion?: number; createdAt: string; updatedAt: string; createdBy: string; updatedBy: string }
+export interface SkuWrite { categoryId: string; name: string; serviceDescription:string;serviceNotice:string; priceMode: string; basePrice: number; unit: string; coverMediaId: string; galleryMediaIds: string[]; version: number }
 
 export const listCategories = () => apiRequest<Category[]>('/api/v1/admin/catalog/categories')
 export const listAllCategories = () => apiRequest<Category[]>('/api/v1/admin/catalog/categories?includeDisabled=true')
@@ -16,8 +15,5 @@ export const listSkus = (keyword = '', categoryId = '', page = 1) => apiRequest<
 export const getSku = (id: string) => apiRequest<SkuDetail>(`/api/v1/admin/catalog/skus/${id}`)
 export const createSku = (body: SkuWrite) => apiRequest<SkuDetail>('/api/v1/admin/catalog/skus', { method: 'POST', body: JSON.stringify(body) })
 export const updateSku = (id: string, body: SkuWrite) => apiRequest<SkuDetail>(`/api/v1/admin/catalog/skus/${id}`, { method: 'PUT', body: JSON.stringify(body) })
-export const publishSku = (id: string) => apiRequest(`/api/v1/admin/catalog/skus/${id}/publish`, { method: 'POST' })
+export const publishSku = (id: string, version:number) => apiRequest(`/api/v1/admin/catalog/skus/${id}/publish`, { method: 'POST',body:JSON.stringify({version}) })
 export const offShelfSku = (id: string) => apiRequest(`/api/v1/admin/catalog/skus/${id}/off-shelf`, { method: 'POST' })
-
-export interface SkuTemplate { key:string;name:string;unit:string;profile:ServiceProfile;candidates:ServiceProfile["includedItems"] }
-export const listSkuTemplates=()=>apiRequest<SkuTemplate[]>("/api/v1/admin/catalog/sku-detail-templates")

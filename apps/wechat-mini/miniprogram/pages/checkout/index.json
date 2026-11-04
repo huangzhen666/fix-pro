@@ -1,6 +1,6 @@
 {
   "navigationBarTitleText": "确认订单",
   "usingComponents": {
-    "service-profile": "/components/service-profile/index"
+    "service-content": "/components/service-content/index"
   }
 }

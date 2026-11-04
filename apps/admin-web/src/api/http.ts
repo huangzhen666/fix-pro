@@ -9,13 +9,15 @@ export interface ApiResponse<T> {
 }
 
 export class ApiError extends Error {
+  readonly fieldErrors?: {field:string;message:string}[]
   readonly code: string
   readonly requestId?: string
  readonly diagnostic?: Diagnostic
  readonly status?: number
 
-  constructor(message: string, code: string, requestId?: string, diagnostic?: Diagnostic) {
+  constructor(message: string, code: string, requestId?: string, diagnostic?: Diagnostic, fieldErrors?: {field:string;message:string}[]) {
     super(message)
+    this.fieldErrors = fieldErrors
     this.code = code
     this.requestId = requestId
  this.diagnostic = diagnostic
@@ -44,15 +46,15 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
   }
   if (!payload || typeof payload !== 'object' || typeof payload.code !== 'string') throw failure(path, id, response, 'INVALID_RESPONSE', '服务器返回异常，请重试')
   if (!response.ok || payload.code !== 'OK') {
-    throw failure(path, id, response, safeCode(payload.code, `HTTP_${response.status}`), payload.message || '请求失败', payload.requestId)
+    throw failure(path, id, response, safeCode(payload.code, `HTTP_${response.status}`), payload.message || '请求失败', payload.requestId, (payload.data as any)?.errors)
   }
   return payload.data
 }
-function failure(path: string, id: string, response: Response | undefined, code: string, message: string, payloadId?: string): ApiError {
+function failure(path: string, id: string, response: Response | undefined, code: string, message: string, payloadId?: string, fieldErrors?: {field:string;message:string}[]): ApiError {
   if (response?.status === 401) useAuthStore.getState().clearSession()
   const serverId = safeId(payloadId) ?? safeId(response?.headers.get('X-Request-Id'))
   const d: Diagnostic = { requestId: serverId ?? id, clientGenerated: !serverId, status: response?.status, code, operation: operation(path), time: new Date().toISOString(), clientVersion: import.meta.env.VITE_APP_VERSION ?? 'development' }
-  return new ApiError(message, code, d.requestId, d)
+  return new ApiError(message, code, d.requestId, d, fieldErrors)
 }
 async function send(path: string, init: RequestInit, id: string): Promise<Response> {
   try { return await fetch(`${baseUrl}${path}`, init) } catch { throw failure(path, id, undefined, 'NETWORK_ERROR', '网络不可用，请重试') }

@@ -1,0 +1,2 @@
+ok  	github.com/fixpro/server/internal/catalog	2.364s
+ok  	github.com/fixpro/server/internal/order	1.939s

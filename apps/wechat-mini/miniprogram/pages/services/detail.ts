@@ -14,16 +14,16 @@ Page({
   async load(id: string) {
     try {
       const s = await getService(id)
-      this.setData({subtotalText:(s.price*s.detailProfile.billing.quantity.min/100).toFixed(2),quantity:s.detailProfile.billing.quantity.min, service: { ...s, priceText: (s.price / 100).toFixed(2), galleryImageUrls: [s.coverImageUrl, ...s.galleryImageUrls.filter(x => x !== s.coverImageUrl)].map(x => `${getApiBaseUrl()}${x}`) } })
+      this.setData({subtotalText:(s.price/100).toFixed(2),quantity:1, service: { ...s, priceText: (s.price / 100).toFixed(2), galleryImageUrls: [s.coverImageUrl, ...s.galleryImageUrls.filter(x => x !== s.coverImageUrl)].map(x => `${getApiBaseUrl()}${x}`) } })
     } catch (e) { this.setData({ error: e instanceof Error ? e.message : '加载失败' }) }
     finally { this.setData({ loading: false }) }
   },
   changeQuantity(e: WechatMiniprogram.BaseEvent) {
     if (this.data.adding || this.data.ordering) return
-    const q=this.data.service.detailProfile.billing.quantity
-    const delta = Number(e.currentTarget.dataset.delta)*q.step
+
+    const delta = Number(e.currentTarget.dataset.delta)
     const quantity=this.data.quantity+delta
-    if(quantity<q.min||quantity>q.max)return
+    if(quantity<1||quantity>9999)return
     this.setData({quantity,subtotalText:(this.data.service.price*quantity/100).toFixed(2)})
   },
   async add() {

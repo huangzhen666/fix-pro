@@ -170,7 +170,6 @@ func NewWithContext(parent context.Context, c config.Config, db *sql.DB, log *za
 	mux.Handle("POST /api/v1/admin/catalog/categories", admin(cat.CreateCategory))
 	mux.Handle("PUT /api/v1/admin/catalog/categories/{id}", admin(cat.UpdateCategory))
 	mux.Handle("POST /api/v1/admin/catalog/categories/{id}/status", admin(cat.CategoryStatus))
-	mux.Handle("GET /api/v1/admin/catalog/sku-detail-templates", admin(cat.Templates))
 	mux.Handle("GET /api/v1/admin/catalog/skus", admin(cat.AdminList))
 	mux.Handle("GET /api/v1/admin/catalog/skus/{id}", admin(cat.AdminDetail))
 	mux.Handle("POST /api/v1/admin/catalog/skus", admin(cat.Create))
@@ -328,7 +327,6 @@ func adminPermission(r *http.Request) string {
 			return "catalog.category.view"
 		}
 		return "catalog.category.manage"
-	case path == "/api/v1/admin/catalog/sku-detail-templates":
 		return "catalog.sku.view"
 	case strings.HasPrefix(path, "/api/v1/admin/catalog/skus"):
 		if strings.HasSuffix(path, "/publish") || strings.HasSuffix(path, "/off-shelf") {

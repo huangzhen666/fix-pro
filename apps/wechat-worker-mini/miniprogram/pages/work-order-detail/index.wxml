@@ -21,7 +21,7 @@
       <view wx:if="{{!order.items.length}}" class="muted">暂无服务项目明细</view>
       <view wx:for="{{order.items}}" wx:key="id" class="service-item">
         <view class="service-item-head"><text class="service-name">{{item.name}}</text><text class="service-quantity">× {{item.quantity}}{{item.unit}}</text></view>
-        <view class="customer-note"><view>{{item.detailProfile.billing.unitDefinition}}</view><view>{{item.detailProfile.billing.quantityExplanation}}</view><view>{{item.detailProfile.billing.feeDescription}}</view><view wx:for="{{item.detailProfile.includedItems}}" wx:for-item="included" wx:key="title">{{included.title}}：{{included.description}}</view><view wx:for="{{item.detailProfile.excludedItems}}" wx:for-item="excluded" wx:key="title">不包含：{{excluded.title}} · {{excluded.description}}</view><view wx:for="{{item.detailProfile.purchaseNotices}}" wx:for-item="notice" wx:key="*this">{{notice}}</view><view>{{item.detailProfile.afterSales.summary}}</view></view><view wx:if="{{item.customerNote}}" class="customer-note"><text class="note-label">客户补充信息</text><text class="note-content">{{item.customerNote}}</text></view>
+        <view class="service-contract"><view class="note-label">服务说明</view><text style="white-space:pre-wrap">{{item.serviceDescription}}</text><view wx:if="{{item.serviceNotice}}"><view class="note-label">服务须知</view><text style="white-space:pre-wrap">{{item.serviceNotice}}</text></view></view><view wx:if="{{item.customerNote}}" class="customer-note"><text class="note-label">客户补充信息</text><text class="note-content">{{item.customerNote}}</text></view>
         <scroll-view wx:if="{{item.customerMedia.length}}" scroll-x="true" class="customer-media-row">
           <view wx:for="{{item.customerMedia}}" wx:key="id" wx:for-item="media" class="customer-media">
             <image wx:if="{{media.mediaType === 'IMAGE' && media.localUrl}}" src="{{media.localUrl}}" mode="aspectFill" />
@@ -43,11 +43,11 @@
 
     <view wx:if="{{order.status === 'PENDING_ARRIVAL' || order.status === 'ARRIVED' || order.status === 'IN_SERVICE'}}" class="card">
       <view class="section-title">现场凭证</view>
-      <view class="muted evidence-hint">独立对象按对象留证；小时、面积等累计额度按本次服务留证，每组需要服务前和服务后照片。</view>
+      <view class="muted evidence-hint">每项服务至少上传一组服务前后凭证，与购买面积、小时或数量无关；可按需补充。</view>
       <view wx:for="{{order.items}}" wx:for-item="service" wx:key="id" class="evidence-service">
         <view class="evidence-service-title">{{service.name}} × {{service.quantity}}{{service.unit}}</view>
         <view wx:for="{{service.evidencePairs}}" wx:for-item="pair" wx:key="unitNo" class="evidence-pair">
-          <view class="evidence-pair-title">{{service.detailProfile.billing.quantity.aggregation==='ADDITIVE'?'本次服务':'服务对象 '+pair.unitNo}}</view>
+          <view class="evidence-pair-title">{{pair.unitNo===1?'本次服务（必需）':'补充凭证（选填）'}}</view>
           <view class="evidence-pair-actions">
             <button wx:if="{{!pair.before}}" size="mini" data-stage="BEFORE" data-work-order-item-id="{{service.id}}" data-unit-no="{{pair.unitNo}}" bindtap="chooseMedia">上传服务前</button>
             <text wx:else class="evidence-uploaded">服务前已上传</text>
@@ -55,6 +55,7 @@
             <text wx:else class="evidence-uploaded">服务后已上传</text>
           </view>
         </view>
+        <button wx:if="{{service.evidencePairs.length < 32}}" size="mini" data-stage="BEFORE" data-work-order-item-id="{{service.id}}" data-unit-no="{{service.evidencePairs.length+1}}" bindtap="chooseMedia">添加补充凭证（选填）</button>
       </view>
     </view>
     <view wx:if="{{order.status === 'IN_SERVICE'}}" class="card">

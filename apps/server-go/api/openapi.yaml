@@ -2,7 +2,7 @@
 openapi: 3.1.0
 info:
   title: 灵狸护家 API
-  version: 2.0.0-service-sku
+  version: 3.0.0-simple-service-sku
 servers:
 - url: http://localhost:8080
 components:
@@ -62,408 +62,15 @@ components:
         data: {}
         requestId:
           type: string
-    ServiceItem:
-      type: object
-      additionalProperties: false
-      properties:
-        title:
-          type: string
-          minLength: 2
-          maxLength: 30
-        description:
-          type: string
-          minLength: 5
-          maxLength: 200
-        iconKey:
-          type: string
-          enum:
-          - service
-          - inspect
-          - protect
-          - tool
-          - clean
-          - install
-          - report
-          - confirm
-        imageMediaId:
-          type: string
-          minLength: 1
-          maxLength: 150
-      required:
-      - title
-      - description
-    QuantityRule:
-      type: object
-      additionalProperties: false
-      properties:
-        min:
-          type: integer
-          minimum: 1
-          maximum: 9999
-        max:
-          type: integer
-          minimum: 1
-          maximum: 9999
-        step:
-          type: integer
-          minimum: 1
-          maximum: 9999
-        aggregation:
-          type: string
-          enum:
-          - INDEPENDENT
-          - ADDITIVE
-      required:
-      - min
-      - max
-      - step
-      - aggregation
-    CollectionField:
-      type: object
-      additionalProperties: false
-      properties:
-        mode:
-          type: string
-          enum:
-          - HIDDEN
-          - OPTIONAL
-          - REQUIRED
-        label:
-          type: string
-          minLength: 2
-          maxLength: 20
-        hint:
-          type: string
-          minLength: 5
-          maxLength: 150
-      required:
-      - mode
-    AfterSales:
-      type: object
-      additionalProperties: false
-      properties:
-        type:
-          type: string
-          enum:
-          - WARRANTY
-          - REWORK
-          - SUPPORT
-        summary:
-          type: string
-          minLength: 5
-          maxLength: 120
-        coverage:
-          type: string
-          minLength: 5
-          maxLength: 300
-        exclusions:
-          type: array
-          items:
-            type: string
-            minLength: 5
-            maxLength: 150
-          minItems: 0
-          maxItems: 8
-        contactDescription:
-          type: string
-          minLength: 5
-          maxLength: 150
-        period:
-          type: object
-          additionalProperties: false
-          properties:
-            value:
-              type: integer
-              minimum: 1
-              maximum: 3650
-            unit:
-              type: string
-              enum:
-              - HOUR
-              - DAY
-              - MONTH
-            startDescription:
-              type: string
-              minLength: 5
-              maxLength: 100
-          required:
-          - value
-          - unit
-          - startDescription
-      required:
-      - type
-      - summary
-      - coverage
-      - contactDescription
-    Enhancements:
-      type: object
-      additionalProperties: false
-      properties:
-        tags:
-          type: array
-          items:
-            type: string
-            minLength: 2
-            maxLength: 16
-          minItems: 0
-          maxItems: 6
-        facts:
-          type: array
-          items:
-            type: object
-            additionalProperties: false
-            properties:
-              label:
-                type: string
-                minLength: 2
-                maxLength: 20
-              value:
-                type: string
-                minLength: 1
-                maxLength: 100
-            required:
-            - label
-            - value
-          minItems: 0
-          maxItems: 8
-        resources:
-          type: array
-          items:
-            type: object
-            additionalProperties: false
-            properties:
-              name:
-                type: string
-                minLength: 2
-                maxLength: 30
-              provider:
-                type: string
-                enum:
-                - PROVIDER
-                - CUSTOMER
-                - SHARED
-              description:
-                type: string
-                minLength: 5
-                maxLength: 150
-            required:
-            - name
-            - provider
-            - description
-          minItems: 0
-          maxItems: 8
-        preparations:
-          type: array
-          items:
-            type: string
-            minLength: 5
-            maxLength: 150
-          minItems: 0
-          maxItems: 8
-        steps:
-          type: array
-          items:
-            "$ref": "#/components/schemas/StepItem"
-          minItems: 0
-          maxItems: 6
-        gallery:
-          type: array
-          items:
-            type: object
-            additionalProperties: false
-            properties:
-              mediaId:
-                type: string
-                minLength: 1
-                maxLength: 150
-              caption:
-                type: string
-                minLength: 5
-                maxLength: 100
-            required:
-            - mediaId
-            - caption
-          minItems: 0
-          maxItems: 6
-        comparisons:
-          type: array
-          items:
-            type: object
-            additionalProperties: false
-            properties:
-              title:
-                type: string
-                minLength: 2
-                maxLength: 30
-              beforeMediaId:
-                type: string
-                minLength: 1
-                maxLength: 150
-              afterMediaId:
-                type: string
-                minLength: 1
-                maxLength: 150
-              description:
-                type: string
-                minLength: 5
-                maxLength: 200
-              effectNotice:
-                type: string
-                minLength: 5
-                maxLength: 150
-            required:
-            - title
-            - beforeMediaId
-            - afterMediaId
-            - description
-            - effectNotice
-          minItems: 0
-          maxItems: 3
-        faqs:
-          type: array
-          items:
-            type: object
-            additionalProperties: false
-            properties:
-              question:
-                type: string
-                minLength: 5
-                maxLength: 60
-              answer:
-                type: string
-                minLength: 5
-                maxLength: 300
-            required:
-            - question
-            - answer
-          minItems: 0
-          maxItems: 6
-    ServiceProfile:
-      type: object
-      additionalProperties: false
-      properties:
-        schemaVersion:
-          type: integer
-          const: 1
-        templateKey:
-          type: string
-          minLength: 1
-          maxLength: 64
-        serviceTarget:
-          type: string
-          minLength: 5
-          maxLength: 150
-        billing:
-          type: object
-          additionalProperties: false
-          properties:
-            unitDefinition:
-              type: string
-              minLength: 5
-              maxLength: 120
-            quantity:
-              "$ref": "#/components/schemas/QuantityRule"
-            quantityExplanation:
-              type: string
-              minLength: 5
-              maxLength: 200
-            visitFeeMode:
-              type: string
-              enum:
-              - INCLUDED
-              - WAIVED
-              - NOT_APPLICABLE
-            feeDescription:
-              type: string
-              minLength: 5
-              maxLength: 200
-          required:
-          - unitDefinition
-          - quantity
-          - quantityExplanation
-          - visitFeeMode
-          - feeDescription
-        includedItems:
-          type: array
-          items:
-            "$ref": "#/components/schemas/ServiceItem"
-          minItems: 1
-          maxItems: 12
-        excludedItems:
-          type: array
-          items:
-            "$ref": "#/components/schemas/ExcludedItem"
-          minItems: 0
-          maxItems: 12
-        unsuitableConditions:
-          type: array
-          items:
-            type: string
-            minLength: 2
-            maxLength: 100
-          minItems: 0
-          maxItems: 8
-        purchaseNotices:
-          type: array
-          items:
-            type: string
-            minLength: 5
-            maxLength: 150
-          minItems: 0
-          maxItems: 8
-        acceptanceCriteria:
-          type: array
-          items:
-            type: string
-            minLength: 5
-            maxLength: 150
-          minItems: 1
-          maxItems: 8
-        afterSales:
-          "$ref": "#/components/schemas/AfterSales"
-        demandCollection:
-          type: object
-          additionalProperties: false
-          properties:
-            description:
-              "$ref": "#/components/schemas/CollectionField"
-            media:
-              "$ref": "#/components/schemas/CollectionField"
-          required:
-          - description
-          - media
-        enhancements:
-          anyOf:
-          - "$ref": "#/components/schemas/Enhancements"
-          - type: 'null'
-      required:
-      - schemaVersion
-      - serviceTarget
-      - billing
-      - includedItems
-      - acceptanceCriteria
-      - afterSales
-      - demandCollection
-      description: Drafts may be incomplete. Publishing requires all core business
-        fields; WARRANTY requires period; enabled media and enhancement entries must
-        be complete. Maximum 64 KiB. No layout/modules/style fields.
     SkuWrite:
       type: object
       additionalProperties: false
       properties:
         categoryId:
           type: string
-          minLength: 1
-          maxLength: 150
         name:
           type: string
-          minLength: 2
-          maxLength: 128
-        description:
-          type: string
-          maxLength: 500
-        detailProfile:
-          "$ref": "#/components/schemas/DraftServiceProfile"
+          maxLength: 60
         priceMode:
           type: string
           enum:
@@ -474,7 +81,6 @@ components:
           maximum: 99999999
         unit:
           type: string
-          minLength: 1
           maxLength: 8
         coverMediaId:
           type: string
@@ -485,54 +91,19 @@ components:
             minLength: 1
             maxLength: 150
           minItems: 0
-          maxItems: 8
-        requiredSkillIds:
-          type: array
-          items:
-            type: string
-            minLength: 1
-            maxLength: 150
-          minItems: 0
-          maxItems: 100
+          maxItems: 5
         version:
           type: integer
           minimum: 0
-      required:
-      - categoryId
-      - name
-      - detailProfile
-      - priceMode
-      - unit
-    SkuTemplate:
-      type: object
-      additionalProperties: false
-      properties:
-        key:
+        serviceDescription:
           type: string
-          minLength: 1
-          maxLength: 64
-        name:
+          maxLength: 5000
+        serviceNotice:
           type: string
-          minLength: 2
-          maxLength: 30
-        unit:
-          type: string
-          minLength: 1
-          maxLength: 8
-        profile:
-          "$ref": "#/components/schemas/DraftServiceProfile"
-        candidates:
-          type: array
-          items:
-            "$ref": "#/components/schemas/ServiceItem"
-          minItems: 0
-          maxItems: 12
-      required:
-      - key
-      - name
-      - unit
-      - profile
-      - candidates
+          maxLength: 3000
+      description: Draft fields may be incomplete. Publish requires name, active category,
+        positive fixed price, unit, valid cover and nonempty serviceDescription. serviceNotice
+        is optional. Text is plain text; no minimum copy length.
     ServiceSummary:
       type: object
       additionalProperties: false
@@ -547,8 +118,8 @@ components:
           maxLength: 150
         name:
           type: string
-          minLength: 2
-          maxLength: 128
+          maxLength: 60
+          minLength: 1
         description:
           type: string
         priceMode:
@@ -572,15 +143,9 @@ components:
             minLength: 1
             maxLength: 150
           minItems: 0
-          maxItems: 9
+          maxItems: 6
         publishedVersion:
           type: integer
-        unitDefinition:
-          type: string
-          minLength: 5
-          maxLength: 120
-        quantityRule:
-          "$ref": "#/components/schemas/QuantityRule"
     ServiceDetail:
       type: object
       additionalProperties: false
@@ -595,10 +160,8 @@ components:
           maxLength: 150
         name:
           type: string
-          minLength: 2
-          maxLength: 128
-        description:
-          type: string
+          maxLength: 60
+          minLength: 1
         priceMode:
           type: string
           enum:
@@ -620,18 +183,22 @@ components:
             minLength: 1
             maxLength: 150
           minItems: 0
-          maxItems: 8
+          maxItems: 6
         publishedVersion:
           type: integer
-        detailProfile:
-          "$ref": "#/components/schemas/ServiceProfile"
+        serviceDescription:
+          type: string
+          maxLength: 5000
+        serviceNotice:
+          type: string
+          maxLength: 3000
       required:
       - id
       - name
       - price
       - unit
       - publishedVersion
-      - detailProfile
+      - serviceDescription
     CartDemandWrite:
       type: object
       additionalProperties: false
@@ -661,6 +228,8 @@ components:
           - VIDEO
         name:
           type: string
+          maxLength: 60
+          minLength: 1
         url:
           type: string
     CartItem:
@@ -672,6 +241,8 @@ components:
           type: string
         name:
           type: string
+          maxLength: 60
+          minLength: 1
         unit:
           type: string
         coverImageUrl:
@@ -684,6 +255,8 @@ components:
           type: integer
         quantity:
           type: integer
+          minimum: 1
+          maximum: 9999
         unitPrice:
           type: integer
         subtotal:
@@ -694,12 +267,17 @@ components:
           type: boolean
         demandComplete:
           type: boolean
-        detailProfile:
-          "$ref": "#/components/schemas/ServiceProfile"
         demandMedia:
           type: array
           items:
             "$ref": "#/components/schemas/DemandMedia"
+        serviceDescription:
+          type: string
+          maxLength: 5000
+        serviceNotice:
+          type: string
+          maxLength: 3000
+      required: []
     CartView:
       type: object
       properties:
@@ -711,452 +289,6 @@ components:
           type: integer
         totalAmount:
           type: integer
-    ExcludedItem:
-      type: object
-      additionalProperties: false
-      properties:
-        title:
-          type: string
-          minLength: 2
-          maxLength: 30
-        description:
-          type: string
-          minLength: 5
-          maxLength: 200
-      required:
-      - title
-      - description
-    StepItem:
-      type: object
-      additionalProperties: false
-      properties:
-        title:
-          type: string
-          minLength: 2
-          maxLength: 30
-        description:
-          type: string
-          minLength: 5
-          maxLength: 200
-        iconKey:
-          type: string
-          enum:
-          - service
-          - inspect
-          - protect
-          - tool
-          - clean
-          - install
-          - report
-          - confirm
-      required:
-      - title
-      - description
-    DraftServiceProfile:
-      type: object
-      additionalProperties: false
-      properties:
-        schemaVersion:
-          type: integer
-          const: 1
-        templateKey:
-          type: string
-          minLength: 0
-          maxLength: 64
-        serviceTarget:
-          type: string
-          minLength: 0
-          maxLength: 150
-        billing:
-          type: object
-          additionalProperties: false
-          properties:
-            unitDefinition:
-              type: string
-              minLength: 0
-              maxLength: 120
-            quantity:
-              type: object
-              additionalProperties: false
-              properties:
-                min:
-                  type: integer
-                  minimum: 0
-                  maximum: 9999
-                max:
-                  type: integer
-                  minimum: 0
-                  maximum: 9999
-                step:
-                  type: integer
-                  minimum: 0
-                  maximum: 9999
-                aggregation:
-                  type: string
-                  enum:
-                  - INDEPENDENT
-                  - ADDITIVE
-                  - ''
-            quantityExplanation:
-              type: string
-              minLength: 0
-              maxLength: 200
-            visitFeeMode:
-              type: string
-              enum:
-              - INCLUDED
-              - WAIVED
-              - NOT_APPLICABLE
-              - ''
-            feeDescription:
-              type: string
-              minLength: 0
-              maxLength: 200
-        includedItems:
-          type:
-          - array
-          - 'null'
-          items:
-            type: object
-            additionalProperties: false
-            properties:
-              title:
-                type: string
-                minLength: 0
-                maxLength: 30
-              description:
-                type: string
-                minLength: 0
-                maxLength: 200
-              iconKey:
-                type: string
-                enum:
-                - service
-                - inspect
-                - protect
-                - tool
-                - clean
-                - install
-                - report
-                - confirm
-                - ''
-              imageMediaId:
-                type: string
-                minLength: 0
-                maxLength: 150
-          minItems: 0
-          maxItems: 12
-        excludedItems:
-          type:
-          - array
-          - 'null'
-          items:
-            type: object
-            additionalProperties: false
-            properties:
-              title:
-                type: string
-                minLength: 0
-                maxLength: 30
-              description:
-                type: string
-                minLength: 0
-                maxLength: 200
-          minItems: 0
-          maxItems: 12
-        unsuitableConditions:
-          type:
-          - array
-          - 'null'
-          items:
-            type: string
-            minLength: 0
-            maxLength: 100
-          minItems: 0
-          maxItems: 8
-        purchaseNotices:
-          type:
-          - array
-          - 'null'
-          items:
-            type: string
-            minLength: 0
-            maxLength: 150
-          minItems: 0
-          maxItems: 8
-        acceptanceCriteria:
-          type:
-          - array
-          - 'null'
-          items:
-            type: string
-            minLength: 0
-            maxLength: 150
-          minItems: 0
-          maxItems: 8
-        afterSales:
-          type: object
-          additionalProperties: false
-          properties:
-            type:
-              type: string
-              enum:
-              - WARRANTY
-              - REWORK
-              - SUPPORT
-              - ''
-            summary:
-              type: string
-              minLength: 0
-              maxLength: 120
-            coverage:
-              type: string
-              minLength: 0
-              maxLength: 300
-            exclusions:
-              type:
-              - array
-              - 'null'
-              items:
-                type: string
-                minLength: 0
-                maxLength: 150
-              minItems: 0
-              maxItems: 8
-            contactDescription:
-              type: string
-              minLength: 0
-              maxLength: 150
-            period:
-              type: object
-              additionalProperties: false
-              properties:
-                value:
-                  type: integer
-                  minimum: 0
-                  maximum: 3650
-                unit:
-                  type: string
-                  enum:
-                  - HOUR
-                  - DAY
-                  - MONTH
-                  - ''
-                startDescription:
-                  type: string
-                  minLength: 0
-                  maxLength: 100
-        demandCollection:
-          type: object
-          additionalProperties: false
-          properties:
-            description:
-              type: object
-              additionalProperties: false
-              properties:
-                mode:
-                  type: string
-                  enum:
-                  - HIDDEN
-                  - OPTIONAL
-                  - REQUIRED
-                  - ''
-                label:
-                  type: string
-                  minLength: 0
-                  maxLength: 20
-                hint:
-                  type: string
-                  minLength: 0
-                  maxLength: 150
-            media:
-              type: object
-              additionalProperties: false
-              properties:
-                mode:
-                  type: string
-                  enum:
-                  - HIDDEN
-                  - OPTIONAL
-                  - REQUIRED
-                  - ''
-                label:
-                  type: string
-                  minLength: 0
-                  maxLength: 20
-                hint:
-                  type: string
-                  minLength: 0
-                  maxLength: 150
-        enhancements:
-          anyOf:
-          - type: object
-            additionalProperties: false
-            properties:
-              tags:
-                type:
-                - array
-                - 'null'
-                items:
-                  type: string
-                  minLength: 0
-                  maxLength: 16
-                minItems: 0
-                maxItems: 6
-              facts:
-                type:
-                - array
-                - 'null'
-                items:
-                  type: object
-                  additionalProperties: false
-                  properties:
-                    label:
-                      type: string
-                      minLength: 0
-                      maxLength: 20
-                    value:
-                      type: string
-                      minLength: 0
-                      maxLength: 100
-                minItems: 0
-                maxItems: 8
-              resources:
-                type:
-                - array
-                - 'null'
-                items:
-                  type: object
-                  additionalProperties: false
-                  properties:
-                    name:
-                      type: string
-                      minLength: 0
-                      maxLength: 30
-                    provider:
-                      type: string
-                      enum:
-                      - PROVIDER
-                      - CUSTOMER
-                      - SHARED
-                      - ''
-                    description:
-                      type: string
-                      minLength: 0
-                      maxLength: 150
-                minItems: 0
-                maxItems: 8
-              preparations:
-                type:
-                - array
-                - 'null'
-                items:
-                  type: string
-                  minLength: 0
-                  maxLength: 150
-                minItems: 0
-                maxItems: 8
-              steps:
-                type:
-                - array
-                - 'null'
-                items:
-                  type: object
-                  additionalProperties: false
-                  properties:
-                    title:
-                      type: string
-                      minLength: 0
-                      maxLength: 30
-                    description:
-                      type: string
-                      minLength: 0
-                      maxLength: 200
-                    iconKey:
-                      type: string
-                      enum:
-                      - service
-                      - inspect
-                      - protect
-                      - tool
-                      - clean
-                      - install
-                      - report
-                      - confirm
-                      - ''
-                minItems: 0
-                maxItems: 6
-              gallery:
-                type:
-                - array
-                - 'null'
-                items:
-                  type: object
-                  additionalProperties: false
-                  properties:
-                    mediaId:
-                      type: string
-                      minLength: 0
-                      maxLength: 150
-                    caption:
-                      type: string
-                      minLength: 0
-                      maxLength: 100
-                minItems: 0
-                maxItems: 6
-              comparisons:
-                type:
-                - array
-                - 'null'
-                items:
-                  type: object
-                  additionalProperties: false
-                  properties:
-                    title:
-                      type: string
-                      minLength: 0
-                      maxLength: 30
-                    beforeMediaId:
-                      type: string
-                      minLength: 0
-                      maxLength: 150
-                    afterMediaId:
-                      type: string
-                      minLength: 0
-                      maxLength: 150
-                    description:
-                      type: string
-                      minLength: 0
-                      maxLength: 200
-                    effectNotice:
-                      type: string
-                      minLength: 0
-                      maxLength: 150
-                minItems: 0
-                maxItems: 3
-              faqs:
-                type:
-                - array
-                - 'null'
-                items:
-                  type: object
-                  additionalProperties: false
-                  properties:
-                    question:
-                      type: string
-                      minLength: 0
-                      maxLength: 60
-                    answer:
-                      type: string
-                      minLength: 0
-                      maxLength: 300
-                minItems: 0
-                maxItems: 6
-          - type: 'null'
-      description: Draft fields may be incomplete. Publishing uses the strict ServiceProfile
-        and conditional policy/media validation.
-      required:
-      - schemaVersion
     WorkerServiceItem:
       type: object
       properties:
@@ -1164,14 +296,14 @@ components:
           type: string
         name:
           type: string
+          maxLength: 60
+          minLength: 1
         unit:
           type: string
         quantity:
           type: integer
-          description: Purchased units; cumulative billing is not an evidence-object
-            count.
-        detailProfile:
-          "$ref": "#/components/schemas/ServiceProfile"
+          minimum: 1
+          maximum: 9999
         customerNote:
           type: string
         customerMedia:
@@ -1189,6 +321,35 @@ components:
                 type: object
               after:
                 type: object
+        serviceDescription:
+          type: string
+          maxLength: 5000
+        serviceNotice:
+          type: string
+          maxLength: 3000
+      required: []
+      description: Immutable serviceDescription/serviceNotice from the order snapshot.
+        One required before/after evidence pair per order item, independent of purchased
+        quantity.
+    FieldIssue:
+      type: object
+      required:
+      - field
+      - message
+      properties:
+        field:
+          type: string
+        message:
+          type: string
+    SkuValidationData:
+      type: object
+      required:
+      - errors
+      properties:
+        errors:
+          type: array
+          items:
+            "$ref": "#/components/schemas/FieldIssue"
 paths:
   "/api/v1/admin/auth/login":
     post:
@@ -1358,6 +519,18 @@ paths:
       responses:
         '200':
           description: OK
+        '400':
+          description: All known field issues, including unavailable images. No old
+            profile requirements.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - "$ref": "#/components/schemas/ApiResponse"
+                - type: object
+                  properties:
+                    data:
+                      "$ref": "#/components/schemas/SkuValidationData"
       requestBody:
         required: true
         content:
@@ -1436,7 +609,7 @@ paths:
         SKU_NOT_AVAILABLE（409）。 Quantity follows per-SKU min/max/step. demandDescription/mediaIds
         are required only by the published demandCollection rules. Content or demand
         rule changes require confirmation. Errors: SKU_QUANTITY_INVALID, ORDER_DEMAND_REQUIRED,
-        CART_SKU_CHANGED. Orders retain detailProfile snapshots.'
+        CART_SKU_CHANGED. Orders retain serviceDescription/serviceNotice snapshots.'
       requestBody:
         required: true
         content:
@@ -1812,9 +985,9 @@ paths:
       responses:
         '200':
           description: Assigned worker work order detail
-      description: 'Items include immutable detailProfile and purchased quantity.
-        Evidence pairs follow the frozen aggregation: one per independent object,
-        one per cumulative service item. No inference from unit text.'
+      description: 'Items include immutable serviceDescription/serviceNotice and purchased
+        quantity. Evidence pairs follow the frozen aggregation: one per independent
+        object, one per cumulative service item. No inference from unit text.'
   "/api/v1/worker/work-orders/{id}/{command}":
     post:
       security:
@@ -2107,26 +1280,6 @@ paths:
           description: Private avatar bytes
         '404':
           description: Avatar missing or outside current organization
-  "/api/v1/admin/catalog/sku-detail-templates":
-    get:
-      security:
-      - adminSession: []
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                allOf:
-                - "$ref": "#/components/schemas/ApiResponse"
-                - type: object
-                  properties:
-                    data:
-                      type: array
-                      items:
-                        "$ref": "#/components/schemas/SkuTemplate"
-                      minItems: 0
-                      maxItems: 100
   "/api/v1/admin/catalog/skus/{id}":
     parameters:
     - "$ref": "#/components/parameters/Id"
@@ -2142,6 +1295,18 @@ paths:
       responses:
         '200':
           description: OK
+        '400':
+          description: All known field issues, including unavailable images. No old
+            profile requirements.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - "$ref": "#/components/schemas/ApiResponse"
+                - type: object
+                  properties:
+                    data:
+                      "$ref": "#/components/schemas/SkuValidationData"
       requestBody:
         required: true
         content:
@@ -2157,6 +1322,31 @@ paths:
       responses:
         '200':
           description: OK
+        '400':
+          description: All known field issues, including unavailable images. No old
+            profile requirements.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - "$ref": "#/components/schemas/ApiResponse"
+                - type: object
+                  properties:
+                    data:
+                      "$ref": "#/components/schemas/SkuValidationData"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+              - version
+              properties:
+                version:
+                  type: integer
+                  minimum: 0
   "/api/v1/admin/catalog/skus/{id}/off-shelf":
     parameters:
     - "$ref": "#/components/parameters/Id"
@@ -2166,6 +1356,18 @@ paths:
       responses:
         '200':
           description: OK
+        '400':
+          description: All known field issues, including unavailable images. No old
+            profile requirements.
+          content:
+            application/json:
+              schema:
+                allOf:
+                - "$ref": "#/components/schemas/ApiResponse"
+                - type: object
+                  properties:
+                    data:
+                      "$ref": "#/components/schemas/SkuValidationData"
   "/api/v1/mini/cart/items/{id}/demand":
     parameters:
     - "$ref": "#/components/parameters/Id"

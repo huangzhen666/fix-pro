@@ -1,0 +1,1 @@
+<view class="content"><view wx:if="{{description}}" class="section"><view class="heading">服务说明</view><text class="body">{{description}}</text></view><view wx:if="{{notice}}" class="section notice"><view class="heading">服务须知</view><text class="body">{{notice}}</text></view></view>
