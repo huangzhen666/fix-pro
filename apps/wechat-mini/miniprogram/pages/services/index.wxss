@@ -1,7 +1,7 @@
 .catalog-page{height:100vh;display:flex;flex-direction:column;background:var(--color-surface)}
 .catalog-header{padding:10px 16px 14px;background:var(--color-surface);border-bottom:1px solid var(--color-border)}
-.search{height:44px;display:flex;align-items:center;gap:10px;padding:0 14px;background:var(--color-page);border-radius:24px;font-size:14px;color:var(--color-text-secondary)}
-.search image{width:19px;height:19px;flex:none}
+.search{height:38px;display:flex;align-items:center;gap:8px;padding:0 12px;background:var(--color-page);border-radius:24px;font-size:14px;color:var(--color-text-secondary)}
+.search image{width:17px;height:17px;flex:none}
 .catalog-body{display:flex;flex:1;min-height:0}
 .category-nav{width:88px;height:100%;background:var(--color-page);flex:none}
 .category-item{position:relative;padding:20px 12px;font-size:13px;color:var(--color-text-secondary);word-break:break-all}

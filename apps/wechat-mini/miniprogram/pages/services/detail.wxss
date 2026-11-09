@@ -1,5 +1,6 @@
-.page{padding-bottom:calc(160rpx + env(safe-area-inset-bottom))}.gallery{height:520rpx;background:var(--color-primary-soft)}.gallery image{width:100%;height:100%}.title{font-size:20px;font-weight:600}.price{font-size:20px;color:var(--color-price);font-weight:600;margin:16rpx 0}.price text{font-size:12px;color:var(--color-text-secondary);font-weight:400}.gap{margin-top:28rpx}
-.quantity-row{display:flex;justify-content:space-between;align-items:center;margin-top:24rpx;font-size:14px}.counter{display:flex;align-items:center;border:1rpx solid var(--color-border);border-radius:28rpx;overflow:hidden}.counter button{width:60rpx;height:52rpx;line-height:50rpx;padding:0;margin:0;background:var(--color-surface);color:var(--color-text);font-size:15px;border-radius:0}.counter button::after{border:0}.counter button[disabled]{color:#d0d5dd}.counter text{width:50rpx;text-align:center;font-size:13px}
+@import "../../styles/quantity.wxss";
+.gallery{height:520rpx;background:var(--color-primary-soft)}.gallery image{width:100%;height:100%}.title{font-size:20px;font-weight:600}.price{font-size:20px;color:var(--color-price);font-weight:600;margin:16rpx 0}.price text{font-size:12px;color:var(--color-text-secondary);font-weight:400}.gap{margin-top:28rpx}
+.quantity-row{display:flex;justify-content:space-between;align-items:center;margin-top:24rpx;font-size:14px}
 /* Keep the cart icon and label stacked independently of the action buttons. */
 .bottom{position:fixed;bottom:0;left:0;right:0;z-index:20;box-sizing:border-box;background:var(--color-surface);padding:18rpx 24rpx calc(18rpx + env(safe-area-inset-bottom));display:flex;align-items:center;gap:16rpx;border-top:1rpx solid var(--color-border)}
 .cart-entry{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:0 0 104rpx;min-width:104rpx;min-height:88rpx;gap:6rpx;color:var(--color-text)}
@@ -12,7 +13,8 @@
 .add-button{background:var(--color-primary-soft);color:var(--color-primary)}
 .order-button{background:var(--color-primary);color:var(--color-on-primary)}
 .bottom button[disabled]{opacity:.6}
-.page{padding:16px 16px calc(100px + env(safe-area-inset-bottom))}
+/* Reserve the 73px action bar plus an 11px content gap. */
+.page{padding:16px 16px calc(84px + env(safe-area-inset-bottom))}
 .gallery{height:240px;margin:-16px -16px 16px}
 .gallery image{object-fit:cover}
 .card{border-radius:var(--radius-card);box-shadow:none}
@@ -26,7 +28,7 @@
 .add-button{background:var(--color-primary-soft);color:var(--color-primary)}
 .order-button{background:var(--color-primary);color:var(--color-on-primary)}
 .cart-badge{background:var(--color-primary);font-size:11px;height:18px;min-width:18px;line-height:16px}
-.counter button{width:44px;height:44px;line-height:42px;font-size:18px}
+
 
 .gallery{height:460rpx;max-height:260px}.gallery image{width:100%;height:100%}
 

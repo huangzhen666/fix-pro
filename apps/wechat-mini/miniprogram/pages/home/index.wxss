@@ -5,8 +5,8 @@
 .service-city{flex:none;margin-left:auto;display:flex;align-items:center;gap:4px;white-space:nowrap;font-size:12px;color:var(--color-text-secondary)}
 .service-city image{width:14px;height:14px}
 .search-sticky{position:sticky;top:0;z-index:30;padding:6px 16px 12px;background:var(--color-surface);border-bottom:1px solid var(--color-border)}
-.search{height:44px;box-sizing:border-box;display:flex;align-items:center;gap:10px;padding:0 14px;background:var(--color-page);border-radius:24px;color:var(--color-text-secondary);font-size:14px}
-.search image{width:19px;height:19px;flex:none}
+.search{height:38px;box-sizing:border-box;display:flex;align-items:center;gap:8px;padding:0 12px;background:var(--color-page);border-radius:24px;color:var(--color-text-secondary);font-size:14px}
+.search image{width:17px;height:17px;flex:none}
 .search text{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .category-panel{background:var(--color-surface);padding:20px 12px 16px}
 .category-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:18px 6px}

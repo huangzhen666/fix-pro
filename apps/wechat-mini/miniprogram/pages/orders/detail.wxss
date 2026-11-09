@@ -2,3 +2,5 @@
 .step-dot{color:var(--color-text-secondary)}
 .step.done .step-dot{background:var(--color-primary-soft);color:var(--color-primary)}
 .step.current .step-dot{color:var(--color-on-primary)}
+
+.demand-head{display:flex;align-items:center;justify-content:space-between;gap:12px}.demand-head .section-title{margin-bottom:0}.edit-demand{margin:0;padding:0 12px;height:32px;line-height:32px;font-size:12px;flex:none;background:var(--color-primary-soft);color:var(--color-primary)}.demand-summary{padding:10px 0;font-size:13px;line-height:1.6}.demand-name{font-weight:500;margin-bottom:4px}.demand-text{white-space:pre-wrap;word-break:break-word;color:var(--color-text-secondary)}.demand-files{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}.demand-files>view{padding:8px;background:var(--color-page);border-radius:8px;color:var(--color-primary);font-size:12px}

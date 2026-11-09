@@ -203,7 +203,7 @@ func (s *Service) Delete(ctx context.Context, id int64, p auth.Principal) error 
 		return httpx.E("MEDIA_NOT_FOUND", "媒体不存在", 404)
 	}
 	var refs int
-	e = tx.QueryRowContext(ctx, `SELECT (SELECT count(*) FROM sku_snapshot_media WHERE media_id=$1)+(SELECT count(*) FROM service_sku WHERE cover_media_id=$1)+(SELECT count(*) FROM service_sku_media WHERE media_id=$1)+(SELECT count(*) FROM shopping_cart_item_media WHERE media_id=$1)+(SELECT count(*) FROM order_item_media WHERE media_id=$1)+(SELECT count(*) FROM employee_account WHERE avatar_media_id=$1)+(SELECT count(*) FROM worker_certificate_media WHERE media_id=$1)+(SELECT count(*) FROM work_order_evidence WHERE media_id=$1)+(SELECT count(*) FROM customer WHERE avatar_media_id=$1)`, id).Scan(&refs)
+	e = tx.QueryRowContext(ctx, `SELECT (SELECT count(*) FROM sku_snapshot_media WHERE media_id=$1)+(SELECT count(*) FROM service_sku WHERE cover_media_id=$1)+(SELECT count(*) FROM service_sku_media WHERE media_id=$1)+(SELECT count(*) FROM shopping_cart_item_media WHERE media_id=$1)+(SELECT count(*) FROM order_item_media WHERE media_id=$1)+(SELECT count(*) FROM order_demand_history_media WHERE media_id=$1)+(SELECT count(*) FROM employee_account WHERE avatar_media_id=$1)+(SELECT count(*) FROM worker_certificate_media WHERE media_id=$1)+(SELECT count(*) FROM work_order_evidence WHERE media_id=$1)+(SELECT count(*) FROM customer WHERE avatar_media_id=$1)`, id).Scan(&refs)
 	if e != nil {
 		return e
 	}

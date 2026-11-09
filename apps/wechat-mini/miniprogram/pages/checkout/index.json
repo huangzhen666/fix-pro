@@ -1,6 +1,1 @@
-{
-  "navigationBarTitleText": "确认订单",
-  "usingComponents": {
-    "service-content": "/components/service-content/index"
-  }
-}
+{"navigationBarTitleText":"确认订单","usingComponents":{"demand-editor":"/components/demand-editor/index"}}

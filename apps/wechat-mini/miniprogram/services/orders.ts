@@ -2,7 +2,7 @@ import { request } from './request'
 export interface OrderResult { id:string;orderNo:string;status:string;totalAmount:number;createdAt:string }
 export const createOrder=(data:{contactName:string;contactMobile:string;serviceAddress:string;appointmentDate:string;appointmentSlot:string;cartItemIds?:string[];directItem?:{skuId:string;skuVersion:number;quantity:number;demandDescription?:string;mediaIds?:string[]}},key:string)=>request<OrderResult>({url:'/api/v1/mini/orders',method:'POST',data,header:{'Idempotency-Key':key}})
 export const repeatCustomerOrder=(id:string)=>request<{itemsCopied:number}>({url:`/api/v1/mini/orders/${id}/repeat`,method:'POST'})
-export interface CustomerOrderSummary { id:string; orderNo:string; status:string; statusText?:string; cancelReason?:string; totalAmount:number; itemCount:number; workOrderTotal:number; workOrderFinished:number; createdAt:string; statusUpdatedAt?:string }
+export interface CustomerOrderSummary { paymentRequired:boolean;paidAmount:number;paymentChannel:string; id:string; orderNo:string; status:string; statusText?:string; cancelReason?:string; totalAmount:number; itemCount:number; workOrderTotal:number; workOrderFinished:number; createdAt:string; statusUpdatedAt?:string }
 export interface CustomerEvidence { id:string; mediaId:string; stage:string; workOrderItemId?:string; unitNo?:number; itemName?:string; url:string; createdAt:string }
 export interface CustomerTimelineEvent { code:string; operatorType:string; note?:string; createdAt:string }
 export interface CustomerWorkOrder { id:string; workOrderNo:string; status:string; statusText?:string; customerAcceptanceStatus?:string; assigneeName?:string; appointmentAt?:string; appointmentSlot?:string; appointmentSlotLabel?:string; completionSummary?:string; version:number; evidence:CustomerEvidence[] }
@@ -12,3 +12,5 @@ export const getCustomerOrder=(id:string)=>request<CustomerOrderDetail>({url:`/a
 export const getWorkOrderTimeline=(id:string)=>request<{items:CustomerTimelineEvent[]}>({url:`/api/v1/mini/work-orders/${id}/timeline`,method:'GET'})
 export const acceptWorkOrder=(id:string,decision:'ACCEPT'|'REJECT',version:number,reason='')=>request<{updated:boolean}>({url:`/api/v1/mini/work-orders/${id}/acceptance`,method:'POST',data:{decision,version,reason},header:{'Idempotency-Key':`${id}-${version}-${decision}`}})
 export const rateWorkOrder=(id:string,stars:number,content:string,version:number)=>request<{created:boolean}>({url:`/api/v1/mini/work-orders/${id}/rating`,method:'POST',data:{stars,content,version},header:{'Idempotency-Key':`${id}-${version}-rating`}})
+
+export const customerOrderStage=(item:CustomerOrderSummary):string=>item.status==='PENDING_CONFIRMATION' && item.paymentRequired && item.paidAmount<item.totalAmount ? 'PENDING_PAYMENT' : item.status

@@ -1,0 +1,28 @@
+<view wx:if="{{open}}" class="overlay" catchtouchmove="noop">
+  <view class="mask" catchtap="close"></view>
+  <view class="sheet" style="bottom:{{keyboardHeight}}px;max-height:calc(88vh - {{keyboardHeight}}px)">
+    <view class="heading"><text>备注</text><button aria-label="关闭备注" disabled="{{uploading || saving}}" bindtap="close">×</button></view>
+    <view class="hint">选填，也可在下单后补充</view>
+    <scroll-view class="body" scroll-y enhanced>
+      <view wx:for="{{draft}}" wx:key="itemId" class="item">
+        <view wx:if="{{draft.length > 1}}" class="name">{{item.name}}</view>
+        <textarea value="{{item.demandDescription}}" data-id="{{item.itemId}}" bindinput="input" bindkeyboardheightchange="keyboard" bindblur="blur" maxlength="500" disabled="{{saving}}" placeholder="请描述现场情况或您的服务要求，帮助师傅判断问题" adjust-position="{{true}}" cursor-spacing="100"/>
+        <view class="count">{{item.demandDescription.length}}/500</view>
+        <view class="media-list">
+          <view wx:for="{{item.demandMedia}}" wx:for-item="media" wx:key="id" class="media" data-id="{{item.itemId}}" data-media="{{media.id}}" bindtap="preview">
+            <image wx:if="{{media.localUrl && media.mediaType === 'IMAGE'}}" src="{{media.localUrl}}" mode="aspectFill" data-id="{{item.itemId}}" data-media="{{media.id}}" binderror="imageError"/>
+            <text wx:else>{{media.mediaType === 'VIDEO' ? '▶ 视频' : '图片'}}</text>
+            <button class="remove" data-id="{{item.itemId}}" data-media="{{media.id}}" catchtap="remove" disabled="{{saving || uploading}}" aria-label="移除现场资料">×</button>
+          </view>
+          <button class="upload" data-id="{{item.itemId}}" bindtap="choose" disabled="{{uploading || saving}}">＋<text>图片/视频</text></button>
+        </view>
+      </view>
+      <view wx:if="{{uploading}}" class="hint">资料上传中…</view>
+      <view wx:if="{{uploadError}}" class="error">{{uploadError}}<view class="retry"><button wx:if="{{pendingPath}}" bindtap="retry" disabled="{{uploading || saving}}">重试上传</button><button bindtap="ignore" disabled="{{uploading || saving}}">忽略此资料</button></view></view>
+      <view wx:if="{{previousItems.length}}" class="previous"><view>上次未保存的输入（供核对）</view><view wx:for="{{previousItems}}" wx:key="itemId"><view>{{item.name}}</view><text>{{item.demandDescription || '无文字备注'}} · {{item.demandMedia.length}}份资料</text></view><button bindtap="restore" disabled="{{uploading || saving}}">使用上次输入</button></view>
+      <view wx:if="{{error}}" class="error">{{error}}</view>
+      <view wx:if="{{conflict}}" class="hint">未保存的输入已保留，请记录需要保留的内容，再加载最新备注核对。<button bindtap="refresh" disabled="{{uploading || saving}}">加载最新备注</button></view>
+    </scroll-view>
+    <view class="footer"><button bindtap="save" loading="{{saving}}" disabled="{{uploading || saving || conflict}}">{{uploading ? '资料上传中' : saving ? '正在保存…' : '保存'}}</button></view>
+  </view>
+</view>

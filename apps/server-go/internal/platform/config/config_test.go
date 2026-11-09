@@ -52,3 +52,15 @@ func TestProductionGuards(t *testing.T) {
 		t.Fatal("production database without TLS must fail")
 	}
 }
+
+func TestPaymentMockRequiresLocalLoopback(t *testing.T) {
+	for _, tc := range []struct {
+		env, addr string
+		ok        bool
+	}{{"local", "127.0.0.1:8080", true}, {"local", "[::1]:8080", true}, {"local", ":8080", false}, {"local", "0.0.0.0:8080", false}, {"staging", "127.0.0.1:8080", false}, {"production", "127.0.0.1:8080", false}} {
+		p := Payment{MockEnabled: true, OrderTTL: 15 * 60 * 1000000000}
+		if err := p.Validate(tc.env, tc.addr); (err == nil) != tc.ok {
+			t.Fatalf("%+v: %v", tc, err)
+		}
+	}
+}

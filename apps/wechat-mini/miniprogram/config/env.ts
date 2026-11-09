@@ -6,7 +6,12 @@ const apiBaseUrls: Record<MiniProgramEnv, string> = {
   release: 'https://api.example.com',
 }
 
+export function isDevtools(): boolean {
+ try { return wx.getDeviceInfo().platform === 'devtools' } catch { return false }
+}
+
 export function getApiBaseUrl(): string {
   const envVersion = wx.getAccountInfoSync().miniProgram.envVersion as MiniProgramEnv
-  return apiBaseUrls[envVersion] ?? apiBaseUrls.develop
+  if (envVersion==='develop' && !isDevtools()) return apiBaseUrls.trial
+  return apiBaseUrls[envVersion] ?? apiBaseUrls.trial
 }

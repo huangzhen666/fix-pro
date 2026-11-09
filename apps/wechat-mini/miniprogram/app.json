@@ -30,19 +30,19 @@
       {
         "pagePath": "pages/home/index",
         "text": "首页",
-        "iconPath": "assets/tabbar/home.png",
+        "iconPath": "assets/tabbar/home-inactive.png",
         "selectedIconPath": "assets/tabbar/home-selected.png"
       },
       {
         "pagePath": "pages/services/index",
         "text": "全部服务",
-        "iconPath": "assets/tabbar/services.png",
+        "iconPath": "assets/tabbar/services-inactive.png",
         "selectedIconPath": "assets/tabbar/services-selected.png"
       },
       {
         "pagePath": "pages/profile/index",
         "text": "我的",
-        "iconPath": "assets/tabbar/profile.png",
+        "iconPath": "assets/tabbar/profile-inactive.png",
         "selectedIconPath": "assets/tabbar/profile-selected.png"
       }
     ],

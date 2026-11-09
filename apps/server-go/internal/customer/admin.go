@@ -64,7 +64,7 @@ func pagination(r *http.Request) (int, int, error) {
 }
 
 const aggregate = `COALESCE(o.n,0),COALESCE(o.completed,0),COALESCE(o.cancelled,0),COALESCE(o.paid,0),o.last_order`
-const lateral = ` LEFT JOIN LATERAL(SELECT count(*) n,count(*) FILTER(WHERE status='COMPLETED') completed,count(*) FILTER(WHERE status='CANCELLED') cancelled,COALESCE(sum(paid_amount),0) paid,max(created_at) last_order FROM customer_order WHERE org_id=c.org_id AND customer_id=c.id) o ON true `
+const lateral = ` LEFT JOIN LATERAL(SELECT count(*) n,count(*) FILTER(WHERE status='COMPLETED') completed,count(*) FILTER(WHERE status='CANCELLED') cancelled,COALESCE(sum(CASE WHEN EXISTS(SELECT 1 FROM payment_order p WHERE p.order_id=customer_order.id AND p.org_id=customer_order.org_id AND p.channel='MOCK') THEN 0 ELSE paid_amount END),0) paid,max(created_at) last_order FROM customer_order WHERE org_id=c.org_id AND customer_id=c.id) o ON true `
 const customerCols = `c.id,c.display_name,CASE WHEN c.deleted_at IS NOT NULL THEN 'DELETED' ELSE c.status END,c.mobile_cipher,c.avatar_media_id,c.created_at,c.last_login_at,c.last_activity_at,`
 
 func (h *Handler) scanAdmin(row interface{ Scan(...any) error }) (AdminCustomer, error) {

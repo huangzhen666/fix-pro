@@ -1,6 +1,7 @@
 {
   "navigationBarTitleText": "订单进度",
   "usingComponents": {
-    "service-content": "/components/service-content/index"
+    "service-content": "/components/service-content/index",
+    "demand-editor": "/components/demand-editor/index"
   }
 }

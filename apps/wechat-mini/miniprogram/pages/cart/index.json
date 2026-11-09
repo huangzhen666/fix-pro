@@ -1,7 +1,1 @@
-{
-  "navigationBarTitleText": "购物车",
-  "enablePullDownRefresh": true,
-  "usingComponents": {
-    "service-content": "/components/service-content/index"
-  }
-}
+{"navigationBarTitleText":"购物车","enablePullDownRefresh":true}

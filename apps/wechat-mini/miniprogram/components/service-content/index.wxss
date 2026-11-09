@@ -1,1 +1,2 @@
 :host{display:block;min-width:0}.content{font-size:28rpx;font-size:max(14px,28rpx);line-height:1.8;color:#26394b}.section{padding:28rpx;background:#fff;border-radius:20rpx;margin:20rpx 0}.heading{font-size:16px;font-size:max(16px,32rpx);font-weight:600;margin-bottom:18rpx}.body{display:block;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word}.notice{background:#fff7ed}
+.section:last-child{margin-bottom:0}

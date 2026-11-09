@@ -1,0 +1,28 @@
+{
+  "$schema": "https://static.cloudbase.net/cli/cloudbaserc.schema.json",
+  "envId": "{{env.TCB_ENV_ID}}",
+  "functions": [{
+    "name": "{{env.PAYMENT_CLOUD_FUNCTION}}",
+    "type": "HTTP",
+    "timeout": 30,
+    "runtime": "Nodejs24.11",
+    "handler": "index.main",
+    "memorySize": 256,
+    "installDependency": false,
+    "dir": "./",
+    "envVariables": {
+      "appId": "{{env.WX_APP_ID}}",
+      "merchantId": "{{env.MCH_ID}}",
+      "merchantSerialNumber": "{{env.MCH_SERIAL_NO}}",
+      "apiV3Key": "{{env.API_V3_KEY}}",
+      "privateKey": "{{env.PRIVATE_KEY}}",
+      "wxPayPublicKey": "{{env.WX_PAY_PUBLIC_KEY}}",
+      "wxPayPublicKeyId": "{{env.WX_PAY_PUBLIC_KEY_ID}}",
+      "notifyURLPayURL": "{{env.NOTIFY_PAY_URL}}",
+      "notifyURLRefundsURL": "{{env.NOTIFY_REFUNDS_URL}}",
+      "PAYMENT_BACKEND_URL": "{{env.PAYMENT_BACKEND_URL}}",
+      "PAYMENT_BRIDGE_SECRET": "{{env.PAYMENT_BRIDGE_SECRET}}"
+    },
+    "ignore": ["node_modules", ".git", ".env", "*.pem", "test.cjs", "README.md"]
+  }]
+}

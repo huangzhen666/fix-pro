@@ -1,3 +1,7 @@
+import { onSessionReset } from '../../services/session'
+import { getOrderDemand, updateOrderDemand, type OrderDemand, type DemandDraftItem } from '../../services/demand'
+import { ApiError } from '../../services/request'
+import { getPayment, payOrder, waitPayment, type PaymentOverview } from '../../services/payment'
 import { protectedPage } from '../../services/guard'
 import { getCustomerOrder, getWorkOrderTimeline, acceptWorkOrder, rateWorkOrder, repeatCustomerOrder, type CustomerOrderDetail, type CustomerTimelineEvent, type CustomerWorkOrder } from '../../services/orders'
 import { download } from '../../services/request'
@@ -130,16 +134,23 @@ function buildFlow(work: CustomerWorkOrder, orderCreatedAt: string, events: Cust
   return { steps, current, appointment }
 }
 
-protectedPage({
-  data: { loading: true, orderId: '', order: null as CustomerOrderView | null, acceptingWorkOrderId: '', reordering: false },
+const demandAttempts = new WeakMap<object, { signature: string; key: string }>()
 
-  onLoad(query: { id?: string }) {
+protectedPage({
+  data: { demand: null as OrderDemand | null, demandLoading: false, demandLoadError: '', showDemandEditor: false, editorItems: [] as DemandDraftItem[], demandDraft: [] as DemandDraftItem[], demandDirty: false, demandSaving: false, demandUploading: false, demandSaveError: '', demandConflict: false, previousDemand: [] as DemandDraftItem[], paying:false, payment:null as PaymentOverview|null, paymentLabel:'', loading: true, orderId: '', order: null as CustomerOrderView | null, acceptingWorkOrderId: '', reordering: false },
+
+  onLoad(query: { id?: string; pay?:string }) {
     if (query.id) this.setData({ orderId: query.id }, () => this.load())
   },
+
+  onShow() { if(this.data.orderId && !this.data.paying) void this.load() },
 
   async load() {
     try {
       const detail = await getCustomerOrder(this.data.orderId)
+      await this.loadDemand()
+      const payment=await getPayment(this.data.orderId)
+      this.setData({payment,paymentLabel:({UNPAID:'待支付',EXEMPT:'历史订单免付',PAID:'已支付',PARTIALLY_REFUNDED:'部分退款',REFUNDED:'已退款',REFUNDING:'退款处理中'} as Record<string,string>)[payment.status]||payment.status})
       const workOrders = await Promise.all(detail.workOrders.map(async work => {
         const [timeline, evidence] = await Promise.all([
           getWorkOrderTimeline(work.id).catch(() => ({ items: [] as CustomerTimelineEvent[] })),
@@ -158,13 +169,77 @@ protectedPage({
       }))
       const stageIndex = workOrders.length ? Math.min(...workOrders.map(work => stageMeta.findIndex(stage => stage.label === work.currentStageLabel))) : 0
       const appointmentText = detail.appointmentAt ? `${formatDateTime(detail.appointmentAt)}${detail.appointmentSlotLabel ? `（${detail.appointmentSlotLabel}）` : ''}` : '待确认'
-      const stageLabel = detail.status === 'CANCELLED' ? (detail.statusText || '已取消') : detail.statusText === '已完成' ? '已完成' : stageMeta[stageIndex].label
+      const stageLabel = detail.status==='PENDING_CONFIRMATION' && payment.required && payment.paidAmount<detail.totalAmount ? '待支付' : detail.status === 'CANCELLED' ? (detail.statusText || '已取消') : detail.statusText === '已完成' ? '已完成' : stageMeta[stageIndex].label
       this.setData({ order: { ...detail, workOrders, stageLabel, totalAmountText: (detail.totalAmount / 100).toFixed(2), createdAtText: formatDateTime(detail.createdAt), appointmentText } })
     } catch (e) {
       wx.showToast({ title: e instanceof Error ? e.message : '订单加载失败', icon: 'none' })
     } finally {
       this.setData({ loading: false })
     }
+  },
+
+  async loadDemand() {
+    this.setData({ demandLoading: true })
+    try {
+      const demand = await getOrderDemand(this.data.orderId)
+      if (this.data.showDemandEditor || this.data.demandDirty || this.data.demandSaving) {
+        // Keep the version that this draft was based on; otherwise a background refresh could hide a conflict.
+        if (!demand.editable) this.setData({ demandConflict: true, demandSaveError: demand.readOnlyReason })
+        return
+      }
+      this.setData({ demand, demandLoadError: '', demandDraft: demand.items, editorItems: demand.items })
+    } catch { this.setData({ demandLoadError: '备注暂时无法加载，点击重试' }) }
+    finally { this.setData({ demandLoading: false }) }
+  },
+  async openDemand() {
+    if (this.data.demandSaving || this.data.demandLoading) return
+    if (!this.data.demandDirty) await this.loadDemand()
+    if (!this.data.demand || (!this.data.demandDirty && this.data.demandLoadError)) return
+    if (!this.data.demand.editable) { wx.showToast({ title: this.data.demand.readOnlyReason, icon: 'none' }); return }
+    this.setData({ editorItems: this.data.demandDraft, showDemandEditor: true })
+  },
+  demandChange(e: WechatMiniprogram.CustomEvent<{ items: DemandDraftItem[] }>) { this.setData({ demandDraft: e.detail.items, demandDirty: true }) },
+  demandBusy(e: WechatMiniprogram.CustomEvent<{ busy: boolean }>) { this.setData({ demandUploading: e.detail.busy }) },
+  closeDemand() { if (!this.data.demandSaving && !this.data.demandUploading) this.setData({ showDemandEditor: false }) },
+  async refreshDemand() {
+    const previousDemand = JSON.parse(JSON.stringify(this.data.demandDraft)) as DemandDraftItem[]
+    try {
+      const demand = await getOrderDemand(this.data.orderId)
+      this.setData({ demand, previousDemand, editorItems: demand.items, demandDraft: demand.items, demandSaveError: '', demandConflict: false })
+      demandAttempts.delete(this)
+      if (!demand.editable) this.setData({ demandSaveError: demand.readOnlyReason, demandConflict: true })
+    } catch { this.setData({ demandSaveError: '加载失败，上次输入已保留，请重试' }) }
+  },
+  async saveOrderDemand(e: WechatMiniprogram.CustomEvent<{ items: DemandDraftItem[] }>) {
+    if (this.data.demandSaving || this.data.demandUploading || !this.data.demand?.editable || this.data.demandConflict) return
+    this.setData({ demandSaving: true, demandSaveError: '', demandDraft: e.detail.items })
+    const signature = JSON.stringify({ version: this.data.demand.demandVersion, items: e.detail.items.map(item => ({ id: item.itemId, text: item.demandDescription, media: item.demandMedia.map(media => media.id) })) })
+    let attempt = demandAttempts.get(this)
+    if (!attempt || attempt.signature !== signature) { attempt = { signature, key: `${Date.now()}-${Math.random().toString(16).slice(2)}` }; demandAttempts.set(this, attempt) }
+    try {
+      const demand = await updateOrderDemand(this.data.orderId, this.data.demand.demandVersion, e.detail.items, attempt.key)
+      this.setData({ demand, demandDraft: demand.items, editorItems: demand.items, demandDirty: false, showDemandEditor: false, previousDemand: [] })
+      demandAttempts.delete(this)
+      wx.showToast({ title: '备注已保存', icon: 'success' }); await this.load()
+    } catch (error) {
+      const conflict = error instanceof ApiError && ['ORDER_DEMAND_VERSION_CONFLICT', 'ORDER_DEMAND_READ_ONLY'].includes(error.code)
+      this.setData({ demandSaveError: error instanceof Error ? error.message : '保存失败，输入已保留，请重试', demandConflict: conflict })
+    } finally { this.setData({ demandSaving: false }) }
+  },
+  async previewDemand(e: WechatMiniprogram.BaseEvent) {
+    const item = this.data.demand?.items.find(item => item.itemId === String(e.currentTarget.dataset.item))
+    const media = item?.demandMedia.find(media => media.id === String(e.currentTarget.dataset.media))
+    if (!media) return
+    try { const url = await download(`/api/v1/mini/media/${media.id}/content`); if (media.mediaType === 'VIDEO') wx.previewMedia({ sources: [{ url, type: 'video' }] }); else wx.previewImage({ urls: [url] }) }
+    catch { wx.showToast({ title: '资料暂时无法预览，请重试', icon: 'none' }) }
+  },
+
+  async pay() {
+    if(this.data.paying)return
+    this.setData({paying:true})
+    try { await payOrder(this.data.orderId);const result=await waitPayment(this.data.orderId);wx.showToast({title:result.paidAmount>0?'支付已确认':'支付结果确认中，请稍后刷新',icon:'none'}) }
+    catch(e){wx.showToast({title:e instanceof Error?e.message:'支付未完成，请查询订单',icon:'none'})}
+    finally{this.setData({paying:false});await this.load()}
   },
 
   async reorder() {
@@ -230,4 +305,12 @@ protectedPage({
       wx.showToast({ title: e instanceof Error ? e.message : '评价失败', icon: 'none' })
     }
   },
+})
+
+onSessionReset(() => {
+  for (const page of getCurrentPages()) {
+    if (page.route !== 'pages/orders/detail') continue
+    demandAttempts.delete(page)
+    page.setData({ order: null, demand: null, demandDraft: [], editorItems: [], previousDemand: [], showDemandEditor: false, demandDirty: false, demandSaving: false, demandUploading: false })
+  }
 })

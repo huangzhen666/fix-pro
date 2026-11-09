@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/fixpro/server/internal/platform/appointment"
 	"github.com/fixpro/server/internal/platform/database"
 	"strings"
 	"time"
@@ -548,13 +549,7 @@ func (s *Service) WorkOrders(ctx context.Context, orgID int64, status string, wo
 	return out, rows.Err()
 }
 
-func validAppointmentSlot(slot string) bool {
-	switch slot {
-	case "08:00", "10:00", "12:00", "14:00", "16:00", "18:00", "20:00":
-		return true
-	}
-	return false
-}
+func validAppointmentSlot(slot string) bool { return appointment.ValidSlot(slot) }
 
 var shanghaiLocation = time.FixedZone("Asia/Shanghai", 8*60*60)
 
@@ -1029,6 +1024,18 @@ func (s *Service) ConfirmOrder(ctx context.Context, p auth.Principal, key string
 	} else if err != nil {
 		return ConfirmResult{}, err
 	}
+	var required bool
+	var total, paid, refunded int64
+	var reserved int64
+	if err = tx.QueryRowContext(ctx, `SELECT payment_required,total_amount,paid_amount,refunded_amount FROM customer_order WHERE org_id=$1 AND id=$2`, p.OrgID, orderID).Scan(&required, &total, &paid, &refunded); err != nil {
+		return ConfirmResult{}, err
+	}
+	if err = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM payment_refund r JOIN payment_order p ON p.id=r.payment_id WHERE p.order_id=$1 AND p.org_id=$2 AND r.status IN ('PROCESSING','ABNORMAL')`, orderID, p.OrgID).Scan(&reserved); err != nil {
+		return ConfirmResult{}, err
+	}
+	if required && (paid < total || refunded > 0 || reserved > 0) {
+		return ConfirmResult{}, httpx.E("ORDER_PAYMENT_REQUIRED", "订单尚未全额付款或存在退款，不能生成工单", 409)
+	}
 	if !canConfirm(status) {
 		return ConfirmResult{}, httpx.E("ORDER_STATUS_CONFLICT", "订单当前状态不能确认", 409)
 	}
@@ -1159,6 +1166,13 @@ func (s *Service) RejectOrder(ctx context.Context, p auth.Principal, key string,
 	} else if err != nil {
 		return RejectResult{}, err
 	}
+	var unreturned int64
+	if err = tx.QueryRowContext(ctx, `SELECT paid_amount-refunded_amount FROM customer_order WHERE org_id=$1 AND id=$2`, p.OrgID, orderID).Scan(&unreturned); err != nil {
+		return RejectResult{}, err
+	}
+	if unreturned > 0 {
+		return RejectResult{}, httpx.E("ORDER_REFUND_REQUIRED", "已付款订单请先完成退款再打回", 409)
+	}
 	if status != OrderPendingConfirmation {
 		return RejectResult{}, httpx.E("ORDER_STATUS_CONFLICT", "只有待确认订单可以打回", 409)
 	}
@@ -1208,6 +1222,9 @@ type ReviewRequest struct {
 }
 
 type CustomerOrderSummary struct {
+	PaymentRequired   bool      `json:"paymentRequired"`
+	PaidAmount        int64     `json:"paidAmount"`
+	PaymentChannel    string    `json:"paymentChannel"`
 	ID                string    `json:"id"`
 	OrderNo           string    `json:"orderNo"`
 	Status            string    `json:"status"`
@@ -1296,10 +1313,10 @@ func (s *Service) CustomerOrders(ctx context.Context, p auth.Principal, status s
 	out.Page = page
 	out.PageSize = size
 	out.Items = []CustomerOrderSummary{}
-	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM customer_order WHERE org_id=$1 AND customer_id=$2 AND ($3='' OR status=$3)`, p.OrgID, p.SubjectID, status).Scan(&out.Total); err != nil {
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM customer_order WHERE org_id=$1 AND customer_id=$2 AND ($3='' OR CASE WHEN status='PENDING_CONFIRMATION' AND payment_required AND paid_amount<total_amount THEN 'PENDING_PAYMENT' ELSE status END=$3)`, p.OrgID, p.SubjectID, status).Scan(&out.Total); err != nil {
 		return out, err
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT o.id,o.order_no,o.status,COALESCE(o.cancel_reason,''),o.total_amount,o.item_count,o.created_at,COALESCE(MAX(w.customer_acceptance_at),o.updated_at),COUNT(w.id),COUNT(w.id) FILTER (WHERE w.status IN ('FINISHED','FINISHED_WITH_REVIEW_EXCEPTION')) FROM customer_order o LEFT JOIN work_order w ON w.org_id=o.org_id AND w.order_id=o.id WHERE o.org_id=$1 AND o.customer_id=$2 AND ($3='' OR o.status=$3) GROUP BY o.id ORDER BY o.created_at DESC LIMIT $4 OFFSET $5`, p.OrgID, p.SubjectID, status, size, (page-1)*size)
+	rows, err := s.db.QueryContext(ctx, `SELECT o.payment_required,o.paid_amount,COALESCE((SELECT p.channel FROM payment_order p WHERE p.order_id=o.id AND p.org_id=o.org_id ORDER BY p.id DESC LIMIT 1),''),o.id,o.order_no,o.status,COALESCE(o.cancel_reason,''),o.total_amount,o.item_count,o.created_at,COALESCE(MAX(w.customer_acceptance_at),o.updated_at),COUNT(w.id),COUNT(w.id) FILTER (WHERE w.status IN ('FINISHED','FINISHED_WITH_REVIEW_EXCEPTION')) FROM customer_order o LEFT JOIN work_order w ON w.org_id=o.org_id AND w.order_id=o.id WHERE o.org_id=$1 AND o.customer_id=$2 AND ($3='' OR CASE WHEN o.status='PENDING_CONFIRMATION' AND o.payment_required AND o.paid_amount<o.total_amount THEN 'PENDING_PAYMENT' ELSE o.status END=$3) GROUP BY o.id ORDER BY o.created_at DESC LIMIT $4 OFFSET $5`, p.OrgID, p.SubjectID, status, size, (page-1)*size)
 	if err != nil {
 		return out, err
 	}
@@ -1307,13 +1324,16 @@ func (s *Service) CustomerOrders(ctx context.Context, p auth.Principal, status s
 	for rows.Next() {
 		var id int64
 		var x CustomerOrderSummary
-		if err = rows.Scan(&id, &x.OrderNo, &x.Status, &x.CancelReason, &x.TotalAmount, &x.ItemCount, &x.CreatedAt, &x.StatusUpdatedAt, &x.WorkOrderTotal, &x.WorkOrderFinished); err != nil {
+		if err = rows.Scan(&x.PaymentRequired, &x.PaidAmount, &x.PaymentChannel, &id, &x.OrderNo, &x.Status, &x.CancelReason, &x.TotalAmount, &x.ItemCount, &x.CreatedAt, &x.StatusUpdatedAt, &x.WorkOrderTotal, &x.WorkOrderFinished); err != nil {
 			return out, err
 		}
 		x.ID = fmt.Sprint(id)
 		x.StatusText = statusText(x.Status)
+		if x.Status == OrderPendingConfirmation && x.PaymentRequired && x.PaidAmount < x.TotalAmount {
+			x.StatusText = "待支付"
+		}
 		if x.Status == OrderCancelled && x.CancelReason != "" {
-			x.StatusText = "商家已打回"
+			x.StatusText = cancellationLabel(x.CancelReason)
 		}
 		out.Items = append(out.Items, x)
 	}
@@ -1356,7 +1376,7 @@ func (s *Service) CustomerOrder(ctx context.Context, p auth.Principal, id int64)
 
 	out.StatusText = statusText(out.Status)
 	if out.Status == OrderCancelled && out.CancelReason != "" {
-		out.StatusText = "商家已打回"
+		out.StatusText = cancellationLabel(out.CancelReason)
 	}
 	if appointment.Valid {
 		out.AppointmentAt = &appointment.Time
@@ -1694,4 +1714,11 @@ func (s *Service) ReviewCompletion(ctx context.Context, p auth.Principal, id int
 		return err
 	}
 	return committed(ctx, tx, "work_order.completion_reviewed", p.OrgID, id, 0, status, to)
+}
+
+func cancellationLabel(reason string) string {
+	if reason == "支付超时" || reason == "支付超时或交易已关闭" {
+		return "支付已关闭"
+	}
+	return "商家已打回"
 }

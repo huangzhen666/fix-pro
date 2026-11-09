@@ -1,82 +1,84 @@
 import { protectedPage } from '../../services/guard'
-import { getApiBaseUrl } from '../../config/env'
-import { getCart, confirmCartItem, removeItem, saveDemand, updateQuantity, uploadDemand, type Cart, type CartItem } from '../../services/cart'
-import { download } from '../../services/request'
+import { getCart, confirmCartItem, removeItem, updateQuantity, type Cart, type CartItem } from '../../services/cart'
+import { mediaUrl } from '../../services/presentation'
 import { onSessionReset } from '../../services/session'
 
 const checkoutItemsStorageKey = 'fixpro.checkoutCartItemIds'
-type DisplayCartItem = CartItem & { coverImageUrl: string; subtotalText: string; selected: boolean }
+type DisplayCartItem = CartItem & { unitPriceText: string; selected: boolean }
 type DisplayCart = Omit<Cart, 'items'> & { items: DisplayCartItem[] }
-let selectedByItemID: Record<string, boolean> = {}
 type Gesture = { id: string; x: number; y: number; offset: number; horizontal: boolean; vertical: boolean }
-const gestures = new WeakMap<object, Gesture>()
-onSessionReset(() => { selectedByItemID = {} })
-
+type State = { revision: number; hidden: boolean; dead: boolean; selected: Record<string, boolean>; gesture?: Gesture; suppressUntil: number; navigating: boolean }
+const states = new WeakMap<object, State>()
+const activePages = new Set<any>()
+function state(page: object): State {
+  let value = states.get(page)
+  if (!value) { value = { revision: 0, hidden: false, dead: false, selected: {}, suppressUntil: 0, navigating: false }; states.set(page, value) }
+  return value
+}
+function current(page: object, revision: number) { const s = state(page); return !s.dead && !s.hidden && s.revision === revision }
 function summary(items: DisplayCartItem[]) {
   const available = items.filter(item => item.available)
   const selected = available.filter(item => item.selected)
   return { totalText: (selected.reduce((sum, item) => sum + item.subtotal, 0) / 100).toFixed(2), selectedCount: selected.length, allSelected: !!available.length && selected.length === available.length }
 }
+onSessionReset(() => {
+  activePages.forEach(page => {
+    const s = state(page); s.revision++; s.selected = {}; s.gesture = undefined
+    page.setData({ cart: { items: [], itemCount: 0, totalAmount: 0 }, ...summary([]), loading: false, loadError: '', updatingId: '', checkoutLoading: false, swipeId: '', swipeOffset: 0 })
+  })
+})
 
 protectedPage({
   data: {
-    loading: true, cart: { items: [], itemCount: 0, totalAmount: 0 } as DisplayCart,
-    totalText: '0.00', selectedCount: 0, allSelected: false, savingId: '', updatingId: '', checkoutLoading: false,
-    expandedId: '', swipeId: '', swipeOffset: 0, swipeWidth: 90, dragging: false,
+    loading: true, loadError: '', cart: { items: [], itemCount: 0, totalAmount: 0 } as DisplayCart,
+    totalText: '0.00', selectedCount: 0, allSelected: false, updatingId: '', checkoutLoading: false,
+    swipeId: '', swipeOffset: 0, swipeWidth: 72, dragging: false,
   },
-  onLoad() { this.setData({ swipeWidth: wx.getWindowInfo().windowWidth * 144 / 750 }) },
-  onShow() { this.load() },
+  onLoad() { activePages.add(this); this.setData({ swipeWidth: wx.getWindowInfo().windowWidth * 144 / 750 }) },
+  onShow() { state(this).hidden = false; this.load() },
+  onHide() {
+    const s = state(this); s.hidden = true; s.revision++; s.gesture = undefined
+    this.setData({ loading: false, updatingId: '', checkoutLoading: false, swipeId: '', swipeOffset: 0, dragging: false })
+  },
   onPullDownRefresh() { this.load().finally(() => wx.stopPullDownRefresh()) },
-  onUnload() { selectedByItemID = {}; gestures.delete(this) },
+  onUnload() { const s = state(this); s.dead = true; s.revision++; s.selected = {}; activePages.delete(this) },
   applyCart(cart: Cart) {
-    const previous = new Map(this.data.cart.items.map(item => [item.id, item]))
-    const items = cart.items.map(item => ({ ...item, coverImageUrl: `${getApiBaseUrl()}${item.coverImageUrl}`, subtotalText: (item.subtotal / 100).toFixed(2), selected: item.available && (selectedByItemID[item.id] ?? true),
-      demandMedia: item.demandMedia.map(media => ({ ...media, localUrl: (previous.get(item.id)?.demandMedia.find(old => old.id === media.id) as any)?.localUrl || '' })),
-    }))
-    this.setData({ cart: { ...cart, items }, ...summary(items), swipeId: '', swipeOffset: 0, dragging: false })
-    this.loadPrivateMedia(items)
+    const choices = state(this).selected
+    const items = cart.items.map(item => ({ ...item, coverImageUrl: mediaUrl(item.coverImageUrl), unitPriceText: (item.unitPrice / 100).toFixed(2), selected: item.available && (choices[item.id] ?? true) }))
+    this.setData({ cart: { ...cart, items }, ...summary(items), loadError: '', swipeId: '', swipeOffset: 0, dragging: false })
   },
   async load() {
-    this.setData({ loading: true })
-    try { this.applyCart(await getCart()) }
-    catch (e) { wx.showToast({ title: e instanceof Error ? e.message : '购物车加载失败', icon: 'none' }) }
-    finally { this.setData({ loading: false }) }
-  },
-  loadPrivateMedia(items: CartItem[]) {
-    items.forEach(item => item.demandMedia.forEach(async media => {
-      if ((media as any).localUrl || !media.url) return
-      try {
-        const localUrl = await download(media.url)
-        const index = this.data.cart.items.findIndex(entry => entry.id === item.id)
-        const mediaIndex = this.data.cart.items[index]?.demandMedia.findIndex(entry => entry.id === media.id) ?? -1
-        if (index >= 0 && mediaIndex >= 0) this.setData({ [`cart.items[${index}].demandMedia[${mediaIndex}].localUrl`]: localUrl })
-      } catch { /* Keep the service card available if media cannot be loaded. */ }
-    }))
+    if (this.data.updatingId || this.data.checkoutLoading || state(this).dead || state(this).hidden) return
+    activePages.add(this)
+    const revision = ++state(this).revision
+    this.setData({ loading: true, loadError: '' })
+    try { const cart = await getCart(); if (current(this, revision)) this.applyCart(cart) }
+    catch (error) { if (current(this, revision)) this.setData({ loadError: error instanceof Error ? error.message : '购物车加载失败，请重试' }) }
+    finally { if (current(this, revision)) this.setData({ loading: false }) }
   },
   toggleSelected(e: any) {
-    const index = Number(e.currentTarget.dataset.index)
-    const item = this.data.cart.items[index]
-    if (!item || !item.available || this.data.checkoutLoading) return
-    selectedByItemID[item.id] = !item.selected
-    const items = this.data.cart.items.map(entry => ({ ...entry, selected: selectedByItemID[entry.id] ?? entry.selected }))
+    const item = this.data.cart.items.find(entry => entry.id === String(e.currentTarget.dataset.id))
+    if (!item?.available || this.data.checkoutLoading) return
+    state(this).selected[item.id] = !item.selected
+    const items = this.data.cart.items.map(entry => ({ ...entry, selected: entry.available && (state(this).selected[entry.id] ?? entry.selected) }))
     this.setData({ 'cart.items': items, ...summary(items) })
   },
   toggleAll() {
     if (this.data.checkoutLoading) return
     const selected = !this.data.allSelected
-    const items = this.data.cart.items.map(item => { selectedByItemID[item.id] = item.available && selected; return { ...item, selected: item.available && selected } })
+    const items = this.data.cart.items.map(item => { state(this).selected[item.id] = item.available && selected; return { ...item, selected: item.available && selected } })
     this.setData({ 'cart.items': items, ...summary(items) })
   },
   touchStart(e: any) {
-    if (this.data.updatingId || this.data.checkoutLoading) return
+    if (e.target?.dataset?.control || this.data.updatingId || this.data.checkoutLoading) return
     const touch = e.touches[0]
     if (!touch) return
     const id = String(e.currentTarget.dataset.id)
-    gestures.set(this, { id, x: touch.clientX, y: touch.clientY, offset: this.data.swipeId === id ? this.data.swipeOffset : 0, horizontal: false, vertical: false })
+    state(this).gesture = { id, x: touch.clientX, y: touch.clientY, offset: this.data.swipeId === id ? this.data.swipeOffset : 0, horizontal: false, vertical: false }
     if (this.data.swipeId !== id) this.setData({ swipeId: '', swipeOffset: 0 })
   },
   touchMove(e: any) {
-    const gesture = gestures.get(this), touch = e.touches[0]
+    const gesture = state(this).gesture, touch = e.touches[0]
     if (!gesture || !touch || gesture.vertical) return
     const dx = touch.clientX - gesture.x, dy = touch.clientY - gesture.y
     if (!gesture.horizontal) {
@@ -87,105 +89,100 @@ protectedPage({
     this.setData({ swipeId: gesture.id, swipeOffset: Math.max(0, Math.min(this.data.swipeWidth, gesture.offset - dx)), dragging: true })
   },
   touchEnd() {
-    const gesture = gestures.get(this)
-    gestures.delete(this)
-    if (!gesture?.horizontal) return
-    const open = this.data.swipeOffset >= this.data.swipeWidth / 2
+    const s = state(this), gesture = s.gesture
+    s.gesture = undefined
+    if (!gesture || (!gesture.horizontal && !gesture.vertical)) return
+    s.suppressUntil = Date.now() + 400
+    const open = gesture.horizontal && this.data.swipeOffset >= this.data.swipeWidth / 2
     this.setData({ swipeId: open ? gesture.id : '', swipeOffset: open ? this.data.swipeWidth : 0, dragging: false })
   },
-  touchCancel() { gestures.delete(this); this.setData({ swipeId: '', swipeOffset: 0, dragging: false }) },
-  toggleDetails(e: any) {
-    const id = String(e.currentTarget.dataset.id)
-    this.setData({ expandedId: this.data.expandedId === id ? '' : id, swipeId: '', swipeOffset: 0 })
+  touchCancel() { state(this).gesture = undefined; state(this).suppressUntil = Date.now() + 400; this.setData({ swipeId: '', swipeOffset: 0, dragging: false }) },
+  imageError(e: any) {
+    const items = this.data.cart.items.map(item => item.id === String(e.currentTarget.dataset.id) ? { ...item, coverImageUrl: '' } : item)
+    this.setData({ 'cart.items': items })
   },
-  async confirmVersion(e:any) {const id=String(e.currentTarget.dataset.id);try{const result=await wx.showModal({title:'确认新版服务',content:'请先查看当前服务详情，确认价格、服务说明和服务须知。确认后将采用新版内容。'});if(result.confirm){const cart=await confirmCartItem(id,this.data.cart.items.find(v=>v.id===id)!.currentVersion);this.applyCart(cart)}}catch(err){wx.showToast({title:err instanceof Error?err.message:'确认失败',icon:'none'})}},
-  inputDemand(e: any) { this.setData({ [`cart.items[${Number(e.currentTarget.dataset.index)}].demandDescription`]: e.detail.value }) },
-  async blurDemand(e: any) { await this.persist(Number(e.currentTarget.dataset.index)) },
-  async change(e: any) {
-    if (this.data.updatingId || this.data.savingId || this.data.checkoutLoading) return
-    const item = this.data.cart.items[Number(e.currentTarget.dataset.index)]
+  async openDetail(e: any) {
+    const s = state(this)
+    if (s.suppressUntil > Date.now() || s.navigating || this.data.updatingId || this.data.checkoutLoading) return
+    if (this.data.swipeId) { this.setData({ swipeId: '', swipeOffset: 0 }); return }
+    const item = this.data.cart.items.find(entry => entry.id === String(e.currentTarget.dataset.id))
     if (!item) return
-    if (!item.available) return
-
-    const quantity = item.quantity + Number(e.currentTarget.dataset.delta)
-    if (quantity < 1 || quantity > 9999) return
-    this.setData({ updatingId: item.id })
-    try { this.applyCart(await updateQuantity(item.id, quantity)) }
-    catch (err) { wx.showToast({ title: err instanceof Error ? err.message : '修改失败', icon: 'none' }) }
-    finally { this.setData({ updatingId: '' }) }
+    s.navigating = true
+    try { await wx.navigateTo({ url: `/pages/services/detail?id=${encodeURIComponent(item.skuId)}` }) }
+    catch { wx.showToast({ title: '服务详情打开失败，请重试', icon: 'none' }) }
+    finally { s.navigating = false }
   },
-  async choose(e: any) {
-    if (this.data.savingId || this.data.updatingId || this.data.checkoutLoading) return
-    const index = Number(e.currentTarget.dataset.index), item = this.data.cart.items[index]
-    if (!item) return
+  async longPress(e: any) {
+    const s = state(this)
+    if (e.target?.dataset?.control || this.data.updatingId || this.data.checkoutLoading || s.gesture?.horizontal || s.gesture?.vertical) return
+    s.gesture = undefined; s.suppressUntil = Date.now() + 600
+    const revision = s.revision
     try {
-      const chosen = await wx.chooseMedia({ count: 1, mediaType: ['image', 'video'], sourceType: ['album', 'camera'] })
-      if (!chosen.tempFiles.length) return
-      wx.showLoading({ title: '上传中' })
-      const uploaded = await uploadDemand(chosen.tempFiles[0].tempFilePath)
-      const demandMedia = [...item.demandMedia, { id: String(uploaded.id), mediaType: uploaded.mediaType, name: '新上传文件', url: '', localUrl: chosen.tempFiles[0].tempFilePath }]
-      this.setData({ [`cart.items[${index}].demandMedia`]: demandMedia })
-      await this.persist(index)
-    } catch (err) { wx.showToast({ title: err instanceof Error ? err.message : '上传失败', icon: 'none' }) }
-    finally { wx.hideLoading() }
+      const result = await wx.showActionSheet({ itemList: ['删除服务'] })
+      if (current(this, revision) && result.tapIndex === 0) await this.remove(e)
+    } catch { /* Cancelling the action sheet leaves the cart unchanged. */ }
+    finally { s.suppressUntil = Date.now() + 600 }
   },
-  async removeMedia(e: any) {
-    if (this.data.savingId || this.data.updatingId || this.data.checkoutLoading) return
-    const index = Number(e.currentTarget.dataset.index), mediaIndex = Number(e.currentTarget.dataset.mediaIndex)
-    const item = this.data.cart.items[index]
-    if (!item) return
-    const list = [...item.demandMedia]; list.splice(mediaIndex, 1)
-    this.setData({ [`cart.items[${index}].demandMedia`]: list }); await this.persist(index)
+  async confirmVersion(e: any) {
+    if (this.data.updatingId || this.data.checkoutLoading) return
+    const item = this.data.cart.items.find(entry => entry.id === String(e.currentTarget.dataset.id))
+    if (!item?.available || !item.needsConfirmation) return
+    const revision = ++state(this).revision
+    this.setData({ updatingId: item.id, loading: false })
+    try {
+      const result = await wx.showModal({ title: '确认新版服务', content: '请先查看当前服务详情，确认价格、服务说明和服务须知。确认后将采用新版内容。' })
+      if (!result.confirm || !current(this, revision)) return
+      const cart = await confirmCartItem(item.id, item.currentVersion)
+      if (current(this, revision)) this.applyCart(cart)
+    } catch (error) { if (current(this, revision)) wx.showToast({ title: error instanceof Error ? error.message : '确认失败', icon: 'none' }) }
+    finally { if (current(this, revision)) this.setData({ updatingId: '' }) }
   },
-  async persist(index: number): Promise<boolean> {
-    const item = this.data.cart.items[index]
-    if (!item) return true
-    this.setData({ savingId: item.id })
-    try { await saveDemand(item.id, item.demandDescription || '', item.demandMedia.map(media => media.id)); return true }
-    catch (err) { wx.showToast({ title: err instanceof Error ? err.message : '补充信息同步失败', icon: 'none' }); return false }
-    finally { this.setData({ savingId: '' }) }
+  async change(e: any) {
+    if (this.data.updatingId || this.data.checkoutLoading) return
+    const item = this.data.cart.items.find(entry => entry.id === String(e.currentTarget.dataset.id))
+    const delta = Number(e.currentTarget.dataset.delta)
+    if (!item?.available || ![-1, 1].includes(delta)) return
+    const quantity = item.quantity + delta
+    if (!Number.isInteger(quantity) || quantity < 1 || quantity > 9999) return
+    const revision = ++state(this).revision
+    this.setData({ updatingId: item.id, loading: false })
+    try { const cart = await updateQuantity(item.id, quantity); if (current(this, revision)) this.applyCart(cart) }
+    catch (error) { if (current(this, revision)) wx.showToast({ title: error instanceof Error ? error.message : '修改失败', icon: 'none' }) }
+    finally { if (current(this, revision)) this.setData({ updatingId: '' }) }
   },
   async remove(e: any) {
-    if (this.data.updatingId || this.data.savingId || this.data.checkoutLoading) return
-    const item = this.data.cart.items[Number(e.currentTarget.dataset.index)]
+    if (this.data.updatingId || this.data.checkoutLoading) return
+    const item = this.data.cart.items.find(entry => entry.id === String(e.currentTarget.dataset.id))
     if (!item) return
-    this.setData({ updatingId: item.id })
+    const revision = ++state(this).revision
+    this.setData({ updatingId: item.id, loading: false })
     try {
       const result = await wx.showModal({ title: '删除服务', content: `确认移除“${item.name}”？` })
-      if (!result.confirm) return
+      if (!result.confirm || !current(this, revision)) return
       const cart = await removeItem(item.id)
-      delete selectedByItemID[item.id]
-      this.applyCart(cart)
-    } catch (err) { wx.showToast({ title: err instanceof Error ? err.message : '删除失败，请重试', icon: 'none' }) }
-    finally { this.setData({ updatingId: '' }) }
+      if (current(this, revision)) { delete state(this).selected[item.id]; this.applyCart(cart) }
+    } catch (error) { if (current(this, revision)) wx.showToast({ title: error instanceof Error ? error.message : '删除失败，请重试', icon: 'none' }) }
+    finally { if (current(this, revision)) this.setData({ updatingId: '' }) }
   },
   goServices() { wx.switchTab({ url: '/pages/services/index' }) },
   async checkout() {
-    if (this.data.checkoutLoading || this.data.savingId || this.data.updatingId) return
-    const selectedItems = this.data.cart.items.filter(item => item.available && item.selected)
-    if (!selectedItems.length) { wx.showToast({ title: '请至少选择一项服务', icon: 'none' }); return }
-    this.setData({ checkoutLoading: true })
-    // Save drafts before leaving; optional supplement fields must not be lost.
-    for (const item of selectedItems) {
-      if (!await this.persist(this.data.cart.items.findIndex(entry => entry.id === item.id))) { this.setData({ checkoutLoading: false }); return }
-    }
+    if (this.data.checkoutLoading || this.data.updatingId) return
+    const ids = this.data.cart.items.filter(item => item.available && item.selected).map(item => item.id)
+    if (!ids.length) { wx.showToast({ title: '请至少选择一项服务', icon: 'none' }); return }
+    const revision = ++state(this).revision
+    this.setData({ checkoutLoading: true, loading: false })
     try {
       const latest = await getCart()
+      if (!current(this, revision)) return
       this.applyCart(latest)
-      if (selectedItems.some(item => !latest.items.find(current => current.id === item.id)?.available)) {
-        wx.showToast({ title: '所选服务已下架或已移除，请重新选择', icon: 'none' })
-        this.setData({ checkoutLoading: false })
-        return
-      }
-    } catch (err) {
-      wx.showToast({ title: err instanceof Error ? err.message : '购物车加载失败', icon: 'none' })
-      this.setData({ checkoutLoading: false })
-      return
-    }
-    wx.setStorageSync(checkoutItemsStorageKey, selectedItems.map(item => item.id))
-    wx.navigateTo({ url: '/pages/checkout/index', fail: () => {
-      wx.removeStorageSync(checkoutItemsStorageKey)
-      wx.showToast({ title: '结算页打开失败，请重试', icon: 'none' })
-    }, complete: () => this.setData({ checkoutLoading: false }) })
+      const selected = ids.map(id => latest.items.find(item => item.id === id))
+      if (selected.some(item => !item?.available)) { wx.showToast({ title: '所选服务已下架或已移除，请重新选择', icon: 'none' }); return }
+      if (selected.some(item => item?.needsConfirmation)) { wx.showToast({ title: '服务信息已更新，请先确认新版', icon: 'none' }); return }
+      try {
+        wx.setStorageSync(checkoutItemsStorageKey, ids)
+        await wx.navigateTo({ url: '/pages/checkout/index' })
+      } catch (error) { wx.removeStorageSync(checkoutItemsStorageKey); throw error }
+    } catch (error) { if (current(this, revision)) wx.showToast({ title: error instanceof Error ? error.message : '结算页打开失败，请重试', icon: 'none' }) }
+    finally { if (current(this, revision)) this.setData({ checkoutLoading: false }) }
   },
 })

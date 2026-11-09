@@ -13,6 +13,7 @@ import (
 	"github.com/fixpro/server/internal/fulfillment"
 	"github.com/fixpro/server/internal/media"
 	"github.com/fixpro/server/internal/order"
+	"github.com/fixpro/server/internal/payment"
 	"github.com/fixpro/server/internal/platform/auth"
 	"github.com/fixpro/server/internal/platform/config"
 	"github.com/fixpro/server/internal/platform/httpx"
@@ -29,6 +30,12 @@ func New(c config.Config, db *sql.DB, log *zap.Logger) (http.Handler, error) {
 	return NewWithContext(context.Background(), c, db, log)
 }
 func NewWithContext(parent context.Context, c config.Config, db *sql.DB, log *zap.Logger) (http.Handler, error) {
+	if c.Payment.OrderTTL == 0 {
+		c.Payment.OrderTTL = 15 * time.Minute
+	}
+	if err := c.Payment.Validate(c.Env, c.HTTPAddr); err != nil {
+		return nil, err
+	}
 	if c.Logging.Level == "" {
 		c.Logging = logging.Defaults()
 	}
@@ -53,7 +60,11 @@ func NewWithContext(parent context.Context, c config.Config, db *sql.DB, log *za
 		return nil, e
 	}
 	med := media.NewHandler(ms)
-	ord := order.NewHandler(order.New(db))
+	orderService := order.New(db)
+	orderService.SetPaymentTTL(c.Payment.OrderTTL)
+	ord := order.NewHandler(orderService)
+	paymentService := payment.New(db, c.Payment, c.Env)
+	pay := payment.NewHandler(paymentService)
 	addr := address.NewHandler(address.New(db))
 	fulService := fulfillment.New(db, ms)
 	ful := fulfillment.NewHandler(fulService)
@@ -61,7 +72,7 @@ func NewWithContext(parent context.Context, c config.Config, db *sql.DB, log *za
 		for _, job := range []struct {
 			name string
 			fn   func(context.Context) error
-		}{{"avatar_cleanup", ms.CollectAvatars}, {"auto_recall", fulService.AutoRecallUnstartedDue}, {"auto_acceptance", fulService.AutoAcceptDue}} {
+		}{{"payment_reconcile", paymentService.Reconcile}, {"avatar_cleanup", ms.CollectAvatars}, {"auto_recall", fulService.AutoRecallUnstartedDue}, {"auto_acceptance", fulService.AutoAcceptDue}} {
 			if parent.Err() != nil {
 				return
 			}
@@ -176,6 +187,8 @@ func NewWithContext(parent context.Context, c config.Config, db *sql.DB, log *za
 	mux.Handle("PUT /api/v1/admin/catalog/skus/{id}", admin(cat.Update))
 	mux.Handle("POST /api/v1/admin/catalog/skus/{id}/publish", admin(cat.Publish))
 	mux.Handle("POST /api/v1/admin/catalog/skus/{id}/off-shelf", admin(cat.OffShelf))
+	mux.Handle("GET /api/v1/admin/orders/{id}/payment", admin(pay.Overview))
+	mux.Handle("POST /api/v1/admin/orders/{id}/refunds", admin(pay.Refund))
 	mux.Handle("GET /api/v1/admin/orders", admin(ord.List))
 	mux.Handle("GET /api/v1/admin/orders/{id}", admin(ord.Detail))
 	mux.Handle("POST /api/v1/admin/orders/{id}/confirm", admin(ful.ConfirmOrder))
@@ -269,7 +282,15 @@ func NewWithContext(parent context.Context, c config.Config, db *sql.DB, log *za
 	mux.Handle("POST /api/v1/mini/cart/items/{id}/confirm", customer(crt.Confirm))
 	mux.Handle("PUT /api/v1/mini/cart/items/{id}/demand", customer(crt.Demand))
 	mux.Handle("DELETE /api/v1/mini/cart/items/{id}", customer(crt.Delete))
+	mux.Handle("GET /api/v1/mini/orders/{id}/payment", customer(pay.Overview))
+	mux.Handle("POST /api/v1/mini/orders/{id}/payment", customer(pay.Prepare))
+	if c.Env == "local" && c.Payment.MockEnabled {
+		mux.Handle("POST /api/v1/mini/orders/{id}/payment/mock", customer(pay.Mock))
+	}
+	mux.HandleFunc("POST /api/v1/internal/payment/{action}", pay.Internal)
 	mux.Handle("POST /api/v1/mini/orders", customer(ord.Create))
+	mux.Handle("GET /api/v1/mini/orders/{id}/demand", customer(ord.Demand))
+	mux.Handle("PUT /api/v1/mini/orders/{id}/demand", customer(ord.Demand))
 	mux.Handle("POST /api/v1/mini/orders/{id}/repeat", customer(ord.Repeat))
 	mux.Handle("GET /api/v1/mini/addresses", customer(addr.List))
 	mux.Handle("POST /api/v1/mini/addresses", customer(addr.Create))
@@ -327,7 +348,6 @@ func adminPermission(r *http.Request) string {
 			return "catalog.category.view"
 		}
 		return "catalog.category.manage"
-		return "catalog.sku.view"
 	case strings.HasPrefix(path, "/api/v1/admin/catalog/skus"):
 		if strings.HasSuffix(path, "/publish") || strings.HasSuffix(path, "/off-shelf") {
 			return "catalog.sku.publish"
@@ -340,6 +360,9 @@ func adminPermission(r *http.Request) string {
 		}
 		return "catalog.sku.update"
 	case strings.HasPrefix(path, "/api/v1/admin/orders"):
+		if strings.HasSuffix(path, "/refunds") {
+			return "payment.refund"
+		}
 		if strings.HasSuffix(path, "/confirm") || strings.HasSuffix(path, "/reject") {
 			return "order.confirm"
 		}

@@ -44,7 +44,7 @@ func TestAllCustomerRoutesRejectLegacyIdentity(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	for _, route := range []string{"POST auth/session/verify", "GET auth/me", "GET profile", "PUT profile", "GET checkout/contact", "POST media/avatar", "POST media/demand", "GET media/1/content", "DELETE media/1", "GET cart", "POST cart/items", "PATCH cart/items/1", "PUT cart/items/1/demand", "DELETE cart/items/1", "POST orders", "POST orders/1/repeat", "GET addresses", "POST addresses", "PUT addresses/1", "POST addresses/1/default", "DELETE addresses/1", "GET orders", "GET orders/1", "GET work-orders/1", "POST work-orders/1/acceptance", "POST work-orders/1/rating", "GET work-orders/1/timeline"} {
+	for _, route := range []string{"POST auth/session/verify", "GET auth/me", "GET profile", "PUT profile", "GET checkout/contact", "POST media/avatar", "POST media/demand", "GET media/1/content", "DELETE media/1", "GET cart", "POST cart/items", "PATCH cart/items/1", "PUT cart/items/1/demand", "DELETE cart/items/1", "POST orders", "POST orders/1/repeat", "GET addresses", "POST addresses", "PUT addresses/1", "POST addresses/1/default", "DELETE addresses/1", "GET orders", "GET orders/1", "GET orders/1/demand", "PUT orders/1/demand", "GET work-orders/1", "POST work-orders/1/acceptance", "POST work-orders/1/rating", "GET work-orders/1/timeline"} {
 		method, path, _ := strings.Cut(route, " ")
 		r := httptest.NewRequest(method, "/api/v1/mini/"+path, nil)
 		r.Header.Set("Authorization", "Bearer local-customer-1")
@@ -58,5 +58,27 @@ func TestAllCustomerRoutesRejectLegacyIdentity(t *testing.T) {
 	h.ServeHTTP(rw, httptest.NewRequest("POST", "/api/v1/mini/auth/logout", nil))
 	if rw.Code != 404 {
 		t.Fatalf("customer logout registered: %d", rw.Code)
+	}
+}
+
+func TestPaymentRoutesAndRefundPermission(t *testing.T) {
+	if got := adminPermission(httptest.NewRequest("POST", "/api/v1/admin/orders/1/refunds", nil)); got != "payment.refund" {
+		t.Fatalf("refund permission=%s", got)
+	}
+	db, _ := sql.Open("pgx", "postgres://invalid:invalid@127.0.0.1:1/invalid?sslmode=disable")
+	defer db.Close()
+	h, e := New(config.Config{Env: "local", MediaDriver: "local", MediaLocalRoot: t.TempDir()}, db, zap.NewNop())
+	if e != nil {
+		t.Fatal(e)
+	}
+	for _, tc := range []struct {
+		method, path string
+		status       int
+	}{{"GET", "/api/v1/mini/orders/1/payment", 401}, {"POST", "/api/v1/mini/orders/1/payment", 401}, {"POST", "/api/v1/mini/orders/1/payment/mock", 404}, {"POST", "/api/v1/admin/orders/1/refunds", 401}, {"POST", "/api/v1/internal/payment/events", 404}} {
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, httptest.NewRequest(tc.method, tc.path, nil))
+		if w.Code != tc.status {
+			t.Fatalf("%s %s: %d", tc.method, tc.path, w.Code)
+		}
 	}
 }

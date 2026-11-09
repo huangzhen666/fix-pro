@@ -1,47 +1,39 @@
-<block wx:if="{{sessionReady}}"><view class="page">
-  <view class="card">
-    <view class="section-title">服务信息</view>
-    <view wx:for="{{cart.items}}" wx:key="id" wx:for-index="index" style="margin:16px 0">
-      <view class="line"><view>{{item.name}} × {{item.quantity}}{{item.unit}}</view><view>¥{{item.subtotal/100}}</view></view>
-
-      <view data-id="{{item.id}}" bindtap="toggleTerms" style="padding:10px 0;color:#204f76">查看完整服务约定 ›</view><service-content wx:if="{{expandedId===item.id}}" description="{{item.serviceDescription}}" notice="{{item.serviceNotice}}"/>
-      <view><view>补充需求（选填）</view><textarea value="{{item.demandDescription}}" data-index="{{index}}" bindinput="demandInput" maxlength="500" placeholder="可补充特别需要注意的情况" style="width:100%;min-height:80px;box-sizing:border-box;background:#f5f7fa;padding:12px;border-radius:8px"/></view>
-      <view><view>现场图片/视频（选填）</view><view class="muted">可上传现场资料，便于了解服务需求</view><view wx:for="{{item.demandMedia}}" wx:for-item="media" wx:for-index="m" wx:key="id">{{media.name}}<text data-index="{{index}}" data-media="{{m}}" bindtap="removeDemandMedia"> · 移除</text></view><button size="mini" data-index="{{index}}" bindtap="demandUpload" loading="{{uploading}}" disabled="{{submitting || uploading}}">添加现场图片/视频</button></view>
-    </view>
-  </view>
-  <view class="card">
-    <view class="section-title">上门信息</view>
-    <view class="address-selector" bindtap="openAddressPicker">
-      <view class="address-icon">⌖</view>
-      <view class="address-content" wx:if="{{selectedAddress}}"><view class="address-title">{{selectedAddress.city}}</view><view class="address-detail">{{selectedAddress.detailAddress}}{{selectedAddress.buildingDoor}}</view><view class="address-contact">{{selectedAddress.contactName}}　{{selectedAddress.contactMobile}}</view></view>
-      <view class="address-content address-empty" wx:else>请选择服务地址<view>首次下单请先新增地址</view></view>
-      <text class="chevron">›</text>
-    </view>
-    <view class="section-title">客户预约时间段</view>
-    <view class="appointment-trigger" bindtap="openAppointmentPicker">
-      <view class="appointment-trigger-title">上门时间</view>
-      <view class="appointment-trigger-value">{{appointmentDisplayText}}<text class="chevron">›</text></view>
-    </view>
-  </view>
-  <view class="submit-bar"><view>合计 <text>¥{{totalText}}</text></view><button type="primary" loading="{{submitting}}" bindtap="submit">提交订单</button></view>
-
-  <view wx:if="{{showAppointmentPicker}}" class="appointment-modal">
-    <view class="appointment-mask" catchtap="cancelAppointmentPicker"></view>
-    <view class="appointment-sheet">
-      <view class="appointment-header"><view><view class="appointment-title">您什么时间有空？</view><view class="appointment-subtitle">师傅会尽快联系您，确认最终上门时间</view></view><view class="appointment-close" catchtap="cancelAppointmentPicker">×</view></view>
-      <view class="appointment-body">
-        <scroll-view class="appointment-dates" scroll-y="true">
-          <view wx:for="{{appointmentDates}}" wx:key="value" class="date-option {{item.selected ? 'selected' : ''}}" data-value="{{item.value}}" bindtap="chooseAppointmentDate">{{item.label}}</view>
-        </scroll-view>
-        <scroll-view class="appointment-slots" scroll-y="true">
-          <block wx:for="{{appointmentSlots}}" wx:key="value">
-            <view wx:if="{{item.showPeriod}}" class="slot-period">{{item.period}}</view>
-            <view class="slot-option {{item.selected ? 'selected' : ''}}" data-value="{{item.value}}" bindtap="chooseAppointmentSlot">{{item.label}}</view>
-          </block>
-        </scroll-view>
+<block wx:if="{{sessionReady}}">
+  <view class="page checkout-page">
+    <view wx:if="{{loading}}" class="state">正在加载订单信息…</view>
+    <view wx:elif="{{loadError}}" class="state"><text>{{loadError}}</text><view class="state-actions"><button bindtap="retryLoad">重新加载</button><button bindtap="back">返回选择</button></view></view>
+    <block wx:else>
+      <view class="card visit-card">
+        <view id="service-address" class="address-selector" bindtap="openAddressPicker" role="button" aria-label="选择服务地址">
+          <image class="address-icon" src="/assets/icons/map-pin.svg" mode="aspectFit"/>
+          <view class="address-content" wx:if="{{selectedAddress}}"><view class="address-detail">{{selectedAddress.detailAddress}}{{selectedAddress.buildingDoor}}</view><view class="address-contact">{{selectedAddress.city}} · {{selectedAddress.contactName}}　{{selectedAddress.contactMobile}}</view></view>
+          <view class="address-content" wx:else><view class="address-empty">添加服务地址</view><view class="address-contact">请先填写上门服务地址</view></view>
+          <text class="chevron">›</text>
+        </view>
+        <view wx:if="{{addressError}}" class="field-error">{{addressError}}</view>
+        <view id="appointment" class="appointment-trigger" bindtap="openAppointmentPicker"><text class="field-label">预约上门时间</text><view class="appointment-value {{appointmentSlot ? 'chosen' : ''}}">{{appointmentDisplayText}}</view><text class="chevron">›</text></view>
+        <view wx:if="{{appointmentError}}" class="field-error">{{appointmentError}}</view>
       </view>
-      <view class="appointment-actions"><button class="cancel-button" bindtap="cancelAppointmentPicker">取消</button><button class="confirm-button" bindtap="confirmAppointmentPicker">确认预约时间</button></view>
+      <view class="card service-card"><view class="card-title">服务清单</view>
+        <view wx:for="{{services}}" wx:key="id" class="service-row">
+          <image wx:if="{{!item.imageFailed}}" class="cover" src="{{item.coverImageUrl}}" mode="aspectFill" data-id="{{item.id}}" binderror="coverError"/>
+          <view wx:else class="cover cover-fallback"><image src="/assets/icons/wrench.svg" mode="aspectFit"/></view>
+          <view class="service-copy"><view class="service-name">{{item.name}}</view><view class="service-price"><text class="unit-price">¥{{item.priceText}}/{{item.unit}} × {{item.quantity}}</text><text class="subtotal">¥{{item.subtotalText}}</text></view></view>
+        </view>
+        <view class="demand-entry" bindtap="openDemand"><text>备注</text><text class="demand-summary">{{hasDemand ? '已填写' : '选填，说明情况或服务要求'}}</text><text class="chevron">›</text></view>
+      </view>
+      <view wx:if="{{submissionUnknown}}" class="pending-tip">提交结果待确认，请重试以获取订单结果。</view>
+      <view class="submit-bar"><view class="total">合计 <text style="font-size:{{totalText.length > 12 ? 13 : totalText.length > 9 ? 16 : 20}}px">¥{{totalText}}</text></view><button loading="{{submitting}}" disabled="{{uploading || submitting}}" bindtap="submit">{{submitting ? '正在提交…' : uploading ? '资料上传中' : submissionUnknown ? '重试提交' : '提交订单'}}</button></view>
+    </block>
+    <view wx:if="{{showAppointmentPicker}}" class="appointment-modal">
+      <view class="appointment-mask" catchtap="cancelAppointmentPicker"></view>
+      <view class="appointment-sheet"><view class="appointment-header"><view><view class="appointment-title">预约上门时间</view><view class="appointment-subtitle">师傅会联系您，确认最终上门时间</view></view><button class="appointment-close" bindtap="cancelAppointmentPicker" aria-label="关闭预约时间">×</button></view>
+        <view class="appointment-body"><scroll-view class="appointment-dates" scroll-y><view wx:for="{{appointmentDates}}" wx:key="value" class="date-option {{item.selected ? 'selected' : ''}}" data-value="{{item.value}}" bindtap="chooseAppointmentDate">{{item.label}}<text wx:if="{{item.selected}}"> ✓</text></view></scroll-view>
+          <scroll-view class="appointment-slots" scroll-y><block wx:for="{{appointmentSlots}}" wx:key="value"><view wx:if="{{item.showPeriod}}" class="slot-period">{{item.period}}</view><view class="slot-option {{item.selected ? 'selected' : ''}}" data-value="{{item.value}}" bindtap="chooseAppointmentSlot">{{item.label}}<text wx:if="{{item.selected}}"> ✓</text></view></block></scroll-view></view>
+        <view class="appointment-actions"><button bindtap="confirmAppointmentPicker">确认时间</button></view>
+      </view>
     </view>
   </view>
-</view>
-</block><view wx:else style="padding:40rpx;text-align:center;color:#888">正在校验登录状态，请保持网络连接</view>
+</block>
+<view wx:else class="state">正在校验登录状态…</view>
+<demand-editor open="{{showDemandEditor && (sessionReady || uploading)}}" items="{{editorItems}}" bind:change="demandChange" bind:busy="demandBusy" bind:close="closeDemand" bind:save="saveDemandDraft"/>

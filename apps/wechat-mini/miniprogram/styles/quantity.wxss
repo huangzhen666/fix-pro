@@ -1,0 +1,6 @@
+/* Shared compact quantity selector for service detail and cart. */
+.counter{display:inline-flex;align-items:center;flex:none;box-sizing:border-box;overflow:hidden;border:1px solid var(--color-border);border-radius:8px;background:var(--color-surface)}
+.counter button{display:flex;align-items:center;justify-content:center;flex:0 0 28px;box-sizing:border-box;width:28px;height:32px;min-height:0;padding:0;margin:0;border-radius:0;background:var(--color-page);color:var(--color-text);font-size:16px;font-weight:400;line-height:32px}
+.counter button::after{border:0}
+.counter button[disabled]{background:var(--color-page);color:var(--color-disabled-text);opacity:.5}
+.counter text{display:block;box-sizing:border-box;min-width:32px;height:32px;padding:0 4px;color:var(--color-text);text-align:center;font-size:13px;font-weight:500;line-height:32px;white-space:nowrap}

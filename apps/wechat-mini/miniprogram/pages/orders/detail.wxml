@@ -5,13 +5,21 @@
       <text class="order-status">{{order.stageLabel}}</text>
     </view>
     <view class="amount-row"><text>订单金额</text><text class="amount">¥{{order.totalAmountText}}</text></view>
+    <view wx:if="{{payment}}" class="info-row"><text class="info-label">付款状态</text><text class="info-value">{{paymentLabel}} {{payment.payments[0].channel === 'MOCK' ? '（模拟支付，无真实扣款）' : ''}}</text></view>
+    <view wx:if="{{payment.expiresAt && payment.status === 'UNPAID'}}" class="muted">支付截止 {{payment.expiresAt}}</view>
+    <button wx:if="{{payment.required && payment.status === 'UNPAID' && order.status === 'PENDING_CONFIRMATION'}}" type="primary" loading="{{paying}}" disabled="{{paying}}" bindtap="pay">立即支付 ¥{{order.totalAmountText}}</button>
     <view class="info-row"><text class="info-label">下单时间</text><text class="info-value">{{order.createdAtText}}</text></view>
     <view class="info-section-title">上门信息</view>
     <view class="info-row"><text class="info-label">联系人</text><text class="info-value">{{order.contactName}} {{order.contactMobile}}</text></view>
     <view class="info-row address"><text class="info-label">服务地址</text><text class="info-value">{{order.serviceAddress}}</text></view>
     <view class="info-row"><text class="info-label">预约时间</text><text class="info-value">{{order.appointmentText}}</text></view>
-    <view wx:if="{{order.cancelReason}}" class="cancel-reason">商家说明：{{order.cancelReason}}</view>
+    <view wx:if="{{order.cancelReason}}" class="cancel-reason">取消说明：{{order.cancelReason}}</view>
     <button wx:if="{{order.status === 'CANCELLED' && order.cancelReason}}" class="reorder-button" loading="{{reordering}}" disabled="{{reordering}}" bindtap="reorder">重新下单</button>
+  </view>
+
+  <view class="card demand-card"><view class="demand-head"><text class="section-title">备注</text><button wx:if="{{demand.editable || demandLoadError}}" class="edit-demand" bindtap="openDemand" loading="{{demandLoading}}">{{demandLoadError ? '重新加载' : '补充／修改备注'}}</button></view>
+    <view wx:if="{{demandLoadError}}" class="muted">{{demandLoadError}}</view>
+    <block wx:else><view wx:for="{{demand.items}}" wx:key="itemId" class="demand-summary"><view wx:if="{{demand.items.length > 1}}" class="demand-name">{{item.name}}</view><text class="demand-text">{{item.demandDescription || (item.demandMedia.length ? '' : '暂无备注')}} </text><view class="demand-files"><view wx:for="{{item.demandMedia}}" wx:for-item="media" wx:key="id" data-item="{{item.itemId}}" data-media="{{media.id}}" bindtap="previewDemand">{{media.mediaType === 'VIDEO' ? '▶ 视频' : '查看图片'}}</view></view></view><view wx:if="{{demand.editable}}" class="muted">可补充现场情况或图片</view></block>
   </view>
 
   <view class="card" wx:for="{{order.items}}" wx:key="id"><view class="section-title">{{item.name}} × {{item.quantity}}{{item.unit}}</view><view class="muted">{{item.demandDescription}}</view><service-content description="{{item.serviceDescription}}" notice="{{item.serviceNotice}}"/></view>
@@ -46,3 +54,4 @@
 </view>
 <view wx:if="{{!loading && !order}}" class="empty">订单不存在或暂时无法加载</view>
 </block><view wx:else style="padding:40rpx;text-align:center;color:#888">正在校验登录状态，请保持网络连接</view>
+<demand-editor open="{{showDemandEditor && (sessionReady || demandUploading)}}" items="{{editorItems}}" saving="{{demandSaving}}" error="{{demandSaveError}}" conflict="{{demandConflict}}" previous-items="{{previousDemand}}" bind:change="demandChange" bind:busy="demandBusy" bind:close="closeDemand" bind:save="saveOrderDemand" bind:refresh="refreshDemand"/>

@@ -2,7 +2,7 @@ import { ensureReady, updateCustomer, onSessionReset, hasSession, scopedKey, ope
 import { request, download } from '../../services/request'
 import { getCart } from '../../services/cart'
 import { listAddresses, type CustomerAddress } from '../../services/addresses'
-import { listCustomerOrders, type CustomerOrderSummary } from '../../services/orders'
+import { listCustomerOrders, customerOrderStage, type CustomerOrderSummary } from '../../services/orders'
 
 type OrderCounts = { pendingPayment: number; pendingService: number; inService: number; pendingRating: number; returned: number }
 type TrackedOrderStatus = 'PENDING_PAYMENT' | 'PENDING_CONFIRMATION' | 'FULFILLING' | 'COMPLETED' | 'CANCELLED'
@@ -39,7 +39,7 @@ function isRead(item: CustomerOrderSummary, status: TrackedOrderStatus, state: R
 
 function countOrders(items: CustomerOrderSummary[]): OrderCounts {
   const readState = getReadOrderState()
-  const countUnread = (status: TrackedOrderStatus, predicate: (item: CustomerOrderSummary) => boolean) => items.filter(item => item.status === status && predicate(item) && !isRead(item, status, readState)).length
+  const countUnread = (status: TrackedOrderStatus, predicate: (item: CustomerOrderSummary) => boolean) => items.filter(item => customerOrderStage(item) === status && predicate(item) && !isRead(item, status, readState)).length
   return {
     pendingPayment: countUnread('PENDING_PAYMENT', () => true),
     pendingService: countUnread('PENDING_CONFIRMATION', () => true),
@@ -52,7 +52,7 @@ function countOrders(items: CustomerOrderSummary[]): OrderCounts {
 function markOrderStatusAsRead(status: TrackedOrderStatus) {
   const state = getReadOrderState()
   const keys = new Set(state.keys)
-  currentOrders.filter(item => item.status === status).forEach(item => keys.add(`${status}:${item.id}`))
+  currentOrders.filter(item => customerOrderStage(item) === status).forEach(item => keys.add(`${status}:${item.id}`))
   state.keys = Array.from(keys).slice(-1000)
   state.viewedAt[status] = Date.now()
   wx.setStorageSync(readOrderStateKey(), state)

@@ -1,3 +1,4 @@
+import { OrderPayment } from './OrderPayment'
 import { ServiceContent } from './ServiceContent'
 import { useEffect, useState } from 'react'
 import { Button, Card, Descriptions, Divider, Drawer, Empty, Input, Modal, Space, Spin, Tag, Typography, message } from 'antd'
@@ -14,7 +15,7 @@ function formatAppointment(date?: string, slot?: string) {
 }
 
 export function OrderDetailContent({ data, statusOverride }: { data: Awaited<ReturnType<typeof getOrder>>; statusOverride?: string }) {
-  const orderLabel = data.order.status === 'CANCELLED' && data.order.cancelReason ? '商家已打回' : orderStatusLabel(data.order.status)
+  const orderLabel = orderStatusLabel(data.order.status,data.order.cancelReason)
   const orderItems = [{ key: 'status', label: '状态', children: <Tag color="gold">{statusOverride || orderLabel}</Tag> }, ...(data.order.cancelReason ? [{ key: 'cancelReason', label: '打回原因', span: 2, children: data.order.cancelReason }] : []), { key: 'amount', label: '总金额', children: `¥${(data.order.totalAmount / 100).toFixed(2)}` }, { key: 'name', label: '联系人', children: data.order.contactName }, { key: 'mobile', label: '手机号', children: data.order.contactMobile }, { key: 'address', label: '服务地址', span: 2, children: data.order.serviceAddress }, { key: 'appointment', label: '客户预约', span: 2, children: formatAppointment(data.order.appointmentAt, data.order.appointmentSlot) }, { key: 'created', label: '下单时间', children: new Date(data.order.createdAt).toLocaleString() }]
   return <Space direction="vertical" size="middle" style={{ width: '100%' }}><Descriptions column={2} bordered size="small" items={orderItems} />{data.items.map(item => <Card key={item.id} size="small" title={`${item.skuName} · V${item.skuVersion}`}><Descriptions column={1} size="small" items={[{ key: 'code', label: 'SKU 编码', children: item.skuCode }, { key: 'fault', label: '需求说明', children: item.demandDescription || '未填写' }, { key: 'price', label: '成交金额', children: `¥${(item.unitPrice / 100).toFixed(2)} × ${item.quantity}${item.unit} = ¥${(item.subtotal / 100).toFixed(2)}` }]} /><ServiceContent serviceDescription={item.serviceDescription} serviceNotice={item.serviceNotice}/><Divider>客户需求资料（{item.demandMedia.length}）</Divider><Space wrap>{item.demandMedia.map(m => <AuthMedia key={m.id} url={m.url} type={m.mediaType} name={m.name} />)}</Space></Card>)}</Space>
 }
@@ -30,7 +31,7 @@ export function OrderDetailDrawer({ open, orderId, onClose }: { open: boolean; o
   useEffect(() => { if (!open) client.removeQueries({ queryKey: ['order-drawer', orderId] }) }, [open, orderId, client])
   const canOperate = data?.order.status === 'PENDING_CONFIRMATION'
   return <><Drawer title={data ? `订单 ${data.order.orderNo}` : '订单详情'} open={open} onClose={onClose} width={1100} extra={canOperate ? <Space><Button type="primary" loading={mutation.isPending} onClick={() => mutation.mutate()}>确认并生成工单</Button><Button danger loading={reject.isPending} onClick={() => setRejectOpen(true)}>打回</Button></Space> : null}>
-    {query.isLoading ? <Spin /> : !data ? <Empty description="订单详情加载失败" /> : <OrderDetailContent data={data} />}
+    {query.isLoading ? <Spin /> : !data ? <Empty description="订单详情加载失败" /> : <Space direction="vertical" style={{width:'100%'}}><OrderPayment orderId={data.order.id}/><OrderDetailContent data={data} /></Space>}
   </Drawer><Modal open={rejectOpen} title="打回订单" okText="确认打回" cancelText="取消" okButtonProps={{ danger: true }} confirmLoading={reject.isPending} onCancel={() => { setRejectOpen(false); setRejectReason('') }} onOk={() => { if (!rejectReason.trim()) { message.warning('请填写打回原因'); return }; reject.mutate() }} destroyOnHidden>
     <Typography.Paragraph>订单将退回客户，客户可以在订单详情中看到打回原因。</Typography.Paragraph>
     <Input.TextArea rows={4} maxLength={512} showCount value={rejectReason} onChange={e => setRejectReason(e.target.value)} placeholder="请输入打回原因（必填）" />

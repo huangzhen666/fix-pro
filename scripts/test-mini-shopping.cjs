@@ -27,12 +27,12 @@ const cart = items => ({ items, itemCount: items.reduce((n, i) => n + i.quantity
     assert.match(navigated[1], /skuId=1&quantity=2&skuVersion=1/);
     let removed = 0, updated = 0, confirm = true, failDelete = false;
     const state = cart([item('1'), item('2', 2)]);
-    const page = loadPage('apps/wechat-mini/miniprogram/pages/cart/index.ts', { session, env: { getApiBaseUrl: () => '' }, request: { download: async () => '' }, cart: { getCart: async () => state, removeItem: async (id) => { if (failDelete)
-                throw Error('删除失败'); removed++; return cart(state.items.filter(i => i.id !== id)); }, updateQuantity: async () => { updated++; return state; }, saveDemand: async () => state } }, { getWindowInfo: () => ({ windowWidth: 375 }), showModal: async () => ({ confirm }), showToast: o => toasts.push(o), setStorageSync() { }, navigateTo: o => { navigated.push(o.url); o.complete?.(); } });
+    const page = loadPage('apps/wechat-mini/miniprogram/pages/cart/index.ts', { session, presentation: { mediaUrl: path => path }, cart: { getCart: async () => state, removeItem: async (id) => { if (failDelete)
+                throw Error('删除失败'); removed++; return cart(state.items.filter(i => i.id !== id)); }, updateQuantity: async () => { updated++; return state; } } }, { getWindowInfo: () => ({ windowWidth: 375 }), showModal: async () => ({ confirm }), showToast: o => toasts.push(o), setStorageSync() { }, navigateTo: o => { navigated.push(o.url); o.complete?.(); } });
     page.onLoad();
     await page.load();
     assert.equal(page.data.totalText, '354.00');
-    page.toggleSelected({ currentTarget: { dataset: { index: 1 } } });
+    page.toggleSelected({ currentTarget: { dataset: { id: '2' } } });
     assert.equal(page.data.totalText, '118.00');
     page.toggleAll();
     assert.equal(page.data.selectedCount, 2);
@@ -55,24 +55,24 @@ const cart = items => ({ items, itemCount: items.reduce((n, i) => n + i.quantity
     page.touchMove(event(130, 105));
     page.touchCancel();
     assert.equal(page.data.swipeId, '');
-    await page.change({ currentTarget: { dataset: { index: 0, delta: -1 } } });
+    await page.change({ currentTarget: { dataset: { id: '1', delta: -1 } } });
     assert.equal(updated, 0);
     assert.equal(removed, 0);
     confirm = false;
-    await page.remove({ currentTarget: { dataset: { index: 0 } } });
+    await page.remove({ currentTarget: { dataset: { id: '1' } } });
     assert.equal(removed, 0);
     confirm = true;
     failDelete = true;
-    await page.remove({ currentTarget: { dataset: { index: 0 } } });
+    await page.remove({ currentTarget: { dataset: { id: '1' } } });
     assert.equal(page.data.cart.items.length, 2);
     assert.equal(page.data.updatingId, '');
     failDelete = false;
-    await page.remove({ currentTarget: { dataset: { index: 0 } } });
+    await page.remove({ currentTarget: { dataset: { id: '1' } } });
     assert.equal(removed, 1);
     assert.equal(page.data.cart.items.length, 1);
     let cartReads = 0, orderPayload;
     const service = { id: '1', name: '测试维修', publishedVersion: 1, price: 11800, unit: '次', coverImageUrl: '/cover',serviceDescription:"约定范围内的基础服务",serviceNotice:"" };
-    const checkout = loadPage('apps/wechat-mini/miniprogram/pages/checkout/index.ts', { catalog: { getService: async () => service }, cart: { getCart: async () => { cartReads++; return state; } }, addresses: { listAddresses: async () => [{ id: 'a', city: '汉川市', detailAddress: '测试路', buildingDoor: '203室', contactName: '张三', contactMobile: '13800138000', isDefault: true }], formatAddress: a => a.city + a.detailAddress + a.buildingDoor }, request: { request: async () => ({ contactMobile: '13800138000' }), ApiError: Error }, orders: { createOrder: async (data) => { orderPayload = data; return { orderNo: 'test', status: 'PENDING_CONFIRMATION', totalAmount: 23600 }; } } }, { getStorageSync: () => '', removeStorageSync() { }, redirectTo() { }, showToast: o => toasts.push(o) });
+    const checkout = loadPage('apps/wechat-mini/miniprogram/pages/checkout/index.ts', { session, presentation: { mediaUrl: path => path }, demand: { demandFilled: items => items.some(item => item.demandDescription.trim() || item.demandMedia.length) }, catalog: { getService: async () => service }, cart: { getCart: async () => { cartReads++; return state; } }, addresses: { listAddresses: async () => [{ id: 'a', city: '汉川市', detailAddress: '测试路', buildingDoor: '203室', contactName: '张三', contactMobile: '13800138000', isDefault: true }], formatAddress: a => a.city + a.detailAddress + a.buildingDoor }, request: { request: async () => ({ contactMobile: '13800138000' }), ApiError: Error }, orders: { createOrder: async (data) => { orderPayload = data; return { orderNo: 'test', status: 'PENDING_CONFIRMATION', totalAmount: 23600 }; } } }, { getStorageSync: () => '', removeStorageSync() { }, redirectTo() { }, showToast: o => toasts.push(o) });
     await checkout.onLoad({ skuId: '1', quantity: '2', skuVersion: '1' });
     assert.equal(cartReads, 0);
     assert.equal(checkout.data.cart.items.length, 1);

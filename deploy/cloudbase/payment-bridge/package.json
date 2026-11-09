@@ -1,0 +1,1 @@
+{"name":"fixpro-payment-bridge","private":true,"version":"1.0.0","scripts":{"start":"node index.cjs","test":"node --test test.cjs"},"engines":{"node":">=18"}}

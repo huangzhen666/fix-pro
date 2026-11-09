@@ -12,6 +12,7 @@ import (
 const DefaultAdminPassword = "12345678"
 
 type Config struct {
+	Payment               Payment
 	Logging               logging.Config
 	WechatAppID           string
 	WechatSecret          string
@@ -46,6 +47,17 @@ func Load() (Config, error) {
 		AdminBasicCompat: envBool("APP_ADMIN_BASIC_COMPAT", false), AdminCookieSecure: envBool("APP_ADMIN_COOKIE_SECURE", false),
 		WorkerDevTokenEnabled: envBool("WORKER_DEV_TOKEN_ENABLED", false),
 		CORSAllowedOrigins:    split(env("CORS_ALLOWED_ORIGINS", "http://localhost:5173")), ShutdownTimeout: 15 * time.Second,
+	}
+	c.Payment = Payment{MockEnabled: envBool("PAYMENT_MOCK_ENABLED", false), WechatEnabled: envBool("PAYMENT_WECHAT_ENABLED", false), CollectionPaused: envBool("PAYMENT_COLLECTION_PAUSED", false), OrderTTL: 15 * time.Minute, AppID: c.WechatAppID, MerchantID: os.Getenv("PAYMENT_MERCHANT_ID"), BridgeURL: os.Getenv("PAYMENT_BRIDGE_URL"), BridgeSecret: os.Getenv("PAYMENT_BRIDGE_SECRET"), TicketSecret: os.Getenv("PAYMENT_TICKET_SECRET"), CloudEnv: os.Getenv("PAYMENT_CLOUD_ENV"), CloudFunction: os.Getenv("PAYMENT_CLOUD_FUNCTION")}
+	if v := os.Getenv("PAYMENT_ORDER_TTL"); v != "" {
+		d, e := time.ParseDuration(v)
+		if e != nil {
+			return Config{}, e
+		}
+		c.Payment.OrderTTL = d
+	}
+	if e := c.Payment.Validate(c.Env, c.HTTPAddr); e != nil {
+		return Config{}, e
 	}
 	var logErr error
 	c.Logging, logErr = logging.Load(c.Env)

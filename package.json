@@ -15,7 +15,9 @@
     "mini:worker:typecheck": "npm run typecheck --workspace wechat-worker-mini",
     "check": "npm run admin:lint && npm run admin:build && npm run mini:typecheck && npm run mini:worker:typecheck",
     "mini:test:home": "node --test scripts/test-mini-home.cjs",
-    "mini:test:shopping": "node scripts/test-mini-shopping.cjs"
+    "mini:test:shopping": "node scripts/test-mini-shopping.cjs",
+    "mini:test:checkout": "node --test scripts/test-mini-checkout.cjs",
+    "mini:test:payment": "node --test scripts/test-mini-payment.cjs deploy/cloudbase/payment-bridge/test.cjs"
   },
   "engines": {
     "node": ">=24"

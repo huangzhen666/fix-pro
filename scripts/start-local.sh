@@ -3,8 +3,10 @@ set -euo pipefail
 project_root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$project_root"
 mkdir -p .tmp/media-current
+export HTTP_ADDR=127.0.0.1:8080 PAYMENT_MOCK_ENABLED="${PAYMENT_MOCK_ENABLED:-true}"
 export APP_ENV=local DB_DSN='postgres://fixpro:fixpro-local@127.0.0.1:5433/fix_pro?sslmode=disable&timezone=UTC'
-export GOCACHE="$project_root/.gocache" GOPATH="$project_root/.gopath" GOMODCACHE="$project_root/.gopath/pkg/mod"
+export GOCACHE="${GOCACHE:-$project_root/.gocache}" GOPATH="${GOPATH:-$project_root/.gopath}"
+export GOMODCACHE="${GOMODCACHE:-$GOPATH/pkg/mod}"
 export MEDIA_LOCAL_ROOT="$project_root/.tmp/media-current" CORS_ALLOWED_ORIGINS='http://localhost:5173'
 if [[ -f .tmp/customer-auth.env ]]; then
   while IFS= read -r customer_line; do

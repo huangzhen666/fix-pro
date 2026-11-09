@@ -9,7 +9,7 @@ import { OrderDetailContent } from '../components/OrderDetailDrawer'
 import { FulfillmentDetailDrawer, type FulfillmentReviewOptions } from '../components/FulfillmentDetailDrawer'
 
 const statuses = ['PENDING_DISPATCH', 'PENDING_ACCEPT', 'PENDING_ARRIVAL', 'ARRIVED', 'IN_SERVICE', 'WAITING_QA_AUDIT', 'WAITING_DIRECTOR_AUDIT', 'WAITING_CUSTOMER_SERVICE_CONFIRMATION', 'SECOND_VISIT_PENDING', 'FINISHED', 'FINISHED_WITH_REVIEW_EXCEPTION', 'CANCELLED']
-const appointmentSlots = ['08:00', '10:00', '12:00', '14:00', '16:00', '18:00', '20:00']
+const appointmentSlots = ['08:00', '10:00', '12:00', '14:00', '16:00']
 
 function appointmentDeadline(appointmentAt?: string, appointmentSlot?: string) {
   if (!appointmentAt || !appointmentSlot) return undefined

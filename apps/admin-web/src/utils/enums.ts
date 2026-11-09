@@ -6,7 +6,7 @@ const labels: Record<string, string> = {
 }
 export const enumLabel = (value?: string | null) => value ? (labels[value] ?? value) : '-'
 export const statusLabel = enumLabel
-export const orderStatusLabel = enumLabel
+export const orderStatusLabel = (status?:string|null,reason?:string|null) => status==='CANCELLED' && reason ? (reason==='支付超时' || reason==='支付超时或交易已关闭' ? '支付已关闭' : '商家已打回') : enumLabel(status)
 export const workOrderStatusLabel = enumLabel
 export const adminWorkOrderStatusLabel = (status?: string | null, customerAcceptanceStatus?: string | null) => customerAcceptanceStatus && ['MANUAL_ACCEPTED', 'AUTO_ACCEPTED'].includes(customerAcceptanceStatus) && (status === 'WAITING_QA_AUDIT' || status === 'WAITING_DIRECTOR_AUDIT') ? '已完成待审核' : enumLabel(status)
 export const priorityLabel = enumLabel

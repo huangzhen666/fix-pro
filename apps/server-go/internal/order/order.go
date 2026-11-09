@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"github.com/fixpro/server/internal/catalog"
 	"github.com/fixpro/server/internal/fulfillment"
+	"github.com/fixpro/server/internal/platform/appointment"
 	"github.com/fixpro/server/internal/platform/auth"
 	"github.com/fixpro/server/internal/platform/database"
 	"github.com/fixpro/server/internal/platform/httpx"
@@ -23,9 +24,18 @@ import (
 	"time"
 )
 
-type Service struct{ db *sql.DB }
+type Service struct {
+	db         *sql.DB
+	paymentTTL time.Duration
+}
 
-func New(db *sql.DB) *Service { return &Service{db} }
+func New(db *sql.DB) *Service { return &Service{db: db, paymentTTL: 15 * time.Minute} }
+
+func (s *Service) SetPaymentTTL(ttl time.Duration) {
+	if ttl > 0 {
+		s.paymentTTL = ttl
+	}
+}
 
 type DirectItem struct {
 	SKUID             string   `json:"skuId"`
@@ -144,21 +154,15 @@ func validate(w Write) error {
 	if !validSlot(w.AppointmentSlot) {
 		return httpx.E("APPOINTMENT_SLOT_INVALID", "请选择有效的预约时间段", 400)
 	}
-	date, err := time.ParseInLocation("2006-01-02", w.AppointmentDate, time.Local)
-	now := time.Now().In(time.Local)
-	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local)
+	date, err := time.ParseInLocation("2006-01-02", w.AppointmentDate, appointment.Location)
+	now := time.Now().In(appointment.Location)
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, appointment.Location)
 	if err != nil || date.Before(today.AddDate(0, 0, 1)) || date.After(today.AddDate(0, 0, 30)) {
 		return httpx.E("APPOINTMENT_DATE_INVALID", "预约日期必须为明天起30天内", 400)
 	}
 	return nil
 }
-func validSlot(slot string) bool {
-	switch slot {
-	case "08:00", "10:00", "12:00", "14:00", "16:00", "18:00", "20:00":
-		return true
-	}
-	return false
-}
+func validSlot(slot string) bool { return appointment.ValidSlot(slot) }
 
 func selectedCartItemIDs(values []string) (map[int64]bool, error) {
 	if values == nil {
@@ -200,10 +204,10 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, key string, w Wr
 			return Result{}, httpx.E("VALIDATION_ERROR", "服务 ID 无效", 400)
 		}
 	}
-	date, _ := time.ParseInLocation("2006-01-02", w.AppointmentDate, time.Local)
+	date, _ := time.ParseInLocation("2006-01-02", w.AppointmentDate, appointment.Location)
 	hour := 0
 	fmt.Sscanf(w.AppointmentSlot, "%d:00", &hour)
-	appointmentAt := time.Date(date.Year(), date.Month(), date.Day(), hour, 0, 0, 0, time.Local).UTC()
+	appointmentAt := time.Date(date.Year(), date.Month(), date.Day(), hour, 0, 0, 0, appointment.Location).UTC()
 	body, _ := json.Marshal(w)
 	hash := sha256.Sum256(body)
 	tx, e := database.BeginTx(ctx, s.db)
@@ -355,8 +359,11 @@ func (s *Service) Create(ctx context.Context, p auth.Principal, key string, w Wr
 		count += x.quantity
 	}
 	orderNo := fmt.Sprintf("FP%s%06d", time.Now().UTC().Format("20060102150405"), time.Now().UnixNano()%1000000)
+	if total <= 0 {
+		return Result{}, httpx.E("ORDER_AMOUNT_INVALID", "订单金额必须大于零", 400)
+	}
 	var orderID int64
-	e = tx.QueryRowContext(ctx, `INSERT INTO customer_order(org_id,order_no,customer_id,contact_name,contact_mobile,service_address,order_type,status,total_amount,paid_amount,item_count,appointment_at,appointment_slot) VALUES($1,$2,$3,$4,$5,$6,'SERVICE',$7,$8,0,$9,$10,$11) RETURNING id`, p.OrgID, orderNo, p.SubjectID, strings.TrimSpace(w.ContactName), w.ContactMobile, strings.TrimSpace(w.ServiceAddress), fulfillment.OrderPendingConfirmation, total, count, appointmentAt, w.AppointmentSlot).Scan(&orderID)
+	e = tx.QueryRowContext(ctx, `INSERT INTO customer_order(org_id,order_no,customer_id,contact_name,contact_mobile,service_address,order_type,status,total_amount,paid_amount,item_count,appointment_at,appointment_slot,payment_expires_at) VALUES($1,$2,$3,$4,$5,$6,'SERVICE',$7,$8,0,$9,$10,$11,$12) RETURNING id`, p.OrgID, orderNo, p.SubjectID, strings.TrimSpace(w.ContactName), w.ContactMobile, strings.TrimSpace(w.ServiceAddress), fulfillment.OrderPendingConfirmation, total, count, appointmentAt, w.AppointmentSlot, time.Now().Add(s.paymentTTL)).Scan(&orderID)
 	if e != nil {
 		return Result{}, e
 	}
